@@ -1,0 +1,15 @@
+# Fins de ligne : LF partout, CRLF pour les scripts Windows
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+# Binaires
+*.png binary
+*.jpg binary
+*.ico binary
+*.jar binary
+*.apk binary
+*.aab binary
+*.keystore binary
+*.woff binary
+*.woff2 binary
