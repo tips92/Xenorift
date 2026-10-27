@@ -9,7 +9,9 @@ Héros : Kaï ; vaisseau : la Comète. Campagne de 4 étapes : Jungle de Xéna `
 Paysage uniquement, tout se joue au tactile (le clavier sert aux tests sur PC). Aucun fichier image ni son :
 graphismes dessinés par code (Canvas 2D, géométries et shaders three), sons et musiques synthétisés (Web Audio).
 Docs : `docs/GDD.md` (conception et contraintes techniques), `docs/SOUHAITS.md` (liste vivante + ordre de
-travail), `docs/HISTOIRE.md` (trame en 5 mondes), `docs/plans/` (plans techniques des prochaines étapes).
+travail), `docs/HISTOIRE.md` (trame en 5 mondes), `docs/plans/` (plans techniques des prochaines étapes ;
+**`docs/plans/README.md` donne l'état de chaque étape et la prochaine action**), `docs/ARCHITECTURE.md`
+(couches, règle de dépendance, documents et suivi des tâches, où ranger le code à venir).
 
 **Langue : tout en français** — réponses, textes de l'interface, commentaires du code (courts), docs, messages
 de commit. Identifiants du code en anglais. Suivre le style du fichier modifié (densité des commentaires, idiomes).

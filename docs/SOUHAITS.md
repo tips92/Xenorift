@@ -7,6 +7,18 @@ de « à discuter » vers « retenu » quand elle est validée.
 Rappel des contraintes du projet : tout est dessiné par code et les sons sont synthétisés, donc chaque
 nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur un mobile milieu de gamme.
 
+## Où on en est (27/10/2026)
+
+- Toutes les décisions prises avec l'utilisateur sont dans ce fichier, dans [HISTOIRE.md](HISTOIRE.md)
+  (validée) et dans la section « Décisions » de chaque plan technique.
+- Plans des étapes 1 à 3 **validés et prêts à coder** : [plans/README.md](plans/README.md) donne l'état
+  de chaque étape et la prochaine action.
+- **Aucun code de la feuille de route n'est écrit.** Git est en place depuis le 27/10 au soir (premier
+  commit `bda3e52`) : on peut commencer l'étape 1.
+- Reste à faire côté conception : le plan de l'étape 4 (monde 1 complet), le choix des styles de niveaux
+  bonus, les réglages chiffrés (armes, prix) après essai sur téléphone.
+- Organisation du code et des documents : [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ---
 
 ## Souhaits retenus
@@ -62,8 +74,11 @@ Plan technique : [plans/03-hangar.md](plans/03-hangar.md).
 - [ ] Établi : acheter les armes débloquées et les améliorer (dégâts, cadence, portée, refroidissement)
 - [ ] Atelier de la Comète : mitrailleuse, bouclier renforcé, meilleur turbo…
 - [ ] Les cristaux ramassés servent de monnaie
-- [ ] Aperçu de la Comète personnalisée (en 3D) et de Kaï avec son arme
-- [ ] Ennemis spatiaux à abattre en vol 3D, pour que la mitrailleuse serve
+- [ ] Aperçu de la Comète personnalisée et de Kaï avec son arme (en 2D d'abord, 3D plus tard)
+- [ ] La Comète a un canon léger dès le départ ; la mitrailleuse est sa première amélioration
+- [ ] Ennemis spatiaux à abattre en vol 3D ; tir automatique quand une cible est devant (option tir manuel)
+- [ ] Tous les cristaux ramassés vont dans la réserve, même en rejouant ; perdus si l'étape est ratée
+- [ ] Hangar accessible entre deux étapes et depuis l'écran Niveaux
 - [ ] Les naufragés secourus rejoignent l'équipage et ouvrent de nouveaux services (voir l'histoire)
 - [ ] Cœur supplémentaire achetable (maximum 5)
 - [ ] Drone compagnon achetable : suit Kaï, attire les cristaux proches ou tire de temps en temps
@@ -168,8 +183,8 @@ Détail dans [HISTOIRE.md](HISTOIRE.md).
 1. **Contrôles** : stick à deux axes (viser en haut, portes, s'accroupir, descendre), réglage des boutons.
    Petit, indépendant, vite testable sur téléphone.
 2. **Armes et nouveaux bonus** : le hangar et les boss en dépendent.
-3. **Hangar** : balises de LUMA, cristaux-monnaie, améliorations définitives, mitrailleuse de la Comète,
-   ennemis spatiaux.
+3. **Hangar**, en deux parties : 3a (cristaux-monnaie, écran du hangar, améliorations des armes de Kaï),
+   puis 3b (tir de la Comète, ennemis spatiaux, modules) ; la balise de LUMA à la fin ou en début d'étape 4.
 4. **Monde 1 complet au nouveau format** : 3 niveaux, mini-boss, méduse-baleine, double saut, vol avec le
    léviathan, LUMA, prologue et cinématique de libération. Il sert de modèle : on valide tout sur un seul
    monde avant de multiplier les niveaux.

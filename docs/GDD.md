@@ -92,3 +92,5 @@ Accueil (JOUER / NIVEAUX / OPTIONS) → carte d'intro de l'étape → jeu (HUD +
 Liste de souhaits et idées à discuter : [SOUHAITS.md](SOUHAITS.md).
 
 Trame de la campagne en 5 mondes : [HISTOIRE.md](HISTOIRE.md).
+
+Organisation du code et des documents : [ARCHITECTURE.md](ARCHITECTURE.md).

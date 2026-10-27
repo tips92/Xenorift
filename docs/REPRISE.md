@@ -50,3 +50,10 @@ Les anciens scénarios à porter sont dans `D:\DevTools\pw\scen-*.mjs` (avec leu
 - Sous Windows avec une carte graphique AMD, la première compilation des reflets (PMREM de three.js, `src/game3d/sky.ts`) prend parfois environ 9 s. Android n'est pas concerné, et une perte du contexte graphique à ce moment-là se rattrape (RÉESSAYER).
 - `giveUpSoon()` dans `src/game3d/flight.ts` peut afficher l'écran d'échec par-dessus la pause.
 - Un changement de musique demandé pendant une pause Capacitor joue environ 120 ms de notes au retour.
+
+## Feuille de route du jeu (autre session, 27/10/2026 au soir)
+Une session parallèle a fixé avec l'utilisateur la suite du jeu (5 mondes, armes, hangar, boss, histoire). Rien n'est codé ; tout est écrit :
+- `docs/SOUHAITS.md` : liste des tâches, toutes les décisions, ordre de travail (section « Où on en est » en tête) ;
+- `docs/HISTOIRE.md` : histoire validée ;
+- `docs/plans/README.md` : état des étapes et prochaine action (plans 01 à 03 validés, prêts à coder ; plan 04 à écrire) ;
+- `docs/ARCHITECTURE.md` : organisation du code et des documents.
