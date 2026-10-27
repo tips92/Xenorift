@@ -19,8 +19,8 @@
 // Chaque scénario reçoit un navigateur NEUF (shaders et GPU à froid) et un contexte neuf. Il échoue sur :
 // exception ou assertion, délai dépassé (meta.timeoutMs, 120 s par défaut), erreur de page (pageerror),
 // console.error non prévue par meta.allowConsole. Les avertissements console sont affichés, sans échec.
-// Un seul lanceur pilote un navigateur à la fois (verrou tests/e2e/out/.lock) : l'iGPU de la machine
-// perd le contexte WebGL sous charge concurrente.
+// Un seul lanceur pilote un navigateur à la fois (verrou xeno-rift-e2e.lock dans le dossier temporaire, commun
+// à toutes les copies du dépôt) : l'iGPU de la machine perd le contexte WebGL sous charge concurrente.
 import { chromium } from 'playwright-core';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -32,7 +32,6 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..', '..');
 const SCEN_DIR = path.join(HERE, 'scenarios');
 const OUT_DIR = path.join(HERE, 'out');
-const LOCK = path.join(OUT_DIR, '.lock');
 const VITE_BIN = path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
 const DIST_INDEX = path.join(ROOT, 'dist', 'index.html');
 
@@ -189,6 +188,8 @@ function printList(all) {
 // ---------------------------------------------------------------- Verrou global (un navigateur à la fois)
 
 let lockHeld = false;
+// Dans le dossier temporaire (XR_TMP), pas dans out/ : partagé par toutes les copies du dépôt (worktrees).
+let LOCK = '';
 
 function pidAlive(pid) {
   try {
@@ -200,7 +201,7 @@ function pidAlive(pid) {
 }
 
 async function acquireLock() {
-  fs.mkdirSync(OUT_DIR, { recursive: true });
+  LOCK = path.join(os.tmpdir(), 'xeno-rift-e2e.lock'); // après setupTemp()
   const t0 = Date.now();
   let announced = false;
   for (;;) {
@@ -234,10 +235,10 @@ async function acquireLock() {
       continue;
     }
     if (!announced) {
-      console.log(`en attente du verrou… (${rel(LOCK)} tenu par le pid ${pid})`);
+      console.log(`en attente du verrou… (${LOCK} tenu par le pid ${pid})`);
       announced = true;
     }
-    if (Date.now() - t0 > LOCK_MAX_MS) throw new Error(`verrou ${rel(LOCK)} toujours tenu par le pid ${pid} après 30 min`);
+    if (Date.now() - t0 > LOCK_MAX_MS) throw new Error(`verrou ${LOCK} toujours tenu par le pid ${pid} après 30 min`);
     await sleep(LOCK_POLL_MS);
   }
 }

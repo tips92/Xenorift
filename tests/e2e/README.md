@@ -12,11 +12,15 @@ node tests/e2e/run.mjs menu j1-play        # scénarios choisis (depuis n'import
 node tests/e2e/run.mjs --suite full        # smoke | full | diag | all (= full + diag)
 node tests/e2e/run.mjs --list              # scénarios, suites, titres
 node tests/e2e/run.mjs --repeat 5 j1-play  # recherche d'instabilités
-node tests/e2e/run.mjs --prod              # build de production (dist/ servi par vite preview sur 4173)
+node tests/e2e/run.mjs --prod --suite full # build de production : menu, small-screens, prod-build (le reste : SKIP)
 node tests/e2e/run.mjs --help              # aide (en-tête de run.mjs)
 ```
 
 Avec npm, les options passent après `--` : `npm run e2e -- --suite full`. Noms et `--suite` s'additionnent.
+`--prod` seul garde la suite smoke par défaut : seul `menu` y tourne.
+
+Durées sur cette machine : `smoke` ≈ 1 min 40 (`npm test` ≈ 2 min 10 en tout), `full` ≈ 18 min (dont
+`flight-autopilot` ≈ 2 min 50 et `stress-laps` ≈ 2 min 15), `diag` ≈ 1 min, `--prod --suite full` ≈ 1 min.
 
 - **Serveur** : scénarios dev : le lanceur réutilise le serveur de dev déjà ouvert sur http://localhost:5173/
   (sans jamais l'arrêter), sinon il lance lui-même `vite`. Scénarios sur le build de production (`--prod`, ou
@@ -27,7 +31,8 @@ Avec npm, les options passent après `--` : `npm run e2e -- --suite full`. Noms 
   (le lanceur prévient si `dist/` est plus ancien que les sources, seulement quand il lance `vite preview`).
 - **`--prod`** : sans aides DEV, seuls `menu`, `small-screens`, `prod-build` (et `bench-shaders` en `diag`)
   tournent ; les autres sont SKIP.
-- **Variables** : `XR_BASE` (URL imposée, aucun serveur géré), `XR_DEV_PORT` / `XR_PROD_PORT` (autres ports),
+- **Variables** : `XR_BASE` (URL imposée à tous les scénarios, `prod-build` compris, aucun serveur géré),
+  `XR_DEV_PORT` / `XR_PROD_PORT` (autres ports),
   `XR_TMP` (dossier temporaire du profil Chrome, `D:/DevTools/tmp` par défaut), `XR_VERBOSE=1`
   (affiche aussi les `console.log` de la page).
 - **Résultat** : tableau final (scénario, PASS / FAIL / SKIP, durée, première erreur) ; code de sortie 1
@@ -143,8 +148,8 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
 ## Règles de la machine (Windows, iGPU AMD Vega 3)
 
 - **Un seul navigateur à la fois** : l'iGPU perd le contexte WebGL sous charge GPU concurrente. Le lanceur
-  pose un verrou (`tests/e2e/out/.lock`, avec le pid) ; un second lanceur affiche « en attente du verrou… »
-  et attend (30 min max). Un verrou dont le processus n'existe plus est supprimé. Ne pas lancer de navigateur
+  pose un verrou (`xeno-rift-e2e.lock` dans `XR_TMP`, `D:/DevTools/tmp` par défaut, avec le pid), commun à
+  toutes les copies du dépôt (worktrees) ; un second lanceur affiche « en attente du verrou… » et attend (30 min max). Un verrou dont le processus n'existe plus est supprimé. Ne pas lancer de navigateur
   hors du lanceur, ni utiliser le panneau navigateur intégré (page cachée : `requestAnimationFrame` figé).
 - Sorties console attendues et sans gravité : `warning X4122: sum of … cannot be represented accurately in
   double precision` (compilation D3D des shaders, une fois par navigateur à froid) ; lors des pertes de

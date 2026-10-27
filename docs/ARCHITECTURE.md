@@ -135,7 +135,7 @@ Le détail fichier par fichier est dans la section « Architecture » de [CLAUDE
 | [HISTOIRE.md](HISTOIRE.md) | trame en 5 mondes, personnages, cinématiques | si l'histoire change |
 | [plans/](plans/README.md) | un plan technique par étape, et leur état | avant de coder une étape, puis à sa fin |
 | ARCHITECTURE.md | ce fichier | quand un module ou une couche apparaît |
-| [REPRISE.md](REPRISE.md) | notes de reprise ponctuelles (après un arrêt) | en fin de séance si du travail reste en cours |
+| `REPRISE.md` (au besoin) | notes de reprise ponctuelles (après un arrêt) | en fin de séance si du travail reste en cours ; supprimé une fois la reprise faite |
 | [tests/e2e/README.md](../tests/e2e/README.md) | écrire et lancer les tests navigateur | quand le banc de test change |
 
 ### Le cycle d'une fonctionnalité

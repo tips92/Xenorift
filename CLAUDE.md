@@ -178,7 +178,9 @@ géante au loin, 4 ennemis par monde).
   port 5173 (ou un `vite preview` sur 4173) sans l'arrêter, ou démarre puis arrête le sien. `--prod` : tout sur
   `dist/` servi sur 4173 (`npm run build` d'abord) ; les scénarios `meta.dev` y sont ignorés (SKIP).
 - **Un seul navigateur à la fois** (l'iGPU perd le contexte WebGL sous charge concurrente) : passer toujours par
-  le lanceur, qui pose le verrou `tests/e2e/out/.lock` (un second lanceur attend). Le panneau navigateur intégré de
+  le lanceur, qui pose le verrou `D:/DevTools/tmp/xeno-rift-e2e.lock` (commun à tous les worktrees ; un second
+  lanceur attend). Depuis un autre worktree, prendre d'autres ports (`XR_DEV_PORT=5174`, `XR_PROD_PORT=4174`) :
+  sinon le lanceur réutilise le serveur 5173 de la copie principale et teste son code. Le panneau navigateur intégré de
   l'app est inutilisable pour jouer : page cachée (`document.hidden`), `requestAnimationFrame` gelé, et le jeu se
   met en pause comme en arrière-plan.
 - Aides DEV (serveur de dev seulement, `import.meta.env.DEV`) : `window.__xr2d` (`scene`, `teleport(col, row)`,

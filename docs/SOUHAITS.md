@@ -178,6 +178,21 @@ Détail dans [HISTOIRE.md](HISTOIRE.md).
 
 ---
 
+## Bugs connus (mineurs, relevés par les tests le 27/10/2026)
+
+- [ ] **Vol : 3e restauration du contexte WebGL pendant la pause** : l'étape échoue aussitôt (« Liaison
+      graphique perdue ») au lieu d'attendre la reprise. `giveUpSoon()` (`src/game3d/flight.ts`) ne regarde
+      pas `paused`, contrairement à `armLossTimer`. Sur Android : appli en arrière-plan.
+- [ ] **2D : canevas blanc pendant une perte de contexte** : Chrome peint le canevas Phaser en blanc, avec une
+      icône d'image cassée, au lieu de l'écran noir prévu (visible derrière le menu Pause). Piste : le masquer
+      (`visibility: hidden`) tant que le contexte est perdu (`src/game2d/engine/game.ts`).
+- [ ] **Musique** : un changement de morceau demandé pendant une pause Capacitor joue environ 120 ms de notes
+      au retour.
+- [ ] **Reflets (PMREM, `src/game3d/sky.ts`)** : première compilation parfois ~9 s à froid sous Windows avec
+      une carte AMD ; Android n'est pas concerné.
+
+---
+
 ## Ordre de travail
 
 1. **Contrôles** : stick à deux axes (viser en haut, portes, s'accroupir, descendre), réglage des boutons.
