@@ -6,6 +6,12 @@ export const ICON_LEFT =
 export const ICON_RIGHT =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 4.8 16.8 12l-8.3 7.2z" fill="currentColor" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>';
 
+export const ICON_UP =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.8 15.5 12 7.2l7.2 8.3z" fill="currentColor" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>';
+
+export const ICON_DOWN =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.8 8.5 12 16.8l7.2-8.3z" fill="currentColor" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg>';
+
 /** Rayon laser qui jaillit d'un éclair de bouche. */
 export const ICON_LASER =
   '<svg viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round">' +

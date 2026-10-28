@@ -1,16 +1,18 @@
-import { getSave, isUnlocked } from '../../core/save';
+import { getCrystals, getSave, isUnlocked } from '../../core/save';
 import { STAGES } from '../../core/stages';
 import type { StageDef } from '../../core/types';
 import { div, el, formatNumber, icon, play } from '../dom';
 import { ICONS, stageIcon } from '../icons';
 import type { UiCtx } from '../services';
-import { screenHeader, screenRoot, starRow, type Screen } from './common';
+import { button, screenHeader, screenRoot, starRow, type Screen } from './common';
 
-// Choix du niveau : une carte par étape (verrou, record, étoiles).
+// Choix du niveau : une carte par étape (verrou, record, étoiles), et l'accès au hangar.
 
 export interface SelectActions {
   back(): void;
   start(stage: StageDef): void;
+  /** Bouton « Hangar » (ouvert sans départ : son retour ramène ici). */
+  hangar(): void;
 }
 
 const SHAKE: Keyframe[] = [
@@ -25,6 +27,12 @@ export function kindLabel(stage: StageDef): string {
   return stage.kind === 'platform' ? 'Plateforme' : 'Vol spatial';
 }
 
+/** « 0 cristal », « 1 cristal », « 1 250 cristaux ». */
+export function crystalsText(n: number): string {
+  const v = Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+  return `${formatNumber(v)} ${v >= 2 ? 'cristaux' : 'cristal'}`;
+}
+
 export function createLevelSelect(ctx: UiCtx, a: SelectActions): Screen {
   const root = screenRoot('select');
   const save = getSave();
@@ -35,7 +43,20 @@ export function createLevelSelect(ctx: UiCtx, a: SelectActions): Screen {
   total.setAttribute('aria-label', `${stars} étoiles sur ${STAGES.length * 3}`);
   total.append(icon(ICONS.star, 'star is-on'), el('span', 'select-total-n', `${stars}/${STAGES.length * 3}`));
 
-  root.append(screenHeader(ctx, 'Choix du niveau', a.back, total));
+  // Hangar, avec la réserve de cristaux en sous-titre.
+  const reserve = crystalsText(getCrystals());
+  const hangar = button(ctx, {
+    label: 'Hangar',
+    icon: ICONS.hangar,
+    sub: reserve,
+    cls: 'btn-sm select-hangar',
+    aria: `Hangar, réserve : ${reserve}`,
+    onPress: a.hangar,
+  });
+  const right = div('select-head-right');
+  right.append(hangar, total);
+
+  root.append(screenHeader(ctx, 'Choix du niveau', a.back, right));
 
   const body = div('screen-body select-body');
   const cards = div('cards');

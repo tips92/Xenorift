@@ -45,14 +45,13 @@ export const KNOCKBACK_X = 300;
 export const KNOCKBACK_Y = 520;
 /** Rebond vertical quand on tombe dans des pics. */
 export const HAZARD_POP_Y = 760;
-/** Décalage du pistolet par rapport aux pieds (personnage tourné vers la droite). */
-export const GUN_OFFSET_X = 28;
-export const GUN_OFFSET_Y = -38;
 
-// ---------------------------------------------------------------- Laser
-/** Délai après un tir avant que le laser refroidisse (sinon 5 tirs rapides ne surchaufferaient jamais). */
-export const HEAT_COOL_DELAY_MS = 260;
-export const TRIPLE_SPREAD_RAD = (10 * Math.PI) / 180;
+// ---------------------------------------------------------------- Tirs de Kaï
+// Fiches des armes (cadence, chauffe, délai de refroidissement…) : core/weapons.ts.
+/** Écart min entre deux sons d'impact (plombs de pompe qui touchent ensemble : un seul son). */
+export const IMPACT_SFX_GAP_MS = 45;
+/** Bonus de vitesse : une bouffée de traînée derrière Kaï toutes les … ms quand il court. */
+export const SPEED_TRAIL_MS = 30;
 
 // ---------------------------------------------------------------- Ennemis
 /** Les ennemis ne sont simulés qu'à moins de 1,5 écran du centre de la caméra. */
@@ -66,7 +65,12 @@ export const SPITTER_INTERVAL_MS = 2200;
 export const SPORE_SPEED = 330;
 export const SPORE_GRAVITY = 420;
 export const SPORE_LIFE_S = 4;
-export const ARMORED_HP = 2;
+/**
+ * Points de vie (doublés à l'étape 2 pour des dégâts entiers) : laser 2 par tir = 1 tir pour un ennemi normal,
+ * 2 pour le blindé, comme avant. L'écrasement et le bloc frappé par dessous tuent toujours d'un coup.
+ */
+export const ENEMY_HP = 2;
+export const ARMORED_HP = 4;
 
 // ---------------------------------------------------------------- Plateformes mobiles
 export const MOVER_TRAVEL = 3 * TILE;

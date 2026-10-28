@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BASE_SHIELDS, BOOST_MULS, MAX_SHIELDS_CAP } from '../core/hangar';
 import type { CourseId, FlightHud, ModeHandle, ModeHooks, StageDef, StageResult } from '../core/types';
 import { AsteroidField, chunkGeometry } from './asteroids';
 import {
@@ -27,10 +28,11 @@ import { Bin, clamp, damp, smoothstep } from './util';
 
 type Phase = 'intro' | 'fly' | 'warp' | 'dead' | 'timeout' | 'done';
 
-const MAX_SHIELD = 3;
 const BOOST_MULT = 1.6;
+/** Turbo de série : jauge vidée en 2,5 s, rechargée en 5 s (× modules du hangar : hooks.loadout.ship). */
 const BOOST_DRAIN = 1 / 2.5;
 const BOOST_FILL = 1 / 5;
+const BOOST_MUL_MAX = BOOST_MULS[BOOST_MULS.length - 1];
 const INVULN_TIME = 1.0;
 const COUNTDOWN = 3;
 const WARP_TIME = 1.5;
@@ -59,6 +61,11 @@ const _v = new THREE.Vector3();
 const _c = new THREE.Color();
 const _c2 = new THREE.Color();
 const _path = { x: 0, y: 0 };
+
+/** Valeur d'un module de la Comète bornée à [min, max] ; absente ou invalide (aperçu ancien) : `def`. */
+function shipValue(v: unknown, min: number, max: number, def: number): number {
+  return typeof v === 'number' && Number.isFinite(v) ? clamp(v, min, max) : def;
+}
 
 interface DevApi {
   autopilot(on?: boolean): void;
@@ -101,6 +108,10 @@ export class FlightRun implements ModeHandle {
   private readonly hotColor = new THREE.Color('#ffe08a');
   private readonly hullColor = new THREE.Color('#e8ecff');
   private readonly cyanColor = new THREE.Color('#3ff0ff');
+  /** Modules de la Comète (hooks.loadout.ship), lus au départ : boucliers max, vidange et recharge du turbo (/s). */
+  private readonly maxShield: number;
+  private readonly boostDrain: number;
+  private readonly boostFill: number;
 
   // --- État de la partie
   private phase: Phase = 'intro';
@@ -119,7 +130,7 @@ export class FlightRun implements ModeHandle {
   private boosting = false;
   private boostLocked = false;
   private boostVis = 0;
-  private shield = MAX_SHIELD;
+  private shield = BASE_SHIELDS;
   private invuln = 0;
   private noDamage = true;
   private timeLeft: number;
@@ -173,6 +184,11 @@ export class FlightRun implements ModeHandle {
     this.container = container;
     this.stage = stage;
     this.hooks = hooks;
+    const ship = hooks.loadout ? hooks.loadout.ship : undefined;
+    this.maxShield = Math.floor(shipValue(ship && ship.maxShields, BASE_SHIELDS, MAX_SHIELDS_CAP, BASE_SHIELDS));
+    this.boostDrain = BOOST_DRAIN * shipValue(ship && ship.boostDrainMul, 1 / BOOST_MUL_MAX, 1, 1);
+    this.boostFill = BOOST_FILL * shipValue(ship && ship.boostFillMul, 1, BOOST_MUL_MAX, 1);
+    this.shield = this.maxShield;
     const courseId: CourseId = stage.levelId === 'asteroids' ? 'asteroids' : 'nebula';
     this.course = buildCourse(courseId);
     this.theme = this.course.def.theme;
@@ -619,14 +635,14 @@ export class FlightRun implements ModeHandle {
       sy /= sl;
     }
 
-    // Turbo : jauge vidée en ~2,5 s, rechargée en ~5 s une fois relâché
+    // Turbo : jauge vidée en ~2,5 s, rechargée en ~5 s une fois relâché (module Turbo : ×1,25 / ×1,5)
     if (!wantBoost) this.boostLocked = false;
     if (wantBoost && !this.boostLocked && this.boostGauge > 0) {
       if (!this.boosting) {
         this.boosting = true;
         this.hooks.audio.sfx('boost');
       }
-      this.boostGauge -= BOOST_DRAIN * h;
+      this.boostGauge -= this.boostDrain * h;
       if (this.boostGauge <= 0) {
         this.boostGauge = 0;
         this.boosting = false;
@@ -634,7 +650,7 @@ export class FlightRun implements ModeHandle {
       }
     } else {
       this.boosting = false;
-      this.boostGauge = Math.min(1, this.boostGauge + BOOST_FILL * h);
+      this.boostGauge = Math.min(1, this.boostGauge + this.boostFill * h);
     }
 
     // Vitesse d'avance (perte brève après un choc)
@@ -962,7 +978,7 @@ export class FlightRun implements ModeHandle {
       gates: this.gatesPassed,
       gatesTotal: this.course.gates.length,
       shield: this.shield,
-      maxShield: MAX_SHIELD,
+      maxShield: this.maxShield,
       boost: Math.round(this.boostGauge * 100) / 100,
       progress: Math.round(this.progress() * 1000) / 1000,
     };
@@ -999,6 +1015,11 @@ export class FlightRun implements ModeHandle {
         nextGate: this.nextGate,
         gatesTotal: this.course.gates.length,
         shield: this.shield,
+        maxShields: this.maxShield,
+        boost: Math.round(this.boostGauge * 1000) / 1000,
+        boosting: this.boosting,
+        boostDrain: this.boostDrain,
+        boostFill: this.boostFill,
         progress: Math.round(this.progress() * 1000) / 1000,
         speed: Math.round(this.speed),
         calls: this.renderer.info.render.calls,

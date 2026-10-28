@@ -6,7 +6,9 @@ import type { Segment } from './build.ts';
 // Chaque mécanique est présentée seule, sans danger, puis combinée. Sol de base : lignes 12-13.
 // Repères de colonnes en commentaire (colonne absolue du premier caractère du segment).
 
-/** 0 — Départ : zone sûre, premiers cristaux à ramasser en marchant, premier bloc « ? ». */
+/** 0 — Départ : zone sûre, premiers cristaux à ramasser en marchant, premier bloc « ? ».
+ *  Départ en colonne 8 : au repos, la caméra est calée à gauche et Kaï doit apparaître à droite du stick
+ *  tactile (et du Tir en mode gaucher), même au cran « grand » sur un écran de 320 px de haut. */
 const START: Segment = [
   '................',
   '................',
@@ -16,15 +18,15 @@ const START: Segment = [
   '................',
   '................',
   '................',
-  '.............?..',
+  '..............?.',
   '................',
   '................',
-  '*.P..*..ccc.....',
+  '*....*..P.ccc...',
   '################',
   '################',
 ];
 
-/** 16 — Premier marcheur seul sur du plat, rangée de blocs avec le tir triple, premier pilier. */
+/** 16 — Premier marcheur seul sur du plat, rangée de blocs avec le bonus de vitesse (« 1 »), premier pilier. */
 const FIRST_WALKER: Segment = [
   '......................',
   '......................',
@@ -52,7 +54,7 @@ const PILLARS: Segment = [
   '....................',
   '....................',
   '....................',
-  '...cc......cc.......',
+  '...cc......c........',
   '...##......##..cc...',
   '...##......##.c..c..',
   'w..##...w..##.......',
@@ -114,26 +116,34 @@ const LIFT: Segment = [
   '##........########',
 ];
 
-/** 124 — Blindé présenté sur un long plat : de la place pour lui tirer dessus (2 tirs). */
+/** 124 — Blindé présenté sur un long plat : de la place pour lui tirer dessus (2 tirs de laser).
+ *  Salle secrète murée tout en haut (ruine astréenne, 3 cristaux ; visible en haut de l'écran depuis le sol,
+ *  mais fermée et hors d'atteinte) : on y entre par la porte posée sur le rocher (col. 144, ligne 9, sur une
+ *  tuile plate), on ressort par celle de la salle (col. 128, ligne 5). Lignes 0 et 1 vides : le plafond et la
+ *  flèche ▲ de la porte de la salle restent sous le HUD (caméra calée en haut de la carte). Le bloc « ? » de
+ *  dessous laisse la place de se tenir debout dessus. Ses cristaux étaient sur le 2e pilier et sur le rocher
+ *  du double saut. */
 const ARMORED: Segment = [
   '......................',
   '......................',
+  '...BBBBBBBBBBB........',
+  '...B.........B........',
+  '...B.........B........',
+  '...BD.*ccc*..B........',
+  '...BBBBBBBBBBB........',
   '......................',
   '......................',
-  '......................',
-  '......................',
-  '......................',
-  '......................',
-  '.....?................',
-  '...................cc.',
+  '.....?............ccD.',
   '..................####',
   '..............a...####',
   '######################',
   '######################',
 ];
 
-/** 146 — Point de contrôle 2, bloc double saut, cache de cristaux en hauteur (double saut uniquement :
- *  depuis le rebord, montée de 6 lignes ; un saut normal plafonne 1 ligne trop bas). */
+/** 146 — Point de contrôle 2, bloc de cadence (« 3 »), et un secret de compétence : la cache de 5 cristaux en
+ *  hauteur n'est accessible qu'avec le double saut, appris plus tard (depuis le rocher, montée de 6 lignes ;
+ *  un saut normal plafonne 1 ligne trop bas). On y revient ensuite : les 3 étoiles restent possibles sans
+ *  elle (48 cristaux sur 53, 90 % requis). */
 const DOUBLE_JUMP: Segment = [
   '........................',
   '........................',
@@ -144,7 +154,7 @@ const DOUBLE_JUMP: Segment = [
   '..................f.....',
   '........................',
   '......3.................',
-  '............c.c.........',
+  '........................',
   '...........#####........',
   '..K........#####....w...',
   '########################',

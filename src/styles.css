@@ -146,7 +146,7 @@ svg {
   touch-action: manipulation;
 }
 
-/* Ordre interne de #ui-root : fond 0, HUD 10, écrans 20, pause 30, messages 40, fondu 50, rotation 60. */
+/* Ordre interne de #ui-root : fond 0, HUD 10, écrans 20, messages 25, pause 30, fondu 50, rotation 60. */
 
 .screens {
   position: absolute;
@@ -972,6 +972,19 @@ svg {
   height: 18px;
 }
 
+/* En-tête des Niveaux : bouton Hangar (réserve en sous-titre) puis le total d'étoiles. */
+.select-head-right {
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 1.4vw, 12px);
+}
+
+.select-hangar {
+  min-height: 44px;
+  padding-top: 0.4em;
+  padding-bottom: 0.4em;
+}
+
 .select-body {
   display: flex;
 }
@@ -1183,8 +1196,15 @@ svg {
 
 /* ------------------------------------------------------------------ Options */
 
+/* Zone qui défile : fondu en haut et en bas (pas de carte tranchée net sous l'en-tête), avec une marge
+   interne de la même hauteur pour que le premier et le dernier élément ne restent pas estompés. */
 .options-body {
   display: flex;
+  padding-top: 14px;
+  padding-bottom: 14px;
+  scroll-padding-block: 14px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
 
 .options {
@@ -1195,6 +1215,38 @@ svg {
   max-width: 880px;
   margin: auto;
   padding-bottom: 4px;
+}
+
+/* Rubriques (Général, Commandes) : titre néon et filet, puis la grille. */
+.options-section {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5px, 1.4vh, 10px);
+}
+
+.options-section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 22px;
+  padding-left: 4px;
+}
+
+.options-section-title {
+  flex: 0 0 auto;
+  padding-left: 0.18em;
+  font: 700 clamp(11px, 3.2vh, 13px) / 1 var(--font-title);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 10px rgba(63, 247, 255, 0.45);
+}
+
+.options-section-rule {
+  flex: 1 1 auto;
+  min-width: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(63, 247, 255, 0.4), rgba(255, 63, 210, 0.12) 70%, transparent);
 }
 
 .options-grid {
@@ -1324,6 +1376,190 @@ svg {
 .toggle--unlockAll.is-on .switch::before {
   background: linear-gradient(90deg, var(--orange), var(--magenta));
   box-shadow: 0 0 12px rgba(255, 154, 63, 0.5);
+}
+
+/* ---- Sélecteur à 3 crans (taille, opacité des commandes) : même carte qu'un interrupteur ; le
+   contrôle segmenté passe sous le libellé quand la place manque (grille à 2 colonnes). */
+
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 56px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(30, 16, 72, 0.8), rgba(12, 5, 34, 0.88));
+}
+
+/* Base fixe (pas « auto ») : les sélecteurs de deux lignes voisines restent alignés. */
+.choice-head {
+  display: flex;
+  flex: 1 1 180px;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.choice .toggle-ico {
+  color: var(--cyan);
+}
+
+.seg {
+  --seg-i: 1;
+  position: relative;
+  display: grid;
+  flex: 1 1 200px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Pastille du cran choisi : glisse d'une case à l'autre (transform seulement). */
+.seg::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 3);
+  border-radius: 10px;
+  background: linear-gradient(100deg, rgba(18, 201, 255, 0.92), rgba(106, 77, 255, 0.92));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 14px rgba(63, 247, 255, 0.42);
+  transform: translate3d(calc(var(--seg-i) * 100%), 0, 0);
+  transition: transform 220ms var(--ease-out);
+}
+
+.seg-btn {
+  position: relative;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 6px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink-dim);
+  font: 700 clamp(11px, 3.4vh, 13px) / 1.1 var(--font-body);
+  letter-spacing: 0.03em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color 160ms ease,
+    transform 120ms ease;
+}
+
+.seg-btn:active {
+  transform: scale(0.95);
+}
+
+.seg-btn.is-on {
+  color: #fff;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.55);
+}
+
+.seg-btn:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .seg-btn:not(.is-on):hover {
+    color: var(--ink);
+  }
+}
+
+/* ---- Aperçu des commandes en jeu (titre de la rubrique Commandes) : mini écran en paysage, stick à
+   gauche, Tir et Saut à droite ; taille, opacité et côté suivent les réglages. */
+
+.ctl-preview {
+  --pv-scale: 1;
+  --pv-opacity: 0.75;
+  position: relative;
+  flex: 0 0 auto;
+  width: 84px;
+  height: 40px;
+  overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, transparent 72%, rgba(157, 255, 63, 0.16) 72%, rgba(157, 255, 63, 0.06)),
+    linear-gradient(180deg, rgba(43, 13, 82, 0.85), rgba(8, 2, 28, 0.92));
+}
+
+.ctl-preview-pad {
+  position: absolute;
+  inset: 0;
+  opacity: var(--pv-opacity);
+  transition:
+    opacity 200ms ease,
+    transform 260ms var(--ease-out);
+}
+
+.ctl-preview.is-lefty .ctl-preview-pad {
+  transform: scaleX(-1);
+}
+
+.ctl-preview-stick,
+.ctl-preview-fire,
+.ctl-preview-jump {
+  position: absolute;
+  border: 1.5px solid rgba(63, 247, 255, 0.95);
+  border-radius: 50%;
+  background: rgba(10, 4, 30, 0.6);
+  box-shadow: 0 0 5px rgba(63, 247, 255, 0.6);
+}
+
+.ctl-preview-stick {
+  left: 3px;
+  bottom: 3px;
+  width: 15px;
+  height: 15px;
+  transform: scale(var(--pv-scale));
+  transform-origin: 0 100%;
+  transition: transform 200ms var(--ease-out);
+}
+
+/* Bille du stick. */
+.ctl-preview-stick::after {
+  content: '';
+  position: absolute;
+  inset: 28%;
+  border-radius: 50%;
+  background: rgba(63, 247, 255, 0.8);
+}
+
+.ctl-preview-btns {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  width: 24px;
+  height: 19px;
+  transform: scale(var(--pv-scale));
+  transform-origin: 100% 100%;
+  transition: transform 200ms var(--ease-out);
+}
+
+.ctl-preview-fire {
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 10px;
+  border-color: rgba(255, 63, 210, 0.95);
+  box-shadow: 0 0 5px rgba(255, 63, 210, 0.6);
+}
+
+.ctl-preview-jump {
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
 }
 
 .options-footer {
@@ -1681,6 +1917,35 @@ svg {
   color: #fff;
 }
 
+/* Réserve du hangar : gain de l'étape (« +N cristaux ») avant le total. */
+.detail--bank {
+  border-color: rgba(63, 247, 255, 0.22);
+  background: rgba(63, 247, 255, 0.06);
+}
+
+.detail--bank .detail-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Le total défile avec le score : chiffres de largeur fixe (la ligne ne tremble pas). */
+.detail--bank .detail-value {
+  min-width: 2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #d8feff;
+}
+
+.detail-gain {
+  flex: 0 0 auto;
+  font: 800 clamp(11px, 3.3vh, 14px) / 1.1 var(--font-title);
+  color: var(--lime);
+  text-shadow: 0 0 8px rgba(157, 255, 63, 0.5);
+  white-space: nowrap;
+}
+
 .results-actions {
   display: flex;
   gap: clamp(8px, 1.4vw, 12px);
@@ -1712,6 +1977,858 @@ svg {
 
   .results-actions .btn-primary {
     flex-basis: 100%;
+  }
+}
+
+/* ------------------------------------------------------------------ Hangar */
+
+/* En-tête (retour, titre, réserve), puis deux colonnes : aperçu et départ à gauche, onglets et liste des
+   achats à droite (seule la liste défile). Petits écrans (568 x 320) : rien ne déborde, les textes passent
+   à la ligne au lieu d'être coupés. */
+
+.screen--hangar {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 2vh, 14px);
+}
+
+.hg-wallet {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 13px 0 10px;
+  border: 1px solid rgba(63, 247, 255, 0.4);
+  border-radius: 999px;
+  background: rgba(63, 247, 255, 0.08);
+  box-shadow: 0 0 14px rgba(63, 247, 255, 0.12);
+  color: #d8feff;
+  font: 800 15px / 1 var(--font-title);
+  white-space: nowrap;
+}
+
+.hg-wallet-ico {
+  width: 20px;
+  height: 20px;
+  filter: drop-shadow(0 0 4px rgba(63, 247, 255, 0.7));
+}
+
+/* « −60 » à gauche de la réserve après un achat (reste dans la bande de l'en-tête). */
+.hg-spent {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 8px);
+  margin-top: -0.5em;
+  color: #ff9adf;
+  font: 800 13px / 1 var(--font-title);
+  text-shadow: 0 0 8px rgba(255, 63, 210, 0.7);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hg-body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.5fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: clamp(8px, 1.8vw, 18px);
+  width: 100%;
+  max-width: 1080px;
+  min-height: 0;
+  margin: 0 auto;
+}
+
+.hg-side {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1.6vh, 10px);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---- Aperçu : baie du hangar (fond et sol en CSS), légende en haut, canvas dessous. */
+
+.hg-stage {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(63, 247, 255, 0.28);
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse 70% 45% at 50% 100%, rgba(63, 247, 255, 0.16), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 50% 0%, rgba(255, 63, 210, 0.1), transparent 70%),
+    linear-gradient(180deg, rgba(22, 11, 56, 0.9), rgba(8, 3, 26, 0.94));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 30px rgba(0, 0, 0, 0.42);
+}
+
+/* Sol de la baie : grille néon. */
+.hg-stage::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  height: 30%;
+  border-top: 1px solid rgba(63, 247, 255, 0.32);
+  background:
+    repeating-linear-gradient(90deg, rgba(63, 247, 255, 0.11) 0 1px, transparent 1px 26px),
+    linear-gradient(180deg, rgba(63, 247, 255, 0.07), rgba(63, 247, 255, 0));
+  pointer-events: none;
+}
+
+.hg-caption {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: clamp(6px, 2vh, 12px) 12px 0;
+}
+
+.hg-caption-title {
+  font: 800 clamp(11px, 3.4vh, 15px) / 1.15 var(--font-title);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(63, 247, 255, 0.55);
+}
+
+.hg-caption-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.hg-caption-sub {
+  font: 600 clamp(10px, 3vh, 12px) / 1.2 var(--font-body);
+  color: var(--ink-dim);
+}
+
+.hg-caption-sub.is-on {
+  color: var(--lime);
+}
+
+.hg-slots {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.hg-slot {
+  width: clamp(13px, 4vh, 17px);
+  height: clamp(13px, 4vh, 17px);
+}
+
+.hg-slot .heart-fill {
+  fill: rgba(255, 255, 255, 0.06);
+  stroke: rgba(255, 196, 238, 0.35);
+  stroke-width: 1.3;
+}
+
+.hg-slot .heart-shine {
+  stroke: transparent;
+}
+
+.hg-slot.is-on .heart-fill {
+  fill: url(#xr-g-heart);
+  stroke: #ffc4ee;
+}
+
+.hg-slot.is-on .heart-shine {
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1.4;
+}
+
+.hg-slot .hex-fill {
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(63, 247, 255, 0.35);
+}
+
+.hg-slot.is-on .hex-fill {
+  fill: url(#xr-g-hex);
+  stroke: #c8fdff;
+}
+
+/* Cœurs et boucliers achetés : halo doré. */
+.hg-slot.is-on.is-extra {
+  filter: drop-shadow(0 0 4px rgba(255, 216, 74, 0.8));
+}
+
+.hg-canvas {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.hg-canvas-el {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.hg-stage-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: radial-gradient(circle at 50% 60%, rgba(170, 250, 255, 0.4), rgba(63, 247, 255, 0) 65%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Colonne étroite (≈ 175 px à 568 de large) : marges et espacement réduits, le libellé tient en entier. */
+.hg-depart {
+  flex: 0 0 auto;
+  width: 100%;
+  padding-left: 0.7em;
+  padding-right: 0.7em;
+  letter-spacing: 0.08em;
+}
+
+/* ---- Onglets et liste */
+
+.hg-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1.6vh, 10px);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Message du hangar (refus, équipement pour la session) : en bas de la colonne des achats, un seul à la fois. */
+.hg-msg {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  z-index: 3;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  padding: 7px 14px;
+  border: 1.5px solid var(--cyan);
+  border-radius: 12px;
+  background: rgba(8, 3, 24, 0.94);
+  box-shadow: 0 0 16px rgba(63, 247, 255, 0.3);
+  color: #fff;
+  font: 700 clamp(12px, 3.6vh, 14px) / 1.25 var(--font-title);
+  letter-spacing: 0.04em;
+  text-align: center;
+  opacity: 0;
+  transform: translate3d(-50%, 8px, 0);
+  transition:
+    opacity 180ms ease,
+    transform 180ms var(--ease-out);
+  pointer-events: none;
+}
+
+.hg-msg.is-on {
+  opacity: 1;
+  transform: translate3d(-50%, 0, 0);
+}
+
+/* Carte touchée dans le bas de la liste : le message passe en haut (top posé par le script). */
+.hg-msg.is-top {
+  bottom: auto;
+}
+
+.hg-msg.is-bad {
+  border-color: #ff4f7a;
+  box-shadow: 0 0 16px rgba(255, 63, 94, 0.35);
+}
+
+.hg-tabs {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.hg-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  color: var(--ink-dim);
+  font: 800 clamp(11px, 3.4vh, 13px) / 1.1 var(--font-title);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color 160ms ease,
+    transform 120ms ease;
+}
+
+.hg-tab:active {
+  transform: scale(0.96);
+}
+
+.hg-tab:focus-visible {
+  outline-offset: -2px;
+}
+
+.hg-tab.is-on {
+  background: linear-gradient(100deg, rgba(18, 201, 255, 0.92), rgba(106, 77, 255, 0.92));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 14px rgba(63, 247, 255, 0.42);
+  color: #fff;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.55);
+}
+
+.hg-tab-ico {
+  width: 20px;
+  height: 20px;
+}
+
+/* La Comète vue de dessus (64 x 32) : icône plus large. */
+.hg-tab--ship .hg-tab-ico {
+  width: 30px;
+}
+
+.hg-tab-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (hover: hover) {
+  .hg-tab:not(.is-on):hover {
+    color: var(--ink);
+  }
+}
+
+/* Zone qui défile : fondu en haut et en bas, comme les Options. */
+.hg-list {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(6px, 1.6vh, 10px);
+  padding: 10px 2px 12px;
+  scroll-padding-block: 10px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 12px), transparent 100%);
+}
+
+.hg-list > * {
+  flex: 0 0 auto;
+}
+
+.hg-list.is-enter > * {
+  animation: rise-in 380ms var(--ease-out) backwards;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+.hg-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 0;
+  font: 700 clamp(10px, 3vh, 12px) / 1.2 var(--font-title);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 10px rgba(63, 247, 255, 0.45);
+}
+
+.hg-section-text {
+  min-width: 0;
+}
+
+.hg-section::after {
+  content: '';
+  flex: 1 1 auto;
+  min-width: 12px;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(63, 247, 255, 0.4), rgba(255, 63, 210, 0.12) 70%, transparent);
+}
+
+/* ---- Établi : sélecteur des 4 armes */
+
+.hg-weapons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.hg-weapon {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 6px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: linear-gradient(160deg, rgba(30, 16, 72, 0.8), rgba(12, 5, 34, 0.88));
+  color: var(--ink-dim);
+  text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 120ms ease;
+}
+
+.hg-weapon:active {
+  transform: scale(0.96);
+}
+
+.hg-weapon:focus-visible {
+  outline-offset: -3px;
+}
+
+.hg-weapon.is-selected {
+  border-color: rgba(63, 247, 255, 0.75);
+  background: linear-gradient(160deg, rgba(36, 40, 110, 0.9), rgba(14, 8, 44, 0.92));
+  box-shadow: 0 0 14px rgba(63, 247, 255, 0.24);
+  color: #fff;
+}
+
+.hg-weapon-ico {
+  width: clamp(24px, 8vh, 32px);
+  height: clamp(24px, 8vh, 32px);
+}
+
+.hg-weapon.is-selected .hg-weapon-ico {
+  color: var(--cyan);
+  filter: drop-shadow(0 0 4px rgba(63, 247, 255, 0.6));
+}
+
+.hg-weapon.is-locked .hg-weapon-ico {
+  opacity: 0.4;
+}
+
+.hg-weapon-name {
+  max-width: 100%;
+  font: 600 clamp(10px, 2.9vh, 12px) / 1.1 var(--font-body);
+  overflow-wrap: anywhere;
+}
+
+/* État sous le nom : « Équipée », « Possédée », prix ou « Plan manquant ». */
+.hg-weapon-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  max-width: 100%;
+  font: 700 clamp(9px, 2.7vh, 11px) / 1.1 var(--font-body);
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+
+.hg-weapon-state.is-equipped {
+  color: var(--lime);
+}
+
+.hg-weapon-state.is-price {
+  color: #d8feff;
+}
+
+.hg-weapon-state.is-lock {
+  color: var(--orange);
+}
+
+.hg-weapon-state-ico {
+  width: 12px;
+  height: 12px;
+}
+
+.hg-weapon-state.is-funds .hg-weapon-state-ico {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+/* ---- Cartes des achats */
+
+.hg-item {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 56px;
+  padding: 8px 10px 8px 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: linear-gradient(160deg, rgba(30, 16, 72, 0.8), rgba(12, 5, 34, 0.88));
+}
+
+.hg-item.is-equipped {
+  border-color: rgba(157, 255, 63, 0.4);
+}
+
+.hg-item.is-max {
+  border-color: rgba(255, 216, 74, 0.3);
+}
+
+.hg-item--soon {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.hg-item-ico {
+  width: clamp(24px, 7.5vh, 30px);
+  height: clamp(24px, 7.5vh, 30px);
+  color: var(--cyan);
+  filter: drop-shadow(0 0 4px rgba(63, 247, 255, 0.5));
+}
+
+.hg-item.is-locked .hg-item-ico {
+  color: var(--ink-faint);
+  filter: none;
+  opacity: 0.7;
+}
+
+.hg-item-ico--heart .heart-fill {
+  fill: url(#xr-g-heart);
+  stroke: #ffc4ee;
+  stroke-width: 1.3;
+}
+
+.hg-item-ico--heart .heart-shine {
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1.4;
+}
+
+.hg-item-text {
+  display: flex;
+  flex: 1 1 140px;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.hg-item-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.hg-item-name {
+  min-width: 0;
+  font: 600 clamp(13px, 3.8vh, 15px) / 1.15 var(--font-body);
+  color: #fff;
+}
+
+.hg-item-line {
+  font: 400 clamp(10px, 3vh, 12px) / 1.25 var(--font-body);
+  color: var(--ink-dim);
+}
+
+.hg-item-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+}
+
+.hg-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 600 clamp(10px, 2.9vh, 11px) / 1.2 var(--font-body);
+  letter-spacing: 0.02em;
+}
+
+.hg-note-ico {
+  width: 12px;
+  height: 12px;
+}
+
+.hg-note.is-lock {
+  color: var(--orange);
+}
+
+.hg-note.is-test {
+  color: var(--gold);
+}
+
+.hg-note.is-soon {
+  color: #c4b0ff;
+}
+
+.hg-pips {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.hg-pip {
+  width: 13px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.hg-pip.is-on {
+  background: linear-gradient(90deg, var(--cyan), var(--violet));
+  box-shadow: 0 0 6px rgba(63, 247, 255, 0.6);
+}
+
+.hg-pip.is-new {
+  animation: hg-pip-pop 520ms var(--ease-back) backwards;
+}
+
+.hg-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.hg-buy,
+.hg-equip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1.5px solid rgba(63, 247, 255, 0.6);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(42, 24, 96, 0.9), rgba(16, 8, 44, 0.92));
+  box-shadow: 0 0 12px rgba(63, 247, 255, 0.18);
+  color: #fff;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 120ms ease;
+}
+
+.hg-buy:active,
+.hg-equip:active {
+  transform: scale(0.95);
+}
+
+.hg-buy {
+  min-width: 74px;
+  font: 800 clamp(13px, 3.9vh, 15px) / 1 var(--font-title);
+}
+
+.hg-buy-ico {
+  width: 16px;
+  height: 16px;
+}
+
+.hg-buy.is-locked {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+  color: var(--ink-faint);
+}
+
+.hg-buy.is-locked .hg-buy-ico {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+.hg-equip {
+  border-color: rgba(157, 255, 63, 0.55);
+  box-shadow: 0 0 12px rgba(157, 255, 63, 0.14);
+  color: #eaffd0;
+  font: 800 clamp(11px, 3.3vh, 13px) / 1 var(--font-title);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hg-equip.is-on {
+  background: rgba(157, 255, 63, 0.14);
+  cursor: default;
+}
+
+.hg-equip-ico {
+  width: 15px;
+  height: 15px;
+  color: var(--lime);
+}
+
+.hg-max,
+.hg-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font: 800 12px / 1 var(--font-title);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.hg-max {
+  border: 1px solid rgba(255, 216, 74, 0.45);
+  background: rgba(255, 216, 74, 0.1);
+  color: #ffe7a0;
+}
+
+.hg-tag {
+  border: 1px solid rgba(196, 176, 255, 0.45);
+  background: rgba(124, 77, 255, 0.14);
+  color: #d8ccff;
+}
+
+/* Achat réussi : éclat de la carte (opacité animée). */
+.hg-item-flash {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg, rgba(63, 247, 255, 0.05), rgba(63, 247, 255, 0.3), rgba(255, 63, 210, 0.18));
+  box-shadow: inset 0 0 0 1.5px var(--cyan);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- Confirmation d'achat (boîte de .confirm, aux couleurs du cristal) : opaque, le hangar ne se lit pas au
+   travers. */
+
+.hg-confirm {
+  background: rgba(3, 0, 10, 0.82);
+}
+
+.hg-confirm-box {
+  border-color: rgba(63, 247, 255, 0.45);
+  background: linear-gradient(160deg, rgb(30, 16, 72), rgb(10, 4, 30));
+}
+
+.hg-confirm-ico {
+  filter: drop-shadow(0 0 8px rgba(63, 247, 255, 0.7));
+}
+
+.hg-confirm-funds {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #d8feff;
+  font: 700 clamp(12px, 3.6vh, 14px) / 1.2 var(--font-title);
+}
+
+.hg-confirm-funds .ico {
+  width: 16px;
+  height: 16px;
+}
+
+/* ---- Petits écrans : sur l'Établi, une amélioration entière reste visible sous la fiche de l'arme. */
+
+@media (max-height: 420px) {
+  .hg-weapon {
+    min-height: 50px;
+    padding: 4px 3px;
+    gap: 2px;
+  }
+
+  .hg-weapon-ico {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Fiche de l'arme sans sa description : la place va aux améliorations ; nom plus étroit, pour que Équiper et le
+     prix (mode test) restent sur la même ligne. */
+  .hg-item--weapon .hg-item-line {
+    display: none;
+  }
+
+  .hg-item--weapon .hg-item-text {
+    flex-basis: 80px;
+  }
+
+  .hg-item--weapon {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+}
+
+@media (max-height: 380px) {
+  .hg-weapon {
+    min-height: 44px;
+    padding: 3px;
+    gap: 1px;
+  }
+
+  .hg-weapon-ico {
+    width: 18px;
+    height: 18px;
+  }
+
+  .hg-item {
+    min-height: 50px;
+    padding: 5px 8px 5px 10px;
+  }
+
+  .hg-item--weapon {
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+
+  .hg-tab {
+    min-height: 40px;
+  }
+}
+
+/* 320 px de haut : titre « Améliorations · arme » masqué (la fiche juste au-dessus nomme l'arme), cartes
+   resserrées. */
+@media (max-height: 340px) {
+  .hg-list {
+    gap: 4px;
+  }
+
+  .hg-list > .hg-section {
+    display: none;
+  }
+
+  .hg-weapon-ico {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* Onglets étroits (568 à 600 px de large) : libellés seuls, liste un peu plus large. */
+@media (max-width: 600px) {
+  .hg-tab-ico {
+    display: none;
+  }
+
+  .hg-body {
+    grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.5fr);
+  }
+}
+
+/* Fenêtre très étroite (PC) : aperçu au-dessus de la liste. */
+@media (max-width: 480px) {
+  .hg-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .hg-stage {
+    flex: 0 0 auto;
+    height: 34vh;
   }
 }
 
@@ -1970,8 +3087,39 @@ svg {
   transform: none;
 }
 
+/* Vue Options : l'en-tête (bouton Retour) reste en place, seul le panneau d'options défile. */
 .pause[data-view='options'] .pause-panel {
+  display: flex;
+  flex-direction: column;
   width: min(880px, 100%);
+  overflow: hidden;
+}
+
+.pause[data-view='options'] .pause-view--options {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Marge négative + retrait : les halos et contours de focus ne sont pas rognés sur les côtés. Fondu en haut
+   et en bas de la zone qui défile, comme .options-body. */
+.pause-opt-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 -8px;
+  padding: 14px 8px;
+  scroll-padding-block: 14px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  scrollbar-width: none;
+}
+
+.pause-opt-body::-webkit-scrollbar {
+  display: none;
 }
 
 .pause-view {
@@ -2262,7 +3410,7 @@ svg {
   text-shadow: 0 0 8px rgba(255, 200, 60, 0.85);
 }
 
-/* ---- Plateforme : jauge de chauffe du laser */
+/* ---- Plateforme : jauge de chauffe de l'arme équipée */
 
 .hud-heat {
   position: absolute;
@@ -2282,18 +3430,19 @@ svg {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
-.hud-heat .ico-laser {
-  width: 18px;
-  height: 18px;
+/* Icône de l'arme : couleur selon la chauffe (froide, tiède, brûlante). */
+.hud-heat .ico-weapon {
+  width: 22px;
+  height: 22px;
   color: var(--cyan);
-  filter: drop-shadow(0 0 4px currentColor);
+  filter: drop-shadow(0 0 3px currentColor);
 }
 
-.hud-heat[data-level='warm'] .ico-laser {
+.hud-heat[data-level='warm'] .ico-weapon {
   color: var(--orange);
 }
 
-.hud-heat[data-level='hot'] .ico-laser {
+.hud-heat[data-level='hot'] .ico-weapon {
   color: var(--red);
 }
 
@@ -2307,29 +3456,26 @@ svg {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 
+/* Dégradé découpé à la chauffe (--heat-off : part vide à droite, posée par hud.ts). Un cache par-dessus laissait
+   baver le dégradé dans l'anticrénelage des coins arrondis (liserés cyan et rouge sur la jauge vide). */
 .heat-grad {
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, #3ff7ff 0%, #3ff7ff 34%, #ff9a3f 64%, #ff3f5e 100%);
+  clip-path: inset(0 calc(var(--heat-off, 1) * 100%) 0 0);
+  transition: clip-path 90ms linear;
 }
 
-.heat-cover {
-  position: absolute;
-  inset: 0;
-  background: #0d0626;
-  transform-origin: right center;
-  transition: transform 90ms linear;
-}
-
+/* Graduations : un tir de l'arme équipée (--heat-step, posé par hud.ts ; laser : 20 %, 5 tirs). */
 .heat-ticks {
   position: absolute;
   inset: 0;
   background: repeating-linear-gradient(
     90deg,
     rgba(0, 0, 0, 0) 0,
-    rgba(0, 0, 0, 0) calc(20% - 1px),
-    rgba(5, 1, 15, 0.85) calc(20% - 1px),
-    rgba(5, 1, 15, 0.85) 20%
+    rgba(0, 0, 0, 0) calc(var(--heat-step, 20%) - 1px),
+    rgba(5, 1, 15, 0.85) calc(var(--heat-step, 20%) - 1px),
+    rgba(5, 1, 15, 0.85) var(--heat-step, 20%)
   );
 }
 
@@ -2359,35 +3505,40 @@ svg {
   animation: crit-pulse 0.28s ease-in-out infinite alternate;
 }
 
-/* ---- Plateforme : bonus actif */
+/* ---- Plateforme : bonus actifs (vitesse, cadence, bouclier), à gauche du bouton pause. Seuls les anneaux
+   allumés prennent de la place : la rangée, calée à droite, ne dépasse jamais 3 anneaux (154 px). */
 
-.hud-power {
-  --pw: var(--magenta);
+.hud-powers {
   position: absolute;
   top: calc(var(--hud-top) - 2px);
   right: calc(var(--hud-right) + 64px);
-  display: grid;
+  display: flex;
+  gap: 5px;
+}
+
+.hud-power {
+  --pw: var(--magenta);
+  position: relative;
+  display: none;
   place-items: center;
   width: 48px;
   height: 48px;
-  opacity: 0;
-  transform: scale(0.6);
-  transition:
-    opacity 200ms ease,
-    transform 260ms var(--ease-back);
 }
 
 .hud-power.is-on {
-  opacity: 1;
-  transform: none;
+  display: grid;
+}
+
+.hud-power[data-kind='speed'] {
+  --pw: var(--lime);
+}
+
+.hud-power[data-kind='rapid'] {
+  --pw: var(--orange);
 }
 
 .hud-power[data-kind='shield'] {
   --pw: var(--cyan);
-}
-
-.hud-power[data-kind='doublejump'] {
-  --pw: var(--lime);
 }
 
 .power-ring {
@@ -2411,6 +3562,11 @@ svg {
   stroke-linecap: round;
 }
 
+/* Bouclier : anneau fixe en pointillés qui tourne (dure jusqu'au prochain coup). */
+.hud-power[data-kind='shield'] .ring-fg {
+  stroke-dasharray: 7 5.566;
+}
+
 .hud-power[data-kind='shield'] .power-ring {
   animation: ring-spin 6s linear infinite;
 }
@@ -2427,20 +3583,6 @@ svg {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.power-label {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  width: 120px;
-  margin: 3px 0 0 -60px;
-  font: 800 9px / 1 var(--font-title);
-  letter-spacing: 0.14em;
-  text-align: center;
-  text-transform: uppercase;
-  color: var(--pw);
-  text-shadow: 0 0 6px var(--pw);
 }
 
 .hud-power.is-ending .power-icon {
@@ -2694,12 +3836,13 @@ svg {
 
 /* ---- Messages (toasts) */
 
+/* Sous la pause (30) : les messages du jeu (« Vitesse ! »…) ne cachent pas le panneau. */
 .toasts {
   position: absolute;
   top: 26%;
   left: 0;
   right: 0;
-  z-index: 40;
+  z-index: 25;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2754,6 +3897,16 @@ svg {
     height: 21px;
   }
 
+  .hud-power {
+    width: 44px;
+    height: 44px;
+  }
+
+  .power-icon {
+    width: 22px;
+    height: 22px;
+  }
+
   .hud-num {
     font-size: 16px;
   }
@@ -2769,12 +3922,15 @@ svg {
 
 @media (max-width: 700px) {
   .hud-chip {
-    gap: 7px;
-    padding: 0 10px;
+    gap: 5px;
+    padding: 0 8px;
   }
 
+  /* Jauge plus étroite et décalée vers la droite : la pastille des vies et cristaux (« 53/53 ») ne la touche pas
+     jusqu'à 621 px de large (dessous, la jauge passe à droite), et elle reste à gauche des trois anneaux. */
   .hud-heat {
-    width: 130px;
+    left: 24px;
+    width: 116px;
   }
 
   .fl-left {
@@ -2787,7 +3943,8 @@ svg {
   }
 }
 
-/* Très petits écrans (ex. 568 px) : la jauge de chauffe passe à droite, le bonus dessous. */
+/* Très petits écrans (ex. 568 px) : la jauge de chauffe passe à droite, les bonus dessous (sous le libellé
+   SURCHAUFFE). */
 @media (max-width: 620px) {
   .hud-heat {
     left: auto;
@@ -2796,13 +3953,60 @@ svg {
     margin: 0;
   }
 
-  .hud-power {
-    top: calc(var(--hud-top) + 56px);
+  .hud-powers {
+    top: calc(var(--hud-top) + 62px);
     right: var(--hud-right);
   }
 
   .fl-timer {
     font-size: 22px;
+  }
+}
+
+/* 4 ou 5 cœurs (hangar ; classe posée par hud.ts) : la pastille s'allonge de 24 px par cœur. Sous 960 px de
+   large, la jauge de chauffe passe à droite et les bonus dessous (comme sous 620 px) : elle ne touche plus la
+   pastille (« 53/53 » compris). */
+@media (max-width: 960px) {
+  .hud-platform.has-extra-hearts .hud-heat {
+    left: auto;
+    right: calc(var(--hud-right) + 62px);
+    width: 116px;
+    margin: 0;
+  }
+
+  .hud-platform.has-extra-hearts .hud-powers {
+    top: calc(var(--hud-top) + 62px);
+    right: var(--hud-right);
+  }
+}
+
+/* Bouclier renforcé (4 ou 5 boucliers ; classe posée par hud.ts) : pastilles serrées, jauge de turbo raccourcie
+   de la marge de sécurité de gauche (encoche : le bloc décalé ne touche pas le chrono centré) ; sous 620 px,
+   pastilles plus petites et jauge plus courte encore. */
+.fl-left.has-extra-shields .fl-pips {
+  gap: 2px;
+}
+
+@media (min-width: 701px) {
+  .fl-left.has-extra-shields .fl-boost-track {
+    width: clamp(64px, calc(14vw - var(--sal)), 130px);
+  }
+}
+
+@media (max-width: 700px) {
+  .fl-left.has-extra-shields .fl-boost-track {
+    width: clamp(40px, calc(64px - var(--sal)), 64px);
+  }
+}
+
+@media (max-width: 620px) {
+  .fl-left.has-extra-shields .fl-pip {
+    width: 17px;
+    height: 19px;
+  }
+
+  .fl-left.has-extra-shields .fl-boost-track {
+    width: 52px;
   }
 }
 
@@ -2962,6 +4166,17 @@ svg {
   }
   100% {
     transform: translate3d(120%, 0, 0);
+  }
+}
+
+@keyframes hg-pip-pop {
+  from {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
   }
 }
 

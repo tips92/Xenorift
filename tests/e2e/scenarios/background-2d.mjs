@@ -29,7 +29,7 @@ export const meta = {
   timeoutMs: 120000,
 };
 
-/** Tient ▶ (doigt `id`) jusqu'à ce que le jeu lise « droite » et que Kaï avance. */
+/** Tient le stick vers la droite (doigt `id`) jusqu'à ce que le jeu lise « droite » et que Kaï avance. */
 async function holdRight(t, f, id, label) {
   const [rx, ry] = await center(t, '.xr-dpad', 0.8, 0.5);
   const x0 = (await player2d(t)).x;
@@ -48,10 +48,10 @@ async function assertFrozen(t, ms, label) {
   return b;
 }
 
-/** Commandes au repos (aucune direction ni bouton). */
+/** Commandes au repos (aucune direction, haut et bas compris, ni bouton). */
 async function assertIdle(t, label) {
   const i = await inputState(t);
-  assert(!i.left && !i.right && !i.jump && !i.fire && i.stickX === 0, `${label} : commandes relâchées attendues (${fmt(i)})`);
+  assert(!i.left && !i.right && !i.up && !i.down && !i.jump && !i.fire && i.stickX === 0, `${label} : commandes relâchées attendues (${fmt(i)})`);
 }
 
 export default async function (t) {

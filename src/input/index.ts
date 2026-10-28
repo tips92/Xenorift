@@ -1,10 +1,12 @@
-import type { InputAction, InputApi, InputState, TouchLayout } from '../core/types';
+import type { InputAction, InputApi, InputState, TouchLayout, TouchOptions } from '../core/types';
 import { K_BOOST, K_DOWN, K_FIRE, K_JUMP, K_LEFT, K_PAUSE, K_RIGHT, K_UP, Keyboard } from './keyboard';
 import { Tilt, requestOrientationPermission } from './tilt';
 import { TouchControls, type TouchPress } from './touch';
 
 // Entrées unifiées : clavier (test sur PC), contrôles tactiles, inclinaison du téléphone.
 // L'état est un objet unique modifié sur place à chaque événement : aucune allocation à la lecture.
+// Appui « interact » (portes) : front montant de « haut sans ← → » (stick 2D qui entre dans le secteur haut,
+// ↑ / W au clavier sans ← → tenus, ou ← → relâché pendant que haut est tenu), jamais si Tir est maintenu.
 
 /** Seuil au-delà duquel un axe analogique active aussi la direction booléenne correspondante. */
 const ANALOG_TO_DIGITAL = 0.5;
@@ -24,7 +26,13 @@ class InputManager implements InputApi {
     stickY: 0,
   };
 
-  private readonly presses: Record<InputAction, boolean> = { jump: false, fire: false, boost: false, pause: false };
+  private readonly presses: Record<InputAction, boolean> = {
+    jump: false,
+    fire: false,
+    boost: false,
+    pause: false,
+    interact: false,
+  };
   private readonly pauseListeners: Array<() => void> = [];
   private readonly keys: Keyboard;
   private readonly touch: TouchControls;
@@ -32,6 +40,8 @@ class InputManager implements InputApi {
   private layout: TouchLayout = 'none';
   private tiltWanted = false;
   private tiltTimer: ReturnType<typeof setTimeout> | null = null;
+  /** « Haut sans ← → » au dernier calcul (front montant → appui interact). */
+  private upOnly = false;
 
   constructor(touchRoot: HTMLElement) {
     this.keys = new Keyboard(this.onKeyEdge, this.recompute);
@@ -59,6 +69,7 @@ class InputManager implements InputApi {
     p.fire = false;
     p.boost = false;
     p.pause = false;
+    p.interact = false;
   }
 
   setLayout(layout: TouchLayout): void {
@@ -68,6 +79,10 @@ class InputManager implements InputApi {
     this.touch.setLayout(layout);
     this.refreshTiltMode();
     this.recompute();
+  }
+
+  setTouchOptions(opts: TouchOptions): void {
+    this.touch.setOptions(opts);
   }
 
   setTiltEnabled(on: boolean): void {
@@ -169,10 +184,11 @@ class InputManager implements InputApi {
     const s = this.state;
     const km = this.keys.mask;
     const t = this.touch;
+    // Directions tout-ou-rien : clavier + stick 2D (le joystick du vol est analogique, plus bas).
     const dl = (km & K_LEFT) !== 0 || t.left;
     const dr = (km & K_RIGHT) !== 0 || t.right;
-    const du = (km & K_UP) !== 0;
-    const dd = (km & K_DOWN) !== 0;
+    const du = (km & K_UP) !== 0 || t.up;
+    const dd = (km & K_DOWN) !== 0 || t.down;
 
     let sx: number;
     let sy: number;
@@ -201,6 +217,10 @@ class InputManager implements InputApi {
     s.jump = (km & K_JUMP) !== 0 || t.jump;
     s.fire = (km & K_FIRE) !== 0 || t.fire;
     s.boost = (km & K_BOOST) !== 0 || t.boost;
+
+    const upOnly = du && !dl && !dr;
+    if (upOnly && !this.upOnly && !s.fire) this.presses.interact = true;
+    this.upOnly = upOnly;
   };
 }
 

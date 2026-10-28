@@ -267,6 +267,10 @@ export class AudioEngine implements AudioApi, SfxHost, MusicFxHost {
   private vibrate(p: number | number[]): void {
     try {
       const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { vibrate?: (p: number | number[]) => boolean }) : null;
+      // Avant le premier geste, Chrome refuse vibrate() avec une erreur dans la console (vibrations coupées dès le
+      // démarrage, victoire sans avoir touché l'écran) : rien à faire vibrer ni à arrêter.
+      const ua = nav ? (nav as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation : undefined;
+      if (ua && !ua.hasBeenActive) return;
       if (nav && typeof nav.vibrate === 'function') nav.vibrate(p);
     } catch {
       // jamais d'exception vers le jeu

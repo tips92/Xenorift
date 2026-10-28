@@ -47,6 +47,10 @@ export interface ParsedLevel {
   enemies: EnemySpawn[];
   checkpoints: GridPos[];
   movers: MoverSpawn[];
+  /** Portes (case du bas, sans collision), triées par colonne puis par ligne : paires 0 ↔ 1, 2 ↔ 3… */
+  doors: GridPos[];
+  /** Cases non pleines d'une salle close (aucun passage vers le bord de la carte) : mur de fond dessiné derrière. */
+  enclosed: GridPos[];
   exit: GridPos | null;
   /** Cristaux posés + blocs « ? ». */
   crystalsTotal: number;
@@ -87,6 +91,7 @@ export function parseLevel(level: LevelData): ParsedLevel {
   const enemies: EnemySpawn[] = [];
   const checkpoints: GridPos[] = [];
   const movers: MoverSpawn[] = [];
+  const doors: GridPos[] = [];
   let start: GridPos | null = null;
   let exit: GridPos | null = null;
   let bonusCrystals = 0;
@@ -130,7 +135,8 @@ export function parseLevel(level: LevelData): ParsedLevel {
         case '3':
           cells[i] = CELL_SOLID;
           tiles[i] = TILE_FRAME.BONUS;
-          bonus.set(i, ch === '?' ? 'crystal' : ch === '1' ? 'triple' : ch === '2' ? 'shield' : 'doublejump');
+          // 1 = vitesse, 2 = bouclier, 3 = cadence (voir LEGEND).
+          bonus.set(i, ch === '?' ? 'crystal' : ch === '1' ? 'speed' : ch === '2' ? 'shield' : 'rapid');
           if (ch === '?') bonusCrystals++;
           break;
         case '=':
@@ -170,6 +176,10 @@ export function parseLevel(level: LevelData): ParsedLevel {
           moverRunChar = ch;
           moverRun++;
           break;
+        case 'D':
+          // Décor non solide (sprite à part) ; la case du dessus fait partie de la porte.
+          doors.push({ col, row });
+          break;
         default:
           break;
       }
@@ -183,6 +193,8 @@ export function parseLevel(level: LevelData): ParsedLevel {
     start = { col: 1, row };
   }
   checkpoints.sort((a, b) => a.col - b.col);
+  // Lecture ligne par ligne : on remet les portes dans l'ordre des paires (colonne, puis ligne).
+  doors.sort((a, b) => a.col - b.col || a.row - b.row);
 
   return {
     cols,
@@ -198,9 +210,48 @@ export function parseLevel(level: LevelData): ParsedLevel {
     enemies,
     checkpoints,
     movers,
+    doors,
+    enclosed: enclosedCells(cols, rows, cells),
     exit,
     crystalsTotal: crystals.length + bonusCrystals,
   };
+}
+
+/**
+ * Cases non pleines qu'aucun chemin (sans traverser de case pleine) ne relie au bord de la carte : intérieur
+ * d'une salle murée, où l'on n'entre que par une porte.
+ */
+function enclosedCells(cols: number, rows: number, cells: Uint8Array): GridPos[] {
+  const open = new Uint8Array(cols * rows);
+  const stack: number[] = [];
+  const push = (col: number, row: number): void => {
+    const i = row * cols + col;
+    if (open[i] || cells[i] === CELL_SOLID) return;
+    open[i] = 1;
+    stack.push(i);
+  };
+  for (let col = 0; col < cols; col++) {
+    push(col, 0);
+    push(col, rows - 1);
+  }
+  for (let row = 0; row < rows; row++) {
+    push(0, row);
+    push(cols - 1, row);
+  }
+  while (stack.length > 0) {
+    const i = stack.pop() as number;
+    const col = i % cols;
+    const row = (i - col) / cols;
+    if (col > 0) push(col - 1, row);
+    if (col < cols - 1) push(col + 1, row);
+    if (row > 0) push(col, row - 1);
+    if (row < rows - 1) push(col, row + 1);
+  }
+  const out: GridPos[] = [];
+  for (let i = 0; i < cells.length; i++) {
+    if (!open[i] && cells[i] !== CELL_SOLID) out.push({ col: i % cols, row: Math.floor(i / cols) });
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- Requêtes sur la grille
@@ -289,6 +340,14 @@ export function buildTilemap(scene: Phaser.Scene, parsed: ParsedLevel): BuiltMap
         tile.faceLeft = false;
         tile.faceRight = false;
       }
+    }
+  }
+
+  // Salles closes : mur de fond derrière les cases vides (sinon on y verrait le ciel de la parallaxe).
+  // Images détruites avec la scène, comme les autres objets du niveau.
+  if (scene.textures.exists(TEX.roomWall)) {
+    for (const c of parsed.enclosed) {
+      scene.add.image(c.col * TILE, c.row * TILE, TEX.roomWall).setOrigin(0, 0).setDepth(DEPTH.decor - 1);
     }
   }
 

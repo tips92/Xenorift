@@ -1,15 +1,21 @@
 import * as Phaser from 'phaser';
-import type { PowerUpKind, SfxId, StageResult, ToastKind } from '../../core/types';
+import type { PowerUpKind, SfxId, StageResult, ToastKind, WeaponId } from '../../core/types';
+import { isWeaponId } from '../../core/weapons';
 import { createParallax, generatePlatformArt } from '../art';
 import type { ParallaxHandle } from '../art';
 import { TILE_FRAME } from '../art/keys';
 import {
   INVULNERABLE_MS,
   MAX_HEARTS,
+  MAX_HEARTS_CAP,
   POWER_DURATION_MS,
+  SPEED_BOOST_MUL,
+  STARS_RATIO,
   START_LIVES,
   TILE,
 } from '../constants';
+import { Doors } from './doors';
+import type { DoorArrival } from './doors';
 import { EnemyManager } from './enemies';
 import { Effects } from './effects';
 import { ExitShip } from './exitShip';
@@ -19,7 +25,7 @@ import { buildTilemap, CELL_HAZARD, CELL_ONEWAY, CELL_SOLID, Grid, parseLevel } 
 import type { GridPos, ParsedLevel } from './mapBuilder';
 import { Movers } from './movers';
 import { Player, PLAYER_HALF_H } from './Player';
-import { LaserPool, SporePool } from './projectiles';
+import { ShotPool, SporePool } from './projectiles';
 import { endSession, haptic, reportError, sfx, toast } from './session';
 import type { Session } from './session';
 import {
@@ -36,10 +42,11 @@ import {
   SCORE_CRYSTAL,
   SCORE_ENEMY,
   SCORE_LIFE,
+  SPEED_TRAIL_MS,
   TIME_BONUS_PER_S,
   TIME_BONUS_REF_S,
 } from './tuning';
-import { Blaster } from './weapons';
+import { Gun } from './weapons';
 
 // Scène Phaser du mode plateforme. Réutilisée d'un niveau à l'autre : tout l'état est remis à zéro dans init().
 
@@ -63,21 +70,29 @@ export class PlatformScene extends Phaser.Scene {
   player!: Player;
   enemies!: EnemyManager;
   items!: Items;
-  lasers!: LaserPool;
+  /** Tirs de Kaï, toutes armes (nom historique, lu par les tests e2e). */
+  lasers!: ShotPool;
   spores!: SporePool;
   movers!: Movers;
   ship!: ExitShip;
-  blaster!: Blaster;
+  gun!: Gun;
   hud!: HudSync;
+  doors!: Doors;
 
   /** Horloge de jeu (ms, hors pause). */
   clockMs = 0;
   lives = START_LIVES;
   hearts = MAX_HEARTS;
+  /** Cœurs au départ et à la réapparition (hooks.loadout.maxHearts : 3 + cœurs du hangar). */
+  maxHearts = MAX_HEARTS;
   crystals = 0;
   enemiesKilled = 0;
-  /** Bonus temporaire actif (le bouclier est porté par le joueur, indépendamment). */
-  power: 'triple' | 'doublejump' | null = null;
+  /**
+   * Bonus à durée, cumulables : temps restant (ms, 0 = inactif) de la vitesse (bloc 1) et de la cadence (bloc 3).
+   * Le bouclier est porté par le joueur. Tout est perdu avec une vie.
+   */
+  speedLeftMs = 0;
+  rapidLeftMs = 0;
   /** Délai pendant lequel un contact ennemi ne blesse pas, juste après un écrasement. */
   stompGraceMs = 0;
 
@@ -86,7 +101,8 @@ export class PlatformScene extends Phaser.Scene {
   private parallax: ParallaxHandle | null = null;
   private world: Phaser.Physics.Arcade.World | null = null;
   private elapsedMs = 0;
-  private powerLeftMs = 0;
+  /** Cumul de temps avant la prochaine bouffée de traînée (bonus de vitesse). */
+  private trailMs = 0;
   private respawnX = 0;
   private respawnFeetY = 0;
   private camOffsetX = 0;
@@ -98,6 +114,8 @@ export class PlatformScene extends Phaser.Scene {
   private heatHudMs = 0;
   private crystalCombo = 0;
   private lastCrystalAt = -1e9;
+  /** Arrivée d'un passage de porte (objet réutilisé, écrit par Doors.enter). */
+  private readonly doorArrival: DoorArrival = { x: 0, feetY: 0 };
 
   constructor() {
     super({ key: SCENE_KEY });
@@ -113,17 +131,21 @@ export class PlatformScene extends Phaser.Scene {
     this.clockMs = 0;
     this.elapsedMs = 0;
     this.lives = START_LIVES;
-    this.hearts = MAX_HEARTS;
+    this.maxHearts = this.loadoutMaxHearts(this.session);
+    this.hearts = this.maxHearts;
     this.crystals = 0;
     this.enemiesKilled = 0;
-    this.power = null;
-    this.powerLeftMs = 0;
+    this.speedLeftMs = 0;
+    this.rapidLeftMs = 0;
+    this.trailMs = 0;
     this.stompGraceMs = 0;
     this.camOffsetX = CAMERA_LOOKAHEAD;
     this.lastBumpAt = -1e9;
     this.heatHudMs = 0;
     this.crystalCombo = 0;
     this.lastCrystalAt = -1e9;
+    this.doorArrival.x = 0;
+    this.doorArrival.feetY = 0;
   }
 
   create(): void {
@@ -164,16 +186,22 @@ export class PlatformScene extends Phaser.Scene {
     this.fx = new Effects(this, theme);
     this.movers = new Movers(this, p.movers);
     this.items = new Items(this, p);
+    // Portes : elles ne lisent this.player qu'à la mise à jour, on peut donc les créer avant lui.
+    this.doors = new Doors(this, p.doors);
     this.enemies = new EnemyManager(this, p.enemies);
     const exit = p.exit ?? this.fallbackExit(p);
     this.ship = new ExitShip(this, exit.col, exit.row);
 
+    // Équipement de la partie (hooks.loadout, fixe) : arme tenue, ses améliorations (et celles des autres
+    // armes), compétence du double saut. Cœurs max : init().
+    const weapon = this.loadoutWeapon(session);
     this.respawnX = p.start.col * TILE + TILE / 2;
     this.respawnFeetY = (p.start.row + 1) * TILE;
-    this.player = new Player(this, this.respawnX, this.respawnFeetY);
-    this.lasers = new LaserPool(this);
+    this.player = new Player(this, this.respawnX, this.respawnFeetY, weapon);
+    this.player.canDoubleJump = this.loadoutDoubleJump(session);
+    this.lasers = new ShotPool(this);
     this.spores = new SporePool(this);
-    this.blaster = new Blaster(this);
+    this.gun = new Gun(this, weapon, session.hooks.loadout ? session.hooks.loadout.mods : undefined);
 
     // Collisions Arcade : uniquement le décor (le reste est géré à la main).
     this.physics.add.collider(this.player.zone, this.layer, undefined, this.processTile, this);
@@ -196,14 +224,16 @@ export class PlatformScene extends Phaser.Scene {
 
     this.hud = new HudSync(session.hooks.hud, {
       hearts: this.hearts,
-      maxHearts: MAX_HEARTS,
+      maxHearts: this.maxHearts,
       lives: this.lives,
       crystals: 0,
       crystalsTotal: p.crystalsTotal,
+      weapon,
       heat: 0,
       overheated: false,
-      power: null,
-      powerLeft: 0,
+      speedLeft: 0,
+      rapidLeft: 0,
+      shield: false,
     });
 
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, this.onPostUpdate, this);
@@ -211,6 +241,26 @@ export class PlatformScene extends Phaser.Scene {
     this.parallax.resize(this.scale.gameSize.width, this.scale.gameSize.height);
 
     if (DEV) this.exposeDevHelper();
+  }
+
+  /** Arme équipée pour la partie (laser si le loadout manque ou est invalide). */
+  private loadoutWeapon(session: Session): WeaponId {
+    const lo = session.hooks.loadout;
+    return lo && isWeaponId(lo.equipped) ? lo.equipped : 'laser';
+  }
+
+  /** Cœurs max : hooks.loadout.maxHearts, entier borné à MAX_HEARTS..MAX_HEARTS_CAP (sinon MAX_HEARTS). */
+  private loadoutMaxHearts(session: Session | null): number {
+    const lo = session ? session.hooks.loadout : null;
+    const n: unknown = lo ? lo.maxHearts : undefined;
+    if (typeof n !== 'number' || !Number.isFinite(n)) return MAX_HEARTS;
+    return Math.min(MAX_HEARTS_CAP, Math.max(MAX_HEARTS, Math.floor(n)));
+  }
+
+  /** Double saut : compétence apprise (ou mode test). */
+  private loadoutDoubleJump(session: Session): boolean {
+    const lo = session.hooks.loadout;
+    return !!(lo && lo.skills && lo.skills.doubleJump);
   }
 
   /** Pas de 'X' dans la carte : vaisseau posé sur le sol, près de la fin. */
@@ -270,9 +320,17 @@ export class PlatformScene extends Phaser.Scene {
     const input = s.hooks.input;
     const p = this.player;
 
-    p.controlUpdate(dt, dtMs, this.clockMs, input);
-    this.blaster.update(dt, dtMs, input);
+    // Bonus d'abord : leur fin vaut dès cette image (vitesse de Kaï, fiche de l'arme).
     this.updatePower(dtMs);
+    p.controlUpdate(dt, dtMs, this.clockMs, input);
+    this.gun.update(dt, dtMs, input);
+    // Portes : « interact » (↑ seul, refusé si Tir est tenu) consommé à chaque image, pour qu'un appui
+    // loin d'une porte ne serve pas plus tard ; devant une porte reliée, Kaï ressort devant l'autre.
+    if (input.consumePress('interact') && this.doors.enter(this.doorArrival)) {
+      p.teleport(this.doorArrival.x, this.doorArrival.feetY);
+      this.snapCamera();
+    }
+    this.doors.update(dtMs, true);
 
     this.enemies.update(dt, dtMs);
     this.lasers.update(dt);
@@ -285,8 +343,27 @@ export class PlatformScene extends Phaser.Scene {
     if (this.state === 'play' && this.ship.touches(p)) this.startExit();
     if (this.state === 'play' && p.top > this.parsed.height) this.onFall();
 
-    if (this.state === 'play') p.visualUpdate(dt, this.clockMs);
+    if (this.state === 'play') {
+      p.visualUpdate(dt, this.clockMs);
+      this.updateSpeedTrail(dtMs);
+    }
     this.updateHeatHud(dtMs);
+  }
+
+  /** Bonus de vitesse : traînée lumineuse derrière Kaï quand il court (particules recyclées). */
+  private updateSpeedTrail(dtMs: number): void {
+    const p = this.player;
+    const vx = p.body.velocity.x;
+    if (this.speedLeftMs <= 0 || Math.abs(vx) < 60) {
+      this.trailMs = 0;
+      return;
+    }
+    this.trailMs += dtMs;
+    while (this.trailMs >= SPEED_TRAIL_MS) {
+      this.trailMs -= SPEED_TRAIL_MS;
+      // Sur le torse : un peu sous l'épaule, sur la moitié de la hauteur du corps.
+      this.fx.speedStreak(p.x - (vx > 0 ? 12 : -12), p.shoulderY + 8, p.body.height * 0.5);
+    }
   }
 
   /** Le monde continue de vivre pendant la mort / le décollage (sans ramassage). */
@@ -295,6 +372,7 @@ export class PlatformScene extends Phaser.Scene {
     this.lasers.update(dt);
     this.spores.update(dt);
     this.items.update(dt, this.clockMs, false);
+    this.doors.update(dtMs, false);
   }
 
   private updateCamera(dt: number): void {
@@ -332,6 +410,8 @@ export class PlatformScene extends Phaser.Scene {
     if (this.state === 'play') {
       this.player.syncVisual();
       this.updateCamTarget();
+    } else if (this.state === 'exit') {
+      this.player.syncArmToSprite();
     }
     this.ship.syncFlame();
   }
@@ -351,15 +431,21 @@ export class PlatformScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- Collisions Arcade
 
-  /** Plateformes traversables : ne bloquent que si le corps était au-dessus avant ce pas. */
+  /**
+   * Plateformes traversables : ne bloquent que si le corps était au-dessus avant ce pas. Sert aussi aux
+   * ennemis : la descente d'étage (↓ + Saut) ne vaut que pour Kaï.
+   */
   private processTile(obj: unknown, tileObj: unknown): boolean {
     const tile = tileObj as Phaser.Tilemaps.Tile;
     if (this.grid.at(tile.x, tile.y) !== CELL_ONEWAY) return true;
     const body = (obj as Phaser.Types.Physics.Arcade.GameObjectWithBody).body as Phaser.Physics.Arcade.Body;
+    if (body === this.player.body && this.player.dropThrough) return false;
     return body.prev.y + body.height <= tile.pixelY + 1;
   }
 
+  /** Plateformes mobiles (Kaï seulement) : dessus seulement, et traversées pendant une descente d'étage. */
   private processMover(playerObj: unknown, moverObj: unknown): boolean {
+    if (this.player.dropThrough) return false;
     const pb = (playerObj as Phaser.Types.Physics.Arcade.GameObjectWithBody).body as Phaser.Physics.Arcade.Body;
     const mb = (moverObj as Phaser.Types.Physics.Arcade.GameObjectWithBody).body as Phaser.Physics.Arcade.Body;
     return pb.prev.y + pb.height <= mb.prev.y + 6;
@@ -471,7 +557,7 @@ export class PlatformScene extends Phaser.Scene {
     this.hud.set('lives', this.lives);
     this.hud.set('hearts', 0);
     this.clearPowers();
-    this.blaster.reset();
+    this.gun.reset();
     this.updateHeatHud(1000);
     this.player.startDeath(hop);
     this.playSfx('death');
@@ -499,10 +585,12 @@ export class PlatformScene extends Phaser.Scene {
     const s = this.session;
     if (!s) return;
     this.player.teleport(this.respawnX, this.respawnFeetY);
+    this.doors.reset();
     this.player.invulnMs = INVULNERABLE_MS;
-    this.hearts = MAX_HEARTS;
+    this.hearts = this.maxHearts;
     this.hud.set('hearts', this.hearts);
-    this.blaster.reset();
+    this.player.canDoubleJump = this.loadoutDoubleJump(s);
+    this.gun.reset();
     this.lasers.clear();
     this.spores.clear();
     this.stompGraceMs = 0;
@@ -541,60 +629,57 @@ export class PlatformScene extends Phaser.Scene {
   collectPower(kind: PowerUpKind, x: number, y: number): void {
     this.playSfx('powerup');
     this.fx.burst(x, y, 0xffffff, 12);
+    // Vitesse et cadence se cumulent ; reprendre le même bonus remet sa durée au maximum.
     if (kind === 'shield') {
       this.player.shield = true;
       this.showToast('Bouclier !', 'good');
+    } else if (kind === 'speed') {
+      this.speedLeftMs = POWER_DURATION_MS.speed;
+      this.showToast('Vitesse !', 'good');
     } else {
-      // Un seul bonus temporaire à la fois : le nouveau remplace l'ancien.
-      this.power = kind;
-      this.powerLeftMs = POWER_DURATION_MS[kind];
-      this.player.canDoubleJump = kind === 'doublejump';
-      this.showToast(kind === 'triple' ? 'Tir triple !' : 'Double saut !', 'good');
+      this.rapidLeftMs = POWER_DURATION_MS.rapid;
+      this.showToast('Cadence !', 'good');
     }
+    this.applyPowers();
     this.refreshPowerHud();
   }
 
   private updatePower(dtMs: number): void {
-    if (this.power) {
-      this.powerLeftMs -= dtMs;
-      if (this.powerLeftMs <= 0) {
-        this.power = null;
-        this.powerLeftMs = 0;
-        this.player.canDoubleJump = false;
-      }
-    }
+    if (this.speedLeftMs > 0) this.speedLeftMs = Math.max(0, this.speedLeftMs - dtMs);
+    if (this.rapidLeftMs > 0) this.rapidLeftMs = Math.max(0, this.rapidLeftMs - dtMs);
+    this.applyPowers();
     this.refreshPowerHud();
   }
 
+  /** Effets des bonus à durée : vitesse de Kaï, fiche de l'arme (cadence). */
+  private applyPowers(): void {
+    this.player.speedMul = this.speedLeftMs > 0 ? SPEED_BOOST_MUL : 1;
+    this.gun.setRapid(this.rapidLeftMs > 0);
+  }
+
+  /** Vie perdue : plus aucun bonus (la compétence du double saut, elle, reste). */
   private clearPowers(): void {
-    this.power = null;
-    this.powerLeftMs = 0;
-    this.player.canDoubleJump = false;
+    this.speedLeftMs = 0;
+    this.rapidLeftMs = 0;
+    this.trailMs = 0;
     this.player.shield = false;
+    this.applyPowers();
     this.refreshPowerHud();
   }
 
   private refreshPowerHud(): void {
-    let kind: PowerUpKind | null = null;
-    let left = 0;
-    if (this.power) {
-      kind = this.power;
-      // Pas de 2 % : quelques mises à jour par seconde seulement.
-      left = Math.ceil((Math.max(0, this.powerLeftMs) / POWER_DURATION_MS[this.power]) * 50) / 50;
-    } else if (this.player.shield) {
-      kind = 'shield';
-      left = 1;
-    }
-    this.hud.set('power', kind);
-    this.hud.set('powerLeft', left);
+    // Pas de 2 % : quelques mises à jour par seconde seulement.
+    this.hud.set('speedLeft', Math.ceil((this.speedLeftMs / POWER_DURATION_MS.speed) * 50) / 50);
+    this.hud.set('rapidLeft', Math.ceil((this.rapidLeftMs / POWER_DURATION_MS.rapid) * 50) / 50);
+    this.hud.set('shield', this.player.shield);
   }
 
   private updateHeatHud(dtMs: number): void {
-    this.hud.set('overheated', this.blaster.overheated);
+    this.hud.set('overheated', this.gun.overheated);
     this.heatHudMs -= dtMs;
     if (this.heatHudMs <= 0) {
       this.heatHudMs = 100;
-      this.hud.set('heat', Math.round(this.blaster.heat * 50) / 50);
+      this.hud.set('heat', Math.round(this.gun.heat * 50) / 50);
     }
   }
 
@@ -627,7 +712,7 @@ export class PlatformScene extends Phaser.Scene {
       Math.max(0, TIME_BONUS_REF_S - seconds) * TIME_BONUS_PER_S +
       this.lives * SCORE_LIFE;
     const ratio = total > 0 ? this.crystals / total : 1;
-    const stars: 1 | 2 | 3 = ratio >= 0.9 ? 3 : ratio >= 0.5 ? 2 : 1;
+    const stars: 1 | 2 | 3 = ratio >= STARS_RATIO.three ? 3 : ratio >= STARS_RATIO.two ? 2 : 1;
     const result: StageResult = {
       stageId: s.stage.id,
       score,
@@ -702,6 +787,55 @@ export class PlatformScene extends Phaser.Scene {
       },
       kill: (): void => {
         if (this.state === 'play') this.killPlayer(true);
+      },
+      /** Change l'arme en cours de partie (jauge remise à zéro ; identifiant inconnu ignoré). Renvoie l'arme tenue. */
+      weapon: (id?: unknown): WeaponId => {
+        if (isWeaponId(id) && this.built) {
+          this.player.setWeapon(id);
+          this.gun.setWeapon(id);
+          this.hud.set('weapon', id);
+          this.updateHeatHud(1000);
+        }
+        return this.gun.weapon;
+      },
+      /** Donne un bonus ('speed' | 'rapid' | 'shield') comme si Kaï l'avait ramassé. */
+      power: (kind: unknown): void => {
+        if (this.state !== 'play' || (kind !== 'speed' && kind !== 'rapid' && kind !== 'shield')) return;
+        this.collectPower(kind, this.player.x, this.player.feetY - 35);
+      },
+      /**
+       * Arme (améliorations du hangar, fiche effective, chauffe), cœurs, bonus et tirs en vol : copie lisible
+       * depuis les tests.
+       */
+      info: () => {
+        const g = this.gun;
+        const p = this.player;
+        return {
+          weapon: g.weapon,
+          heat: g.heat,
+          overheated: g.overheated,
+          mods: { ...g.mods },
+          stats: { ...g.stats },
+          hearts: this.hearts,
+          maxHearts: this.maxHearts,
+          speedLeftMs: this.speedLeftMs,
+          rapidLeftMs: this.rapidLeftMs,
+          shield: p.shield,
+          speedMul: p.speedMul,
+          canDoubleJump: p.canDoubleJump,
+          shots: this.lasers.bolts
+            .filter((b) => b.alive)
+            .map((b) => ({
+              weapon: b.weapon,
+              x: b.img.x,
+              y: b.img.y,
+              vx: b.vx,
+              vy: b.vy,
+              dist: b.dist,
+              range: b.range,
+              damage: b.damage,
+            })),
+        };
       },
     };
   }

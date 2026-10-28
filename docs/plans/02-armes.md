@@ -1,7 +1,11 @@
 # Étape 2 — armes et nouveaux bonus : plan technique
 
 Deuxième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail), après les
-[contrôles](01-controles.md). Rien n'est codé.
+[contrôles](01-controles.md). **Codé** le 28/10/2026 (typecheck, check-levels et build passent),
+**vérifié par la suite e2e complète** (30 scénarios, dont les nouveaux `weapons` et `powerups`, section
+« Tests ») et documenté (section « Documentation à mettre à jour ») ; reste l'essai sur téléphone pour régler
+le tableau des armes (et écouter leurs sons). La section « Ce qui existe déjà » décrit le code d'avant
+l'étape 2.
 
 ## Objectif
 
@@ -16,15 +20,18 @@ Le hangar (achat, améliorations) est l'étape 3. Ici, on construit les armes et
 ## Ce qui existe déjà
 
 - `src/game2d/engine/weapons.ts` : classe `Blaster`, un seul laser. Cadence, tir maintenu, surchauffe et
-  tir triple y sont codés en dur avec les constantes de `constants.ts` (`LASER_*`).
+  tir triple y sont codés en dur avec les constantes de `constants.ts` (`LASER_*`). Depuis l'étape 1, le
+  tir part de `player.gunX` / `gunY` selon `player.fireAngle` (visée devant, diagonale ou haut), gerbe
+  triple comprise.
 - `src/game2d/engine/projectiles.ts` : `LaserPool`, 24 tirs recyclés. Vitesse et portée sont les mêmes
   pour tous (`LASER_SPEED`, `LASER_RANGE`). La direction est déjà libre (`fire(x, y, angle)`).
 - `src/game2d/engine/enemies.ts` : `laserHit(e)` retire toujours 1 point de vie ; le blindé en a 2,
   les autres 1.
 - `src/game2d/engine/PlatformScene.ts` : un seul bonus à durée à la fois (`power: 'triple' | 'doublejump'`),
   plus le bouclier à part. `collectPower` et `updatePower` les gèrent.
-- `src/game2d/art/draw/player.ts` : le pistolet est **dessiné dans chaque image de Kaï** (main et angle
-  du pistolet fixés pour chaque pose). Changer d'arme ou viser demanderait de redessiner toutes les poses.
+- `src/game2d/art/draw/player.ts` : depuis l'étape 1, le corps de Kaï est dessiné **sans arme** et le bras
+  armé est un sprite à part (64x32) qui pivote à l'épaule (`ARM_RIG`, `PLAYER_SHOULDER`) ; une texture par
+  arme dans `ARM_TEX` (`art/keys.ts`), qui n'a encore que `laser` (`drawArmFrame(ctx, weapon, index)`).
 - `src/ui/hud.ts` et `src/ui/icons.ts` : jauge de chauffe avec l'icône du laser, un anneau de bonus.
 - Niveaux : blocs `1` (tir triple), `2` (bouclier), `3` (double saut). La Jungle a un bloc `3` suivi de
   5 cristaux secrets (sur 53) qu'on n'atteint qu'avec le double saut. `scripts/check-levels.ts` vérifie
@@ -70,7 +77,9 @@ On réutilise les caractères `1` et `3` : les niveaux n'ont pas à être rééc
   « secret de compétence » : on y revient plus tard avec le double saut. Les 3 étoiles restent possibles
   sans eux (48 cristaux sur 53, soit 90,6 %).
 - **Choix de l'arme avant le hangar** : en mode test (« Tout débloquer »), une ligne « Arme : ◀ Laser ▶ »
-  sur la carte d'intro de l'étape, et un raccourci `?weapon=` dans l'URL. Le hangar la remplacera.
+  sur la carte d'intro de l'étape, et un raccourci `?weapon=` dans l'URL. Le hangar la remplacera. *Fait en 3a
+  ([03-hangar.md](03-hangar.md), point I) : ligne retirée, arme de la session choisie au hangar ; `?weapon=`
+  gardé.*
 - **Bras et arme dessinés à part** : un sprite séparé, accroché à l'épaule de Kaï, qui pivote selon la
   visée. Une seule série de poses pour le corps, et 4 dessins d'armes au lieu de 4 × toutes les poses.
   Ça sert aussi la visée haut / diagonale de l'étape 1 (voir son point 9).
@@ -104,8 +113,8 @@ On réutilise les caractères `1` et `3` : les niveaux n'ont pas à être rééc
 
 ### Graphismes et sons
 
-9. **Kaï** (`art/draw/player.ts`, `art/keys.ts`) : le bras armé et l'arme sortent des images du corps et
-   deviennent un sprite à part ; 4 dessins d'armes.
+9. **Kaï** (`art/draw/player.ts`, `art/keys.ts`) : le bras armé est déjà un sprite à part (étape 1) ;
+   reste à dessiner les 3 autres armes et à les ajouter à `ARM_TEX`.
 10. **Projectiles et bonus** (`art/draw/items.ts`) : images des balles, plombs et traits ; icônes de
     bonus vitesse et cadence à la place de tir triple et double saut.
 11. **Sons** (`audio/sfx.ts`, `SfxId`) : un son de tir par arme, synthétisé comme les autres.
@@ -133,13 +142,26 @@ On réutilise les caractères `1` et `3` : les niveaux n'ont pas à être rééc
   cadence, les deux en même temps, et le bouclier.
 - **Vérifications habituelles** : `npm run typecheck`, `npm run check-levels`, `npm run build`, puis la
   suite e2e complète.
+- **Après relecture** (28/10/2026) : `weapons` vérifie aussi le refroidissement de chaque arme et la reprise
+  du tir sous 30 %, la chauffe gardée jusqu'au délai de refroidissement, la dispersion réelle, la portée et la
+  vitesse effectives, le son de chaque arme, l'arme gardée d'une étape à l'autre puis oubliée hors mode test,
+  et l'équipement relu de la sauvegarde (anciennes sauvegardes, valeurs abîmées, double saut appris) ;
+  `powerups` vérifie le bonus sorti de chaque bloc, les anneaux qui clignotent, la jauge du HUD vidée à la mort
+  et le HUD de 844 à 621 px avec 53 cristaux. Retouches visuelles : plombs de pompe ambrés cerclés de sombre
+  (mode normal, vitesses à ± 8 %), icône Cadence (deux balles et traits de vitesse), jauge vide sans liseré,
+  traînée de vitesse verte sur le torse, épaule décalée en visée diagonale (et un peu plus en visée haute).
 - **Essai sur téléphone** pour régler le tableau des armes.
 
 ## Documentation à mettre à jour
 
-- `docs/GDD.md` : sections « Mode plateforme 2D » (laser, bonus) et score.
+Fait le 28/10/2026.
+
+- `docs/GDD.md` : sections « Mode plateforme 2D » (armes, surchauffe, bonus, double saut) et score (inchangé).
 - `README.md` : raccourcis `?weapon=` et mode test.
 - `docs/SOUHAITS.md` : cocher les cases de la section 2.
+- `CLAUDE.md` (architecture, contrats, recettes Sauvegarde et Arme, aides DEV), `tests/e2e/README.md`
+  (scénarios `weapons` et `powerups`, aides), `docs/ARCHITECTURE.md`, et « Ce qui existe déjà » de
+  [03-hangar.md](03-hangar.md).
 
 ## Ordre de réalisation
 

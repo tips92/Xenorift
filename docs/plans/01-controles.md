@@ -1,7 +1,9 @@
 # Étape 1 — contrôles 2D : plan technique
 
-Première étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). Rien n'est codé : ce plan sert à
-démarrer dès que Git est en place.
+Première étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). **Codé et vérifié** sur la branche
+`plans-etapes-1-3` (points 1 à 11 ; le point 12 reste « plus tard ») : suite e2e complète verte, documentation
+à jour. Reste l'essai sur téléphone (secteurs d'angle et taille du stick). La section « Ce qui existe déjà »
+décrit l'état d'avant l'étape.
 
 ## Ce que le joueur doit pouvoir faire
 
@@ -77,9 +79,9 @@ Diagonales vers le bas : traitées comme ← →, pour ne pas s'accroupir par ac
 ### Réglage des commandes (Options)
 
 11. **Nouvelle rubrique « Commandes »** dans `ui/screens/options.ts` : taille des boutons (3 crans),
-    opacité (3 crans), mode gaucher (stick à droite, Saut et Tir à gauche). Ces réglages s'ajoutent à
-    `Settings` dans `core/save.ts` ; les anciennes sauvegardes reçoivent les valeurs par défaut (déjà
-    géré par la fusion `{ ...DEFAULT_SETTINGS, ...parsed.settings }`).
+    opacité (3 crans), mode gaucher (stick à droite, boutons à gauche : Saut et Tir en 2D, Turbo en vol).
+    Ces réglages s'ajoutent à `Settings` dans `core/save.ts` ; les anciennes sauvegardes reçoivent les
+    valeurs par défaut, et `load()` remplace aussi une valeur du mauvais type (crans bornés à 0..2).
 12. Plus tard, si besoin : placement libre des boutons en les faisant glisser.
 
 ## Tests
@@ -88,13 +90,18 @@ Diagonales vers le bas : traitées comme ← →, pour ne pas s'accroupir par ac
   gauche et droite de `.xr-dpad`, et `small-screens.mjs` vérifie sa place à l'écran. On garde la classe
   `.xr-dpad` sur le nouveau stick pour limiter les changements.
 - **Nouveau scénario `aim-crouch-drop`** : laser vers le haut et en diagonale (sens des projectiles),
-  hauteur du corps accroupi, passage à travers une plateforme `=`, aller-retour par une paire de portes,
-  et ↑ au clavier qui ne fait plus sauter.
+  hauteur du corps accroupi, passage à travers une plateforme `=` et à travers une plateforme mobile
+  (Lune), aller-retour par une paire de portes, et ↑ au clavier qui ne fait plus sauter.
+- **Ajoutés en cours de route** : `touch-options` (rubrique Commandes, anciennes sauvegardes, persistance,
+  changement depuis la Pause, gaucher en 2D et en vol) et `art-preview` (suite `diag` : captures de
+  `preview/art.html`, dont le bras armé, les poses accroupies et les portes).
 - **Vérifications habituelles** : `npm run typecheck`, `npm run check-levels`, `npm run build`, puis la
   suite e2e complète.
 - **Essai sur téléphone** pour régler les secteurs d'angle et la taille du stick.
 
 ## Documentation à mettre à jour
+
+Fait le 28/10/2026 (ainsi que `CLAUDE.md`, `docs/ARCHITECTURE.md` et `docs/plans/README.md`).
 
 - `docs/GDD.md` : section « Contrôles » du mode plateforme.
 - `README.md` : touches du clavier.

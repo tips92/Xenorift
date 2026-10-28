@@ -53,9 +53,9 @@ interface Checkpoint {
 }
 
 const POWER_TEX: Record<PowerUpKind, string> = {
-  triple: TEX.powerTriple,
+  speed: TEX.powerSpeed,
   shield: TEX.powerShield,
-  doublejump: TEX.powerDoubleJump,
+  rapid: TEX.powerRapid,
 };
 
 export class Items {

@@ -1,7 +1,19 @@
 import type * as Phaser from 'phaser';
-import type { InputApi } from '../../core/types';
-import { ANIM, TEX } from '../art/keys';
-import { DEPTH, MAX_FALL_SPEED, PLAYER_BODY, RUN_SPEED } from '../constants';
+import type { InputApi, WeaponId } from '../../core/types';
+import { PLAYER_SHOULDER } from '../art';
+import { ANIM, ARM_MUZZLE, ARM_RIG, ARM_TEX, FRAMES, FRAME_SIZE, TEX } from '../art/keys';
+import {
+  AIM_ANGLE,
+  type AimDir,
+  DEPTH,
+  DROP_THROUGH_MS,
+  MAX_FALL_SPEED,
+  PLAYER_BODY,
+  PLAYER_CROUCH_BODY,
+  RUN_SPEED,
+  TILE,
+} from '../constants';
+import { CELL_ONEWAY, CELL_SOLID } from './mapBuilder';
 import type { PlatformScene } from './PlatformScene';
 import {
   AIR_ACCEL,
@@ -12,8 +24,6 @@ import {
   GROUND_ACCEL,
   GROUND_DECEL,
   GROUND_TURN_ACCEL,
-  GUN_OFFSET_X,
-  GUN_OFFSET_Y,
   HURT_LOCK_MS,
   JUMP_BUFFER_MS,
   JUMP_CUT,
@@ -24,10 +34,19 @@ import {
   STOMP_BOUNCE_HELD,
 } from './tuning';
 
-// Kaï : corps physique (zone invisible 34x70) séparé du visuel, pour pouvoir écraser / étirer
-// le sprite sans toucher à la boîte de collision.
+// Kaï : corps physique (zone invisible 34x70, 34x46 accroupi) séparé du visuel, pour pouvoir écraser / étirer
+// le sprite sans toucher à la boîte de collision. Le bras armé est un sprite à part qui pivote à l'épaule.
 
 const HALF_H = PLAYER_BODY.height / 2;
+/**
+ * Reptation : on ne court pas accroupi (↓ seul pour s'accroupir, les diagonales basses font courir), mais une
+ * fois accroupi, ↓ + côté fait ramper lentement, et sous un plafond trop bas ← → aussi : sans ça, impossible
+ * d'entrer dans un passage d'une tuile de haut ou d'en sortir.
+ */
+const CRAWL_SPEED = 0.3 * RUN_SPEED;
+/** Durée de la frame de recul du bras, et de la pose accroupie de tir, après un tir (ms). */
+const RECOIL_MS = 70;
+const CROUCH_SHOT_MS = 150;
 
 function approach(value: number, target: number, step: number): number {
   if (value < target) return Math.min(value + step, target);
@@ -39,15 +58,25 @@ export class Player {
   readonly zone: Phaser.GameObjects.Zone;
   readonly body: Phaser.Physics.Arcade.Body;
   readonly sprite: Phaser.GameObjects.Sprite;
+  /** Bras armé (ARM_TEX) : position, sens et rotation recalés à chaque frame sur le sprite du corps. */
+  readonly arm: Phaser.GameObjects.Image;
   readonly bubble: Phaser.GameObjects.Image;
 
   facing: 1 | -1 = 1;
   invulnMs = 0;
   hurtMs = 0;
   shield = false;
+  /** Compétence apprise (hooks.loadout.skills.doubleJump), posée par la scène au départ et à la réapparition. */
   canDoubleJump = false;
+  /** Bonus de vitesse : vitesses et accélérations horizontales multipliées (SPEED_BOOST_MUL), saut inchangé. */
+  speedMul = 1;
   god = false;
   onGround = true;
+  /** Visée : devant, diagonale haute ou haut (toujours devant accroupi). */
+  aim: AimDir = 'front';
+  crouching = false;
+  /** Descente d'étage en cours : les plateformes `=` et mobiles laissent passer Kaï vers le bas. */
+  dropThrough = false;
   /** Dernière position sûre au sol (mode god : on y revient après une chute). */
   safeX = 0;
   safeFeetY = 0;
@@ -69,11 +98,19 @@ export class Player {
   private now = 0;
   /** Juste après un saut / rebond, le contact au sol (encore signalé par la physique) est ignoré. */
   private ignoreGroundUntil = 0;
+  private dropUntil = -1e9;
+  /** Dernier support touché : plateforme traversable (`=` ou mobile) plutôt que sol plein. */
+  private supportPassThrough = false;
+  private recoilMs = 0;
+  private crouchShotMs = 0;
+  private weaponId: WeaponId = 'laser';
+  private armFrame: number = FRAMES.arm.rest;
 
   constructor(
     private readonly scene: PlatformScene,
     x: number,
     feetY: number,
+    weapon: WeaponId = 'laser',
   ) {
     this.zone = scene.add.zone(x, feetY - HALF_H, PLAYER_BODY.width, PLAYER_BODY.height);
     scene.physics.add.existing(this.zone);
@@ -86,12 +123,17 @@ export class Player {
     this.sprite = scene.add.sprite(x, feetY, TEX.player, 0);
     this.sprite.setOrigin(0.5, 1).setDepth(DEPTH.player);
 
+    this.arm = scene.add.image(x, feetY + ARM_RIG.shoulderY, TEX.armLaser, FRAMES.arm.rest);
+    this.arm.setOrigin(ARM_RIG.pivotX / FRAME_SIZE.arm.w, ARM_RIG.pivotY / FRAME_SIZE.arm.h).setDepth(DEPTH.player + 0.5);
+    this.setWeapon(weapon);
+
     this.bubble = scene.add.image(x, feetY - HALF_H, TEX.shieldBubble);
     this.bubble.setDepth(DEPTH.player + 1).setVisible(false);
 
     this.safeX = x;
     this.safeFeetY = feetY;
     this.playAnim(ANIM.playerIdle);
+    this.placeArm(1);
   }
 
   get x(): number {
@@ -107,16 +149,63 @@ export class Player {
     return this.body.prevFrame.y + this.body.height;
   }
 
+  /** Décalage de l'épaule selon la visée (ARM_RIG) : avancée en visée haute, avancée et abaissée en diagonale. */
+  private get aimShoulderDX(): number {
+    return this.aim === 'up' ? ARM_RIG.upShoulderX : this.aim === 'diag' ? ARM_RIG.diagShoulderX : 0;
+  }
+
+  private get aimShoulderDY(): number {
+    return this.aim === 'diag' ? ARM_RIG.diagShoulderY : 0;
+  }
+
+  /** Épaule (pivot du bras, dans le corps) : départ du balayage du canon au tir (ShotPool.fire). */
+  get shoulderX(): number {
+    const sx = (this.crouching ? ARM_RIG.crouchShoulderX : ARM_RIG.shoulderX) + this.aimShoulderDX;
+    return this.x + this.facing * sx;
+  }
+
+  get shoulderY(): number {
+    return this.feetY + (this.crouching ? ARM_RIG.crouchShoulderY : ARM_RIG.shoulderY) + this.aimShoulderDY;
+  }
+
+  /**
+   * Bouche du canon (voir ARM_RIG / ARM_MUZZLE) : épaule debout ou accroupie (décalée selon la visée), puis le
+   * canon tourné selon la visée.
+   */
   get gunX(): number {
-    return this.x + this.facing * GUN_OFFSET_X;
+    const a = AIM_ANGLE[this.aim];
+    const m = ARM_MUZZLE[this.weaponId];
+    const sx = (this.crouching ? ARM_RIG.crouchShoulderX : ARM_RIG.shoulderX) + this.aimShoulderDX;
+    return this.x + this.facing * (sx + (m.x - ARM_RIG.pivotX) * Math.cos(a) + (m.y - ARM_RIG.pivotY) * Math.sin(a));
   }
 
   get gunY(): number {
-    return this.feetY + GUN_OFFSET_Y;
+    const a = AIM_ANGLE[this.aim];
+    const m = ARM_MUZZLE[this.weaponId];
+    const sy = (this.crouching ? ARM_RIG.crouchShoulderY : ARM_RIG.shoulderY) + this.aimShoulderDY;
+    return this.feetY + sy - (m.x - ARM_RIG.pivotX) * Math.sin(a) + (m.y - ARM_RIG.pivotY) * Math.cos(a);
+  }
+
+  /** Angle du tir (radians Phaser, y vers le bas) : visée vers le haut, du côté où regarde Kaï. */
+  get fireAngle(): number {
+    const a = AIM_ANGLE[this.aim];
+    return this.facing > 0 ? -a : Math.PI + a;
   }
 
   get isDying(): boolean {
     return this.dying;
+  }
+
+  /** Arme tenue : texture du bras (ARM_TEX) et bouche du canon (ARM_MUZZLE). */
+  get weapon(): WeaponId {
+    return this.weaponId;
+  }
+
+  /** Change l'arme tenue (texture du laser tant que celle de l'arme n'est pas dessinée). */
+  setWeapon(id: WeaponId): void {
+    this.weaponId = id;
+    const key = this.scene.textures.exists(ARM_TEX[id]) ? ARM_TEX[id] : TEX.armLaser;
+    if (this.arm.texture.key !== key) this.arm.setTexture(key, this.armFrame);
   }
 
   /** Lecture des commandes et calcul des vitesses (appliquées au prochain pas de physique). */
@@ -126,10 +215,17 @@ export class Player {
     this.now = now;
     if (this.invulnMs > 0) this.invulnMs -= dtMs;
     if (this.hurtMs > 0) this.hurtMs -= dtMs;
+    if (this.recoilMs > 0) this.recoilMs -= dtMs;
+    if (this.crouchShotMs > 0) this.crouchShotMs -= dtMs;
+    this.dropThrough = now < this.dropUntil;
 
     const left = st.left || st.stickX < -0.35;
     const right = st.right || st.stickX > 0.35;
+    const up = st.up || st.stickY > 0.35;
+    const down = st.down || st.stickY < -0.35;
     const move = left === right ? 0 : right ? 1 : -1;
+    // ↓ seul : les diagonales basses comptent comme ← → (pas d'accroupi par accident en courant).
+    const downOnly = down && !left && !right;
     // Contact au sol (tuiles ou plateforme mobile, y compris quand elle monte).
     const grounded = (b.blocked.down || b.touching.down) && now >= this.ignoreGroundUntil;
 
@@ -139,28 +235,40 @@ export class Player {
       this.jumping = false;
       this.airJumpUsed = false;
       this.maxFallVy = 0;
-      if (b.blocked.down) {
-        // Sol fixe (pas une plateforme mobile) : point de retour du mode god.
+      if (b.blocked.down && !b.touching.down) {
+        // Sol fixe (une plateforme mobile pose aussi blocked.down, mais touching seulement elle) : point de
+        // retour du mode god.
         this.safeX = this.x;
         this.safeFeetY = this.feetY;
       }
+      this.supportPassThrough = this.onPassThrough();
     } else if (b.velocity.y > this.maxFallVy) {
       this.maxFallVy = b.velocity.y;
     }
     this.onGround = grounded;
     this.wasGrounded = grounded;
 
-    // ---- Horizontal : accélération, demi-tour nerveux
+    // ---- Accroupi : ↓ seul au sol (puis ↓ + côté pour ramper) ; reste accroupi tant que la place manque.
+    // Une perte de contact d'une frame (plateforme mobile qui descend) ne le relève pas.
+    const footing = grounded || (this.crouching && now - this.lastGroundAt <= COYOTE_MS);
+    const wantCrouch = footing && this.hurtMs <= 0 && (downOnly || (this.crouching && down));
+    if (wantCrouch !== this.crouching && (wantCrouch || this.canStand())) this.setCrouch(wantCrouch);
+
+    // ---- Visée : ↑ seul = haut (Kaï s'arrête : aucun côté), ↑ + côté = diagonale.
+    this.aim = this.crouching || !up ? 'front' : move === 0 ? 'up' : 'diag';
+
+    // ---- Horizontal : accélération, demi-tour nerveux (bonus de vitesse : vitesses et accélérations × speedMul)
     let vx = b.velocity.x;
     if (this.hurtMs > 0) {
       vx = approach(vx, 0, 200 * dt);
     } else {
+      const k = this.speedMul;
       let accel: number;
       if (move !== 0) {
         const turning = vx * move < 0;
         if (grounded) accel = turning ? GROUND_TURN_ACCEL : GROUND_ACCEL;
         else accel = turning ? AIR_TURN_ACCEL : AIR_ACCEL;
-        if (turning && grounded && Math.abs(vx) > 160 && now - this.lastTurnPuffAt > 220) {
+        if (turning && grounded && !this.crouching && Math.abs(vx) > 160 && now - this.lastTurnPuffAt > 220) {
           this.lastTurnPuffAt = now;
           this.scene.fx.puff(this.x - move * 10, this.feetY - 4, 2);
         }
@@ -168,17 +276,24 @@ export class Player {
       } else {
         accel = grounded ? GROUND_DECEL : AIR_DECEL;
       }
-      vx = approach(vx, move * RUN_SPEED, accel * dt);
+      vx = approach(vx, move * (this.crouching ? CRAWL_SPEED : RUN_SPEED) * k, accel * k * dt);
     }
     b.velocity.x = vx;
 
-    // ---- Saut : mémoire d'appui + coyote time + double saut
+    // ---- Saut : mémoire d'appui + coyote time + double saut ; ↓ + Saut sur un support traversable = descente
     if (input.consumePress('jump')) this.jumpBufferAt = now;
     if (this.hurtMs <= 0 && now - this.jumpBufferAt <= JUMP_BUFFER_MS) {
       const coyote = !this.jumping && now - this.lastGroundAt <= COYOTE_MS;
-      if (grounded || coyote) {
+      if ((grounded || coyote) && downOnly && this.supportPassThrough) {
         this.jumpBufferAt = -1e9;
-        this.jump(false);
+        this.startDrop(now);
+      } else if (grounded || coyote) {
+        this.jumpBufferAt = -1e9;
+        // Accroupi sous un plafond trop bas : pas de saut.
+        if (!this.crouching || this.canStand()) {
+          this.setCrouch(false);
+          this.jump(false);
+        }
       } else if (this.canDoubleJump && !this.airJumpUsed) {
         this.jumpBufferAt = -1e9;
         this.jump(true);
@@ -190,6 +305,72 @@ export class Player {
       b.velocity.y *= JUMP_CUT;
       this.cutDone = true;
     }
+  }
+
+  /**
+   * Change la hauteur du corps (70 ↔ 46), pieds en place. prev / prevFrame suivent le haut du corps : sinon,
+   * pendant un pas, processTile / processMover croiraient Kaï sous une plateforme traversable.
+   */
+  private setCrouch(on: boolean): void {
+    if (on === this.crouching) return;
+    this.crouching = on;
+    const b = this.body;
+    const h = on ? PLAYER_CROUCH_BODY.height : PLAYER_BODY.height;
+    const dy = b.height - h;
+    b.setSize(PLAYER_BODY.width, h, false);
+    // Zone de 70 px de haut centrée sur son origine : décalage vers le bas pour garder les pieds.
+    b.setOffset(0, PLAYER_BODY.height - h);
+    b.position.y += dy;
+    b.prev.y += dy;
+    b.prevFrame.y += dy;
+    b.updateCenter();
+    if (!on) this.crouchShotMs = 0;
+  }
+
+  /** Place pour se relever : aucune case pleine entre le haut du corps accroupi et la hauteur debout. */
+  private canStand(): boolean {
+    const grid = this.scene.grid;
+    const b = this.body;
+    const feet = b.y + b.height;
+    const c0 = Math.floor((b.x + 1) / TILE);
+    const c1 = Math.floor((b.x + b.width - 1) / TILE);
+    const r0 = Math.floor((feet - PLAYER_BODY.height + 0.5) / TILE);
+    const r1 = Math.floor((feet - PLAYER_CROUCH_BODY.height - 0.5) / TILE);
+    for (let row = r0; row <= r1; row++) {
+      for (let col = c0; col <= c1; col++) {
+        if (grid.at(col, row) === CELL_SOLID) return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Au sol sur un support traversable seulement : plateforme `=` (aucun sol plein sous les pieds) ou mobile.
+   * Mobile = touching.down, posé seulement par les collisions entre corps : les tuiles ne posent que blocked,
+   * une plateforme mobile (corps `immovable` pour Arcade) pose les deux.
+   */
+  private onPassThrough(): boolean {
+    const grid = this.scene.grid;
+    const b = this.body;
+    const row = Math.floor((b.y + b.height + 2) / TILE);
+    const c0 = Math.floor((b.x + 1) / TILE);
+    const c1 = Math.floor((b.x + b.width - 1) / TILE);
+    let oneWay = false;
+    for (let col = c0; col <= c1; col++) {
+      const cell = grid.at(col, row);
+      if (cell === CELL_SOLID) return false;
+      if (cell === CELL_ONEWAY) oneWay = true;
+    }
+    return oneWay || b.touching.down;
+  }
+
+  /** Descente d'étage : pas de saut, les supports traversables s'effacent pendant DROP_THROUGH_MS. */
+  private startDrop(now: number): void {
+    this.dropUntil = now + DROP_THROUGH_MS;
+    this.dropThrough = true;
+    this.lastGroundAt = -1e9; // pas de saut « coyote » juste après
+    this.leaveGround();
+    this.scene.fx.puff(this.x, this.feetY - 2, 2);
   }
 
   private jump(double: boolean): void {
@@ -261,12 +442,19 @@ export class Player {
     this.ignoreGroundUntil = this.now + 70;
   }
 
+  /** Un tir vient de partir : recul du bras (et pose accroupie de tir). */
+  onShot(): void {
+    this.recoilMs = RECOIL_MS;
+    if (this.crouching) this.crouchShotMs = CROUCH_SHOT_MS;
+  }
+
   /** Visuel : animation, écrasement, clignotement, bulle. Appelé à chaque frame. */
   visualUpdate(dt: number, now: number): void {
     if (this.dying) {
       this.deathVy += 1900 * dt;
       this.sprite.y += this.deathVy * dt;
       this.sprite.angle += this.facing * 160 * dt;
+      this.placeArm(1);
       return;
     }
     const k = Math.min(1, dt * 14);
@@ -277,7 +465,11 @@ export class Player {
 
     const b = this.body;
     let key: string;
-    if (this.hurtMs > 0) key = ANIM.playerHurt;
+    // Accroupi d'abord : le visuel suit la boîte basse (même touché sous un plafond) ; reptation au sol.
+    if (this.crouching) {
+      if (this.crouchShotMs > 0) key = ANIM.playerCrouchShoot;
+      else key = this.onGround && Math.abs(b.velocity.x) > 25 ? ANIM.playerCrawl : ANIM.playerCrouch;
+    } else if (this.hurtMs > 0) key = ANIM.playerHurt;
     else if (!this.onGround) key = b.velocity.y < 0 ? ANIM.playerJump : ANIM.playerFall;
     else if (Math.abs(b.velocity.x) > 25) key = ANIM.playerRun;
     else key = ANIM.playerIdle;
@@ -289,6 +481,12 @@ export class Player {
     }
 
     this.sprite.alpha = this.invulnMs > 0 && Math.floor(now / 70) % 2 === 0 ? 0.3 : 1;
+
+    const armFrame = this.recoilMs > 0 ? FRAMES.arm.recoil : FRAMES.arm.rest;
+    if (armFrame !== this.armFrame) {
+      this.armFrame = armFrame;
+      this.arm.setFrame(armFrame);
+    }
 
     if (this.bubble.visible !== this.shield) this.bubble.setVisible(this.shield);
     if (this.shield) {
@@ -304,7 +502,47 @@ export class Player {
     const x = this.x;
     const feet = this.feetY;
     this.sprite.setPosition(x, feet);
-    if (this.shield) this.bubble.setPosition(x, feet - HALF_H - 2);
+    if (this.shield) this.bubble.setPosition(x, feet - this.body.height / 2 - 2);
+    this.placeArm(1);
+  }
+
+  /** Décollage : le bras suit le sprite animé par le vaisseau (saut vers le cockpit, rétrécissement). */
+  syncArmToSprite(): void {
+    if (!this.dying) this.placeArm(this.sprite.scaleY);
+  }
+
+  /**
+   * Bras armé accroché à l'épaule de la frame affichée (PLAYER_SHOULDER), avec le sens, l'écrasement et la
+   * rotation du corps (mort avec rebond), tourné selon la visée. Une échelle négative retourne l'image autour
+   * de l'épaule (pas flipX).
+   */
+  private placeArm(scale: number): void {
+    const spr = this.sprite;
+    const arm = this.arm;
+    if (!spr.visible) {
+      if (arm.visible) arm.setVisible(false);
+      return;
+    }
+    const f = spr.flipX ? -1 : 1;
+    const i = (+spr.frame.name | 0) * 2;
+    let sx: number = ARM_RIG.shoulderX;
+    let sy: number = ARM_RIG.shoulderY;
+    if (i >= 0 && i + 1 < PLAYER_SHOULDER.length) {
+      sx = PLAYER_SHOULDER[i];
+      sy = PLAYER_SHOULDER[i + 1];
+    }
+    // Visée haute ou diagonale : épaule décalée, le canon longe le bord avant du casque (la visière reste visible).
+    sx += this.aimShoulderDX;
+    sy += this.aimShoulderDY;
+    const c = Math.cos(spr.rotation);
+    const s = Math.sin(spr.rotation);
+    const ox = f * sx * spr.scaleX;
+    const oy = sy * spr.scaleY;
+    arm.setPosition(spr.x + ox * c - oy * s, spr.y + ox * s + oy * c);
+    arm.setScale(f * scale, scale);
+    arm.rotation = spr.rotation - f * AIM_ANGLE[this.aim];
+    arm.alpha = spr.alpha;
+    if (!arm.visible) arm.setVisible(true);
   }
 
   playAnim(key: string): void {
@@ -317,6 +555,16 @@ export class Player {
   freeze(): void {
     this.body.stop();
     this.body.enable = false;
+    this.aim = 'front';
+    this.dropUntil = -1e9;
+    this.dropThrough = false;
+    // Bras au repos : plus de mise à jour visuelle ensuite (décollage), le recul resterait affiché.
+    this.recoilMs = 0;
+    this.crouchShotMs = 0;
+    if (this.armFrame !== FRAMES.arm.rest) {
+      this.armFrame = FRAMES.arm.rest;
+      this.arm.setFrame(FRAMES.arm.rest);
+    }
   }
 
   startDeath(hop: boolean): void {
@@ -325,15 +573,20 @@ export class Player {
     this.deathVy = hop ? -640 : 0;
     this.shield = false;
     this.bubble.setVisible(false);
+    this.arm.setDepth(DEPTH.foreground + 0.5);
     this.sprite.setScale(1).setAlpha(1).setDepth(DEPTH.foreground);
     this.sprite.anims.timeScale = 1;
     this.animKey = '';
     this.playAnim(ANIM.playerHurt);
     if (!hop) this.sprite.setVisible(false);
+    // Avec rebond, le bras tournoie avec le corps ; sans rebond, placeArm le masque avec le sprite.
+    this.placeArm(1);
   }
 
-  /** Replace Kaï (pieds en feetY), immobile, prêt à jouer. */
+  /** Replace Kaï (pieds en feetY), immobile, debout, prêt à jouer. */
   teleport(x: number, feetY: number): void {
+    // Debout avant body.reset : la position est recalculée depuis la zone, sans le décalage accroupi.
+    this.setCrouch(false);
     this.body.enable = true;
     this.body.reset(x, feetY - HALF_H);
     this.dying = false;
@@ -350,16 +603,26 @@ export class Player {
     this.ignoreGroundUntil = 0;
     this.squashX = 1;
     this.squashY = 1;
+    this.aim = 'front';
+    this.dropUntil = -1e9;
+    this.dropThrough = false;
+    this.supportPassThrough = false;
+    this.recoilMs = 0;
+    this.crouchShotMs = 0;
     this.sprite.setVisible(true).setAlpha(1).setAngle(0).setScale(1).setDepth(DEPTH.player);
     this.sprite.setPosition(x, feetY);
     this.animKey = '';
     this.playAnim(ANIM.playerIdle);
+    this.armFrame = FRAMES.arm.rest;
+    this.arm.setFrame(FRAMES.arm.rest).setDepth(DEPTH.player + 0.5);
+    this.placeArm(1);
   }
 
   /** Masque Kaï (entré dans le vaisseau). */
   hide(): void {
     this.sprite.setVisible(false);
     this.bubble.setVisible(false);
+    this.arm.setVisible(false);
   }
 
   /** Rectangle de collision courant (coordonnées monde). */

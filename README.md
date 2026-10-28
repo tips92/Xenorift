@@ -1,6 +1,6 @@
 # Xeno Rift
 
-Démo d'un jeu mobile : plateforme 2D (style Mario, avec tir laser) entrecoupée de vols spatiaux en 3D
+Démo d'un jeu mobile : plateforme 2D (style Mario, avec armes à tir) entrecoupée de vols spatiaux en 3D
 à travers des portails intergalactiques. Univers extraterrestre, tout se joue à l'écran tactile.
 Conception détaillée : [docs/GDD.md](docs/GDD.md).
 
@@ -14,6 +14,9 @@ Conception détaillée : [docs/GDD.md](docs/GDD.md).
 | 4 | Vol spatial 3D | Ceinture d'Orak |
 
 Chaque étape se choisit dans le menu « Niveaux » (déblocage progressif, ou « Tout débloquer » dans les options).
+Entre deux étapes (« Suivant » sur les résultats) et depuis le menu « Niveaux », le **hangar** de la Comète
+dépense les cristaux ramassés : armes de Kaï et leurs améliorations, cœurs supplémentaires, bouclier et turbo
+de la Comète (son canon s'achète déjà ; son effet en vol viendra avec le combat spatial).
 
 ## Technique
 
@@ -22,8 +25,8 @@ Chaque étape se choisit dans le menu « Niveaux » (déblocage progressif, ou �
 - Tous les outils et caches sont sur `D:\DevTools` (le disque C: est plein).
 
 ```
-src/core      contrats partagés, étapes, sauvegarde
-src/ui        écrans, HUD, enchaînement des étapes
+src/core      contrats partagés, étapes, sauvegarde, fiches des armes, catalogue du hangar
+src/ui        écrans (dont le hangar), HUD, enchaînement des étapes
 src/input     clavier, contrôles tactiles, inclinaison
 src/audio     sons et musiques synthétisés
 src/game2d    mode plateforme (moteur, graphismes, niveaux)
@@ -40,9 +43,21 @@ tests/e2e     tests de bout en bout (Chrome sans fenêtre)
 npm run dev
 ```
 
-Puis ouvrir http://localhost:5173. Clavier : flèches ou ZQSD, Espace = saut / turbo, J ou X = tir, Échap = pause.
+Puis ouvrir http://localhost:5173. Clavier : flèches ou ZQSD, Espace ou K = saut (Espace = turbo en vol),
+J ou X = tir, Échap = pause. En 2D, ↑ / Z vise vers le haut (avec ← → : en diagonale) et fait entrer dans
+une porte ; il ne fait pas sauter. ↓ / S accroupit (puis ← → : ramper) ; ↓ + saut descend d'une plateforme
+traversable ou mobile. Sur téléphone : stick rond à 8 directions, boutons Saut et Tir ; taille, opacité et
+mode gaucher dans Options › Commandes.
 Raccourcis de test : `?stage=j1` (ou `f1`, `m1`, `f2`) lance directement une étape, `?unlock=1` débloque tout,
-`?touch=1` affiche les boutons tactiles sur PC.
+`?touch=1` affiche les boutons tactiles sur PC, `?weapon=machinegun` (ou `laser`, `shotgun`, `rifle`) impose
+l'arme pour la session, même si elle n'est pas possédée (rien n'est enregistré ; une valeur inconnue est
+ignorée, avec le message « Arme inconnue » sur l'accueil, ou en début de partie avec `?stage=`). Les
+paramètres se combinent : `?stage=m1&weapon=rifle`.
+
+Mode test (« Tout débloquer » dans les options, ou `?unlock=1`) : les 4 armes et le double saut sont
+disponibles. Au hangar (après « Suivant » sur les résultats, ou bouton « Hangar » du choix du niveau), le mode
+test lève les conditions d'achat (plans d'armes, équipage) mais pas les prix, et une arme non possédée s'y
+équipe pour la session seulement (rien n'est enregistré).
 
 ## Tests
 

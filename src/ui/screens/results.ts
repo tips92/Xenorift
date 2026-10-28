@@ -3,9 +3,10 @@ import { clamp, div, el, formatDuration, formatNumber, icon } from '../dom';
 import { ICONS } from '../icons';
 import type { UiCtx } from '../services';
 import { button, screenRoot, starRow, type Screen } from './common';
+import { crystalsText } from './select';
 
 // Résultats d'une étape réussie : score qui défile, étoiles qui apparaissent une à une,
-// détails, record. Toucher le panneau termine les animations.
+// détails, réserve de cristaux, record. Toucher le panneau termine les animations.
 
 export interface ResultsData {
   stage: StageDef;
@@ -14,6 +15,12 @@ export interface ResultsData {
   newRecord: boolean;
   /** Meilleur score enregistré (après cette partie). */
   best: number;
+  /** Cristaux de l'étape ajoutés à la réserve (recordResult ; 0 en vol pour l'instant). */
+  crystalsGained: number;
+  /** Réserve après l'ajout (au retour du hangar : réserve actuelle, achats déduits). */
+  crystals: number;
+  /** Retour du hangar : valeurs finales tout de suite, sans animation ni son. */
+  settled?: boolean;
 }
 
 export interface ResultsActions {
@@ -74,6 +81,20 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
     detailRow(details, ICONS.clock, 'Temps', formatDuration(result.timeMs, true));
   }
 
+  // Réserve du hangar : gain de l'étape (« +N cristaux », s'il y en a) et total, qui défile avec le score. Au
+  // retour du hangar (achats déduits), le total seul : le gain ne s'y additionne plus.
+  const gained = Number.isFinite(d.crystalsGained) ? Math.max(0, Math.round(d.crystalsGained)) : 0;
+  const bankTo = Number.isFinite(d.crystals) ? Math.max(0, Math.round(d.crystals)) : 0;
+  const bankFrom = d.settled ? bankTo : Math.max(0, bankTo - gained);
+  const showGain = !d.settled;
+  const bank = div('detail detail--bank');
+  bank.setAttribute('aria-label', `Réserve : ${crystalsText(bankTo)}${showGain && gained > 0 ? `, dont ${crystalsText(gained)} de cette étape` : ''}`);
+  const bankN = el('b', 'detail-value', formatNumber(bankFrom));
+  bank.append(icon(ICONS.crystal, 'ico detail-ico'), el('span', 'detail-label', 'Réserve'));
+  if (showGain && gained > 0) bank.append(el('span', 'detail-gain', `+${crystalsText(gained)}`));
+  bank.append(bankN);
+  details.append(bank);
+
   const actions = div('results-actions');
   actions.append(
     button(ctx, { label: 'Suivant', icon: ICONS.next, cls: 'btn-primary', onPress: a.next }),
@@ -123,6 +144,7 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
     const k = Math.min(1, (now - t0) / duration);
     const eased = 1 - (1 - k) * (1 - k) * (1 - k);
     scoreEl.textContent = formatNumber(target * eased);
+    if (bankTo !== bankFrom) bankN.textContent = formatNumber(bankFrom + (bankTo - bankFrom) * eased);
     if (k < 1) {
       raf = requestAnimationFrame(tick);
     } else {
@@ -138,9 +160,19 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
     for (const id of timers) window.clearTimeout(id);
     timers.length = 0;
     scoreEl.textContent = formatNumber(target);
+    bankN.textContent = formatNumber(bankTo);
     scoreEl.classList.add('is-done');
     for (let i = 0; i < earned; i++) popStar(i, false);
     revealRecord(true);
+  }
+
+  // Retour du hangar : tout est déjà affiché (ni défilement, ni étoiles qui sautent, ni son).
+  if (d.settled) {
+    started = true;
+    finished = true;
+    scoreEl.textContent = formatNumber(target);
+    for (let i = 0; i < earned; i++) stars[i]?.classList.add('is-on');
+    revealRecord(false);
   }
 
   // Toucher en dehors des boutons : afficher le résultat final tout de suite.

@@ -5,7 +5,7 @@ import type { UiCtx } from '../services';
 import { screenRoot, type Screen } from './common';
 import { kindLabel } from './select';
 
-// Carte d'introduction d'une étape (~2 s, toucher pour passer).
+// Carte d'introduction d'une étape (~2 s, toucher pour passer). L'arme se choisit au hangar.
 
 export function createIntroScreen(ctx: UiCtx, stage: StageDef, onSkip: () => void): Screen {
   const root = screenRoot('intro', `intro--${stage.kind} intro--${stage.theme}`);

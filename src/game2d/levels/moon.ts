@@ -7,7 +7,7 @@ import type { Segment } from './build.ts';
 // Toutes les plateformes mobiles bougent en phase (même horloge) : les enchaînements en tiennent compte.
 // Repères de colonnes en commentaire (colonne absolue du premier caractère du segment).
 
-/** 0 — Départ sûr sur le régolithe. */
+/** 0 — Départ sûr sur le régolithe (colonne 8 : à droite des commandes tactiles, voir la Jungle). */
 const START: Segment = [
   '................',
   '................',
@@ -17,10 +17,10 @@ const START: Segment = [
   '................',
   '................',
   '................',
-  '...........?....',
+  '.............?..',
   '................',
   '................',
-  '*.P...*.ccc.....',
+  '*.....*.P.ccc...',
   '################',
   '################',
 ];

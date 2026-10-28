@@ -1,10 +1,11 @@
 // Perte du contexte du jeu Phaser pendant qu'il dort (vol 3D f1 entre deux étapes 2D).
-//  A. j1 gagné -> SUIVANT -> f1 : le jeu 2D est endormi (canvas masqué, boucle arrêtée) ; son contexte est
-//     perdu pour de bon -> le vol continue sans message ni échec -> f1 gagné -> SUIVANT -> m1 tourne sur un
-//     jeu Phaser NEUF (l'ancien canvas retiré), s'affiche et répond.
+//  A. j1 gagné -> SUIVANT -> hangar -> DÉCOLLER -> f1 : le jeu 2D est endormi (canvas masqué, boucle arrêtée) ;
+//     son contexte est perdu pour de bon -> le vol continue sans message ni échec -> f1 gagné -> SUIVANT ->
+//     hangar -> DÉCOLLER -> m1 tourne sur un jeu Phaser NEUF (l'ancien canvas retiré), s'affiche et répond.
 //  B. même parcours, contexte restauré pendant le vol -> m1 réutilise le MÊME jeu, image identique à celle
 //     du jeu neuf de A (textures rechargées pendant le sommeil), et répond.
 import { assert, fmt, info3d, screenText, waitFor, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
+import { nextViaHangar } from '../lib/core.mjs';
 import {
   WEBGL,
   assertPlays,
@@ -15,7 +16,6 @@ import {
   home,
   loseGameOk,
   phaserCanvases,
-  pressScreen,
   recordUi,
   restoreGame,
   screensSince,
@@ -30,11 +30,11 @@ export const meta = {
   timeoutMs: 300000,
 };
 
-/** j1 gagné -> résultats -> SUIVANT -> carte d'intro -> vol f1 en phase 'fly' ; vérifie le jeu 2D endormi. */
+/** j1 gagné -> résultats -> SUIVANT -> hangar -> DÉCOLLER -> carte d'intro -> vol f1 en phase 'fly' ; vérifie le jeu 2D endormi. */
 async function toFlight(t, game, label) {
   await t.ev(() => window.__xr2d.win());
   await waitForScreen(t, 'results', { timeout: 25000 });
-  await pressScreen(t, 'results', 'Suivant');
+  await nextViaHangar(t);
   await waitFor3dPhase(t, 'fly', { timeout: 60000 });
   const gi = await gameInfo(t, game);
   assert(
@@ -43,13 +43,13 @@ async function toFlight(t, game, label) {
   );
 }
 
-/** f1 gagné -> « VOL RÉUSSI » -> SUIVANT -> carte d'intro -> Lune (m1) jouable. */
+/** f1 gagné -> « VOL RÉUSSI » -> SUIVANT -> hangar -> DÉCOLLER -> carte d'intro -> Lune (m1) jouable. */
 async function toMoon(t, label) {
   await t.ev(() => window.__xr3d.win());
   await waitForScreen(t, 'results', { timeout: 25000 });
   const text = await screenText(t, 'results');
   assert(/VOL RÉUSSI/i.test(text), `${label} : écran « VOL RÉUSSI » attendu (texte : ${text.slice(0, 160)})`);
-  await pressScreen(t, 'results', 'Suivant');
+  await nextViaHangar(t);
   const m = await waitPlay(t, { timeout: 40000 });
   assert(m.stage === 'm1', `${label} : étape m1 attendue, obtenu ${fmt(m.stage)}`);
   return m;

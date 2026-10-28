@@ -8,22 +8,28 @@
 //
 // Modèle d'accessibilité : un graphe de positions « debout » (case libre sur 2 lignes avec un appui plein,
 // traversable ou bloc bonus juste dessous, ou position sur une plateforme mobile). Arêtes : marcher, sauter
-// (montée ≤ maxRise avec les écarts max de DESIGN_RULES), se laisser tomber (écart ≤ maxGapDown).
-// Les plafonds et les murs bloquent les sauts. Un second parcours, amorcé sous les blocs « double saut »,
-// repère les secrets réservés au double saut.
+// (montée ≤ maxRise avec les écarts max de DESIGN_RULES), se laisser tomber (écart ≤ maxGapDown), passer
+// une porte 'D' (vers l'autre porte de sa paire, dans les deux sens). Les plafonds et les murs bloquent
+// les sauts. Un second parcours, avec le double saut (compétence apprise : loadout.skills.doubleJump) depuis
+// toutes les positions déjà atteintes, repère les « secrets de compétence ». Les 3 étoiles doivent rester
+// possibles sans eux.
 
-import { DESIGN_RULES, LEVEL_ROWS, RUN_SPEED, TILE } from '../src/game2d/constants.ts';
+import { DESIGN_RULES, LEVEL_ROWS, RUN_SPEED, STARS_RATIO, TILE } from '../src/game2d/constants.ts';
 import { getLevel, LEVEL_IDS } from '../src/game2d/levels/index.ts';
 import { LEGEND } from '../src/game2d/levels/types.ts';
 import type { LevelData } from '../src/game2d/levels/types.ts';
 
 const SOLID_CHARS = '#B?123';
 const BONUS_CHARS = '?123';
+/** Nom des blocs bonus dans les messages et la carte (sens complet : LEGEND de levels/types.ts). */
+const BONUS_NAMES: Readonly<Record<string, string>> = { '?': 'cristal', '1': 'vitesse', '2': 'bouclier', '3': 'cadence' };
 const ENEMY_CHARS = 'wfap';
 const VALID_THEMES = ['jungle', 'moon'];
 const VALID_MUSIC = ['menu', 'jungle', 'moon', 'nebula', 'asteroids'];
+/** Part des cristaux qui donne 3 étoiles (seuil partagé avec PlatformScene.finishLevel). */
+const STARS3_RATIO = STARS_RATIO.three;
 
-/** Accessibilité : 0 = non atteinte, 1 = atteinte normalement, 2 = seulement avec le double saut. */
+/** Accessibilité : 0 = non atteinte, 1 = atteinte normalement, 2 = seulement avec le double saut (compétence). */
 const REACH_NONE = 0;
 const REACH_NORMAL = 1;
 const REACH_DJ = 2;
@@ -35,8 +41,6 @@ const CRYSTAL_UP_DJ = 8;
 /** Bloc le plus haut frappé par dessous (la tête atteint le bas de la ligne r-5). */
 const HIT_UP = 5;
 const HIT_UP_DJ = 8;
-/** Un secret « double saut » doit être à moins de N colonnes après un bloc « 3 » (bonus de 20 s). */
-const DJ_SECRET_MAX_DIST = 40;
 const START_SAFE_COLS = 8;
 /** Positions par plateforme mobile dans le graphe : 3 cases x 4 décalages (0..3 tuiles). */
 const MOVER_NODES = 12;
@@ -68,6 +72,10 @@ class LevelGrid {
   readonly rows: number;
   readonly cols: number;
   readonly movers: Mover[] = [];
+  /** Portes 'D' dans l'ordre des paires (comme le moteur) : par colonne, puis par ligne. */
+  readonly doors: Pos[] = [];
+  /** Case d'une porte appairée -> case de l'autre porte de sa paire. */
+  readonly doorLink = new Map<number, number>();
   readonly map: readonly string[];
 
   constructor(map: readonly string[]) {
@@ -75,6 +83,7 @@ class LevelGrid {
     this.rows = map.length;
     this.cols = map.length > 0 ? map[0].length : 0;
     this.parseMovers();
+    this.parseDoors();
   }
 
   key(c: number, r: number): number {
@@ -134,6 +143,20 @@ class LevelGrid {
       }
     }
   }
+
+  /** Même appairage que le moteur (parseLevel) : tri (colonne, ligne), puis 1re ↔ 2e, 3e ↔ 4e… */
+  private parseDoors(): void {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) if (this.ch(c, r) === 'D') this.doors.push({ col: c, row: r });
+    }
+    this.doors.sort((a, b) => a.col - b.col || a.row - b.row);
+    for (let i = 0; i + 1 < this.doors.length; i += 2) {
+      const a = this.key(this.doors[i].col, this.doors[i].row);
+      const b = this.key(this.doors[i + 1].col, this.doors[i + 1].row);
+      this.doorLink.set(a, b);
+      this.doorLink.set(b, a);
+    }
+  }
 }
 
 // ---------------------------------------------------------------- Règles de saut
@@ -148,7 +171,7 @@ function jumpAllowed(rise: number, gap: number, dj: boolean): boolean {
     if (rise >= -1) return gap <= R.maxGapFlat;
     return gap <= R.maxGapDown;
   }
-  // Double saut (~7,2 tuiles) : réservé aux secrets.
+  // Double saut (~7,2 tuiles) : réservé aux secrets de compétence.
   if (rise > 6) return false;
   if (rise >= 5) return gap <= 2;
   if (rise >= 3) return gap <= 3;
@@ -259,6 +282,12 @@ class ReachGraph {
         if (edgeAllowed(g, c0, r0, c1, r1, dj)) out.push(g.key(c1, r1));
       }
     }
+    // Porte : on entre debout devant elle, on ressort devant l'autre porte de la paire.
+    const link = mi < 0 ? g.doorLink.get(id) : undefined;
+    if (link !== undefined && g.standable(c0, r0)) {
+      const c1 = link % g.cols;
+      if (g.standable(c1, (link - c1) / g.cols)) out.push(link);
+    }
     // Cibles sur plateformes mobiles
     const q: Pos = { col: 0, row: 0 };
     for (let mj = 0; mj < g.movers.length; mj++) {
@@ -352,6 +381,16 @@ function fmtTime(s: number): string {
   const m = Math.floor(s / 60);
   const sec = Math.round(s - m * 60);
   return `${m} min ${sec.toString().padStart(2, '0')} s`;
+}
+
+/** Pourcentage à la française : 0.9057 -> « 90,6 % ». */
+function fmtPct(ratio: number): string {
+  return `${(ratio * 100).toFixed(1).replace('.', ',')} %`;
+}
+
+/** Bloc bonus lisible : « vitesse « 1 » ». */
+function bonusName(ch: string): string {
+  return `${BONUS_NAMES[ch] ?? 'inconnu'} « ${ch} »`;
 }
 
 function checkLevel(id: string, level: LevelData): Report {
@@ -483,6 +522,20 @@ function checkLevel(id: string, level: LevelData): Report {
     if (!g.solid(d.col, d.row + 1)) warn(`décor (${d.col}, ${d.row}) : ne repose pas sur un sol plein`);
   }
 
+  // ---- Portes : par paires, posées sur un sol, 2 cases de haut (la case et celle du dessus, vide)
+  const doors = g.doors;
+  if (doors.length % 2 !== 0) {
+    const last = doors[doors.length - 1];
+    err(`${doors.length} portes 'D' : nombre impair, la porte (${last.col}, ${last.row}) n'a pas de paire`);
+  }
+  for (const d of doors) {
+    const at = `porte (${d.col}, ${d.row})`;
+    if (!g.supported(d.col, d.row)) err(`${at} : pas de sol dessous`);
+    const above = g.ch(d.col, d.row - 1);
+    if (d.row < 1) err(`${at} : dépasse en haut de la carte (2 cases de haut)`);
+    else if (above !== '.') err(`${at} : case du dessus (${d.col}, ${d.row - 1}) occupée par « ${above} »`);
+  }
+
   // ---- Départ : zone sûre
   if (!g.standable(P.col, P.row)) err(`départ P (${P.col}, ${P.row}) : pas de sol dessous`);
   for (let c = P.col; c < P.col + START_SAFE_COLS; c++) {
@@ -504,27 +557,16 @@ function checkLevel(id: string, level: LevelData): Report {
   const graph = new ReachGraph(g);
   const nodeReach = new Uint8Array(graph.total);
   graph.flood(nodeReach, [g.key(P.col, P.row)], false, REACH_NORMAL);
-  // Double saut : à partir des cases sous un bloc « 3 » atteintes normalement.
-  const djBlocks = bonus.filter((b) => g.ch(b.col, b.row) === '3');
-  const djSeeds: number[] = [];
-  for (const b of djBlocks) {
-    for (let rs = b.row + 2; rs <= Math.min(g.rows - 1, b.row + HIT_UP); rs++) {
-      if (g.solid(b.col, rs - 1)) break;
-      if (nodeReach[g.key(b.col, rs)] === REACH_NORMAL) djSeeds.push(g.key(b.col, rs));
-    }
-  }
-  if (djSeeds.length > 0) graph.flood(nodeReach, djSeeds, true, REACH_DJ);
+  // Compétence « double saut » : plus aucun bloc ne la donne, une fois apprise elle sert partout. Second
+  // parcours depuis toutes les positions atteintes normalement ; ce qu'il ajoute = secrets de compétence.
+  const skillSeeds: number[] = [];
+  for (let id = 0; id < graph.total; id++) if (nodeReach[id] === REACH_NORMAL) skillSeeds.push(id);
+  graph.flood(nodeReach, skillSeeds, true, REACH_DJ);
   const reach = graph.cellReach(nodeReach);
 
   const isReached = (p: Pos, lvl: number): boolean => {
     const v = reach[g.key(p.col, p.row)];
     return v !== REACH_NONE && v <= lvl;
-  };
-  const djLabel = (col: number): string | null => {
-    const before = djBlocks.filter((b) => b.col <= col);
-    if (before.length === 0) return null;
-    const d = col - before[before.length - 1].col;
-    return d <= DJ_SECRET_MAX_DIST ? `bloc « 3 » ${d} colonnes avant` : null;
   };
 
   if (!isReached(X, REACH_NORMAL)) err(`le vaisseau X (${X.col}, ${X.row}) n'est PAS accessible depuis P`);
@@ -538,28 +580,32 @@ function checkLevel(id: string, level: LevelData): Report {
       }
     }
   }
+  for (const d of doors) {
+    if (!isReached(d, REACH_DJ)) warn(`porte (${d.col}, ${d.row}) inaccessible (même avec le double saut)`);
+  }
 
-  let djCrystals = 0;
+  // Cristaux (posés 'c' et blocs '?') : atteints normalement, secrets de compétence, ou erreur.
+  let openCrystals = 0;
+  let skillCrystals = 0;
   for (const cr of crystals) {
-    if (touchable(g, reach, cr.col, cr.row, REACH_NORMAL)) continue;
-    if (touchable(g, reach, cr.col, cr.row, REACH_DJ)) {
-      djCrystals++;
-      const lbl = djLabel(cr.col);
-      if (lbl) warn(`cristal (${cr.col}, ${cr.row}) : inaccessible sans double saut [secret double saut, ${lbl}]`);
-      else err(`cristal (${cr.col}, ${cr.row}) : seulement avec le double saut, sans bloc « 3 » proche avant`);
+    if (touchable(g, reach, cr.col, cr.row, REACH_NORMAL)) {
+      openCrystals++;
+    } else if (touchable(g, reach, cr.col, cr.row, REACH_DJ)) {
+      skillCrystals++;
+      warn(`cristal (${cr.col}, ${cr.row}) : seulement avec le double saut [secret de compétence]`);
     } else {
       err(`cristal (${cr.col}, ${cr.row}) : inaccessible (même avec le double saut)`);
     }
   }
   for (const b of bonus) {
     const ch = g.ch(b.col, b.row);
-    if (hittable(g, reach, b.col, b.row, REACH_NORMAL)) continue;
-    const lbl = djLabel(b.col);
-    if (ch === '?' && lbl && hittable(g, reach, b.col, b.row, REACH_DJ)) {
-      djCrystals++;
-      warn(`bloc « ? » (${b.col}, ${b.row}) : seulement avec le double saut [secret, ${lbl}]`);
+    if (hittable(g, reach, b.col, b.row, REACH_NORMAL)) {
+      if (ch === '?') openCrystals++;
+    } else if (hittable(g, reach, b.col, b.row, REACH_DJ)) {
+      if (ch === '?') skillCrystals++;
+      warn(`bloc ${bonusName(ch)} (${b.col}, ${b.row}) : seulement avec le double saut [secret de compétence]`);
     } else {
-      err(`bloc « ${ch} » (${b.col}, ${b.row}) : impossible à frapper par dessous`);
+      err(`bloc ${bonusName(ch)} (${b.col}, ${b.row}) : impossible à frapper par dessous (même avec le double saut)`);
     }
   }
 
@@ -572,7 +618,7 @@ function checkLevel(id: string, level: LevelData): Report {
   const nC = crystals.length;
   const nQ = bonus.filter((b) => g.ch(b.col, b.row) === '?').length;
   const count = (k: string): number => enemies.filter((e) => e.kind === k).length;
-  const powers = bonus.filter((b) => g.ch(b.col, b.row) !== '?').map((b) => `« ${g.ch(b.col, b.row)} » col. ${b.col}`);
+  const powers = bonus.filter((b) => g.ch(b.col, b.row) !== '?').map((b) => `${bonusName(g.ch(b.col, b.row))} col. ${b.col}`);
   const pureRun = (X.col - P.col) / (RUN_SPEED / TILE);
   // Estimation grossière : course x2,4 (sauts, hésitations) + temps par ennemi et par plateforme mobile.
   const estimate = pureRun * 2.4 + enemies.length * 1.2 + g.movers.length * 2.5;
@@ -584,7 +630,21 @@ function checkLevel(id: string, level: LevelData): Report {
     `taille : ${g.cols} x ${g.rows} ; trous : ${pits} ; plateformes mobiles : ${g.movers.length} ` +
       `(dont ${g.movers.filter((m) => m.vertical).length} verticales)`,
   );
-  rep.notes.push(`cristaux : ${nC + nQ} (${nC} 'c' + ${nQ} blocs '?'), dont ${djCrystals} secrets double saut`);
+  rep.notes.push(`cristaux : ${nC + nQ} (${nC} 'c' + ${nQ} blocs '?'), dont ${skillCrystals} secrets de compétence`);
+  // 3 étoiles sans compétence : on reviendra chercher les secrets plus tard. Même calcul que le moteur
+  // (cristaux ramassés / total ≥ STARS3_RATIO), `need` = le plus petit nombre de cristaux qui suffit.
+  const total = nC + nQ;
+  let need = 0;
+  while (need < total && need / total < STARS3_RATIO) need++;
+  const openRatio = total > 0 ? openCrystals / total : 1;
+  const stars3 = openRatio >= STARS3_RATIO;
+  rep.notes.push(
+    `3 étoiles sans compétence : ${openCrystals}/${total} cristaux accessibles (${fmtPct(openRatio)}), ` +
+      `${need} requis (${fmtPct(STARS3_RATIO)}) ${stars3 ? '✓' : '✗'}`,
+  );
+  if (!stars3) {
+    err(`3 étoiles impossibles sans compétence : ${openCrystals} cristaux sur ${total} hors secrets, ${need} requis`);
+  }
   rep.notes.push(
     `ennemis : ${enemies.length} (marcheurs ${count('w')}, volants ${count('f')}, blindés ${count('a')}, ` +
       `cracheurs ${count('p')})`,
@@ -593,6 +653,15 @@ function checkLevel(id: string, level: LevelData): Report {
     `points de contrôle : ${checkpoints.length} (colonnes ${checkpoints.map((k) => k.col).join(', ') || '-'}) ; ` +
       `bonus : ${powers.join(', ') || 'aucun'}`,
   );
+  if (doors.length > 0) {
+    const pairs: string[] = [];
+    for (let i = 0; i + 1 < doors.length; i += 2) {
+      const a = doors[i];
+      const b = doors[i + 1];
+      pairs.push(`(${a.col}, ${a.row}) ↔ (${b.col}, ${b.row})`);
+    }
+    rep.notes.push(`portes : ${doors.length} (paires : ${pairs.join(', ') || '-'})`);
+  }
   rep.notes.push(`durée : course pure ≈ ${Math.round(pureRun)} s, estimation de jeu ≈ ${fmtTime(estimate)}`);
 
   if (checkpoints.length < 2) warn(`${checkpoints.length} point(s) de contrôle (2 attendus)`);
@@ -625,7 +694,9 @@ function printMap(g: LevelGrid, reach: Uint8Array, crystals: Pos[], bonus: Pos[]
     }
   }
   for (const b of bonus) {
-    if (!hittable(g, reach, b.col, b.row, REACH_NORMAL)) out[b.row][b.col] = '%';
+    if (!hittable(g, reach, b.col, b.row, REACH_NORMAL)) {
+      out[b.row][b.col] = hittable(g, reach, b.col, b.row, REACH_DJ) ? '&' : '%';
+    }
   }
   const ruler1: string[] = [];
   const ruler2: string[] = [];
@@ -642,8 +713,10 @@ function printMap(g: LevelGrid, reach: Uint8Array, crystals: Pos[], bonus: Pos[]
     lines.push('');
   }
   lines.push(
-    "     légende : ':' debout atteint, ';' atteint seulement avec le double saut, " +
-      "'d' cristal secret (double saut), '!' cristal inaccessible, '%' bloc impossible à frapper",
+    "     légende : ':' debout atteint, ';' atteint seulement avec le double saut (compétence), " +
+      "'d' cristal secret de compétence, '!' cristal inaccessible, '&' bloc frappé seulement avec le double saut, " +
+      "'%' bloc impossible à frapper, 'D' porte",
+    '     blocs bonus : ' + [...BONUS_CHARS].map((ch) => `'${ch}' ${BONUS_NAMES[ch]}`).join(', '),
   );
   rep.notes.push('\n' + lines.join('\n'));
 }

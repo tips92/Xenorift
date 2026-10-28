@@ -15,8 +15,9 @@ const KEYMAP = new Map<string, number>([
   ['KeyA', K_LEFT],
   ['ArrowRight', K_RIGHT],
   ['KeyD', K_RIGHT],
-  ['ArrowUp', K_UP | K_JUMP],
-  ['KeyW', K_UP | K_JUMP],
+  // ↑ / W (Z en AZERTY) : haut (visée, portes, vol), ne fait pas sauter. Saut : Espace et K.
+  ['ArrowUp', K_UP],
+  ['KeyW', K_UP],
   ['ArrowDown', K_DOWN],
   ['KeyS', K_DOWN],
   ['Space', K_JUMP | K_BOOST],

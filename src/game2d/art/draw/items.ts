@@ -1,4 +1,4 @@
-import type { ThemeId } from '../../../core/types';
+import type { ThemeId, WeaponId } from '../../../core/types';
 import { PALETTES } from '../palette';
 import {
   type Ctx,
@@ -16,7 +16,7 @@ import {
   sphereGrad,
 } from '../util';
 
-// Objets : laser, cristaux, bonus, bouclier, balise, particules, plateforme mobile.
+// Objets : projectiles de Kaï, cristaux, bonus, bouclier, balise, particules, plateforme mobile.
 
 const OUT = '#0d0618';
 
@@ -51,6 +51,89 @@ export function drawLaser(ctx: Ctx): void {
     ctx.fill();
   });
   softDot(ctx, 35, cy, 5, '#ffffff', 0.9);
+}
+
+// ---------------------------------------------------------------- Projectiles des autres armes (BULLET_SIZE)
+// Vers la droite, centrés ; la tête tombe sur `tip` (keys.ts). Sans contour et rendus en mode additif, sauf
+// les plombs de la pompe (BULLET_ADDITIVE) : contour sombre et mode normal, pour garder l'ambre sur tous les fonds.
+
+/** Balle de mitrailleur (24x6) : trait court cyan, tête blanche en x = 22. */
+function drawBulletMachinegun(ctx: Ctx): void {
+  const cy = 3;
+  ctx.fillStyle = linGrad(ctx, 0, 0, 22, 0, [[0, 'rgba(63,240,255,0)'], [0.5, 'rgba(63,240,255,0.55)'], [1, 'rgba(120,248,255,0.95)']]);
+  ctx.beginPath();
+  ctx.moveTo(1, cy);
+  ctx.quadraticCurveTo(12, cy - 2.6, 19.6, cy - 2.4);
+  ctx.arc(19.6, cy, 2.4, -Math.PI / 2, Math.PI / 2);
+  ctx.quadraticCurveTo(12, cy + 2.6, 1, cy);
+  ctx.fill();
+  ctx.fillStyle = linGrad(ctx, 7, 0, 22, 0, [[0, 'rgba(255,255,255,0)'], [1, '#ffffff']]);
+  ctx.beginPath();
+  ctx.moveTo(7, cy);
+  ctx.quadraticCurveTo(14, cy - 1.2, 20, cy - 1.2);
+  ctx.arc(20, cy, 1.2, -Math.PI / 2, Math.PI / 2);
+  ctx.quadraticCurveTo(14, cy + 1.2, 7, cy);
+  ctx.fill();
+}
+
+/** Plomb de pompe (16x16) : boule ambre cerclée de sombre, traînée orange, front en x = 15 (mode normal). */
+function drawBulletShotgun(ctx: Ctx): void {
+  const cy = 8;
+  ctx.fillStyle = linGrad(ctx, 0, 0, 10, 0, [[0, 'rgba(255,138,31,0)'], [1, 'rgba(255,138,31,0.85)']]);
+  ctx.beginPath();
+  ctx.moveTo(0.5, cy);
+  ctx.lineTo(10, cy - 2.4);
+  ctx.lineTo(10, cy + 2.4);
+  ctx.closePath();
+  ctx.fill();
+  softDot(ctx, 11.4, cy, 4.6, '#ff8a1f', 0.55);
+  fillOutlined(ctx, circle(11.6, cy, 2.9), '#ffb347', OUT, 1.4);
+  ctx.fillStyle = '#ffe2b0';
+  ctx.beginPath();
+  ctx.arc(12.4, cy - 0.9, 1.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(12.6, cy - 1, 0.8, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** Trait de fusil d'assaut (56x8) : long, blanc-violet, deux ondes le long du trait, tête en x = 52. */
+function drawBulletRifle(ctx: Ctx): void {
+  const cy = 4;
+  ctx.fillStyle = linGrad(ctx, 0, 0, 52, 0, [[0, 'rgba(176,102,255,0)'], [0.45, 'rgba(176,102,255,0.45)'], [1, 'rgba(214,170,255,0.95)']]);
+  ctx.beginPath();
+  ctx.moveTo(1, cy);
+  ctx.quadraticCurveTo(26, cy - 3.4, 49, cy - 3.2);
+  ctx.arc(49, cy, 3.2, -Math.PI / 2, Math.PI / 2);
+  ctx.quadraticCurveTo(26, cy + 3.4, 1, cy);
+  ctx.fill();
+  // Ondes
+  ctx.strokeStyle = 'rgba(233,212,255,0.55)';
+  ctx.lineWidth = 1;
+  for (const x of [24, 36]) {
+    ctx.beginPath();
+    ctx.ellipse(x, cy, 0.9, 2.8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Cœur
+  ctx.fillStyle = linGrad(ctx, 8, 0, 52, 0, [[0, 'rgba(255,255,255,0)'], [0.6, 'rgba(240,228,255,0.9)'], [1, '#ffffff']]);
+  ctx.beginPath();
+  ctx.moveTo(8, cy);
+  ctx.quadraticCurveTo(30, cy - 1.3, 50, cy - 1.3);
+  ctx.lineTo(53, cy);
+  ctx.lineTo(50, cy + 1.3);
+  ctx.quadraticCurveTo(30, cy + 1.3, 8, cy);
+  ctx.fill();
+  softDot(ctx, 49.5, cy, 4.5, '#ffffff', 0.8);
+}
+
+/** Projectile de chaque arme, à la taille BULLET_SIZE[arme] (laser : le trait d'origine). */
+export function drawBullet(ctx: Ctx, weapon: WeaponId): void {
+  if (weapon === 'machinegun') drawBulletMachinegun(ctx);
+  else if (weapon === 'shotgun') drawBulletShotgun(ctx);
+  else if (weapon === 'rifle') drawBulletRifle(ctx);
+  else drawLaser(ctx);
 }
 
 // ---------------------------------------------------------------- Cristal (32x40, 6 frames de rotation)
@@ -179,32 +262,85 @@ function orbGloss(ctx: Ctx): void {
   ctx.fill();
 }
 
-export function drawPowerTriple(ctx: Ctx): void {
-  powerOrb(ctx, '#ffd0a0', '#ff6a3d', '#8a1a4a', '#ff7a3d');
-  // Trois rayons en éventail
-  for (const a of [-0.42, 0, 0.42]) {
-    ctx.save();
-    ctx.translate(14, 24);
-    ctx.rotate(a);
-    glow(ctx, '#3ff0ff', 5, () => {
-      ctx.strokeStyle = OUT;
-      ctx.lineWidth = 5.5;
-      ctx.beginPath();
-      ctx.moveTo(2, 0);
-      ctx.lineTo(19, 0);
-      ctx.stroke();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    });
-    ctx.fillStyle = '#c9fdff';
+/** Vitesse (bloc 1) : orbe vert, double chevron vers l'avant et traits de vitesse. */
+export function drawPowerSpeed(ctx: Ctx): void {
+  powerOrb(ctx, '#eaffb0', '#5ae04a', '#0e5a3a', '#7dff4a');
+  // Traits de vitesse
+  ctx.lineCap = 'round';
+  for (const y of [20, 28]) {
+    ctx.strokeStyle = OUT;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(19.5, 0, 2.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
+    ctx.moveTo(10, y);
+    ctx.lineTo(13.5, y);
+    ctx.stroke();
+    ctx.strokeStyle = '#eaffb0';
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
-  fillOutlined(ctx, circle(14, 24, 3.5), '#ffffff', OUT, 2);
+  for (const dx of [0, 9]) {
+    const ch = new Path2D();
+    ch.moveTo(16 + dx, 15);
+    ch.lineTo(24.5 + dx, 24);
+    ch.lineTo(16 + dx, 33);
+    glow(ctx, '#eaffb0', 5, () => {
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = OUT;
+      ctx.lineWidth = 7.5;
+      ctx.stroke(ch);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 4;
+      ctx.stroke(ch);
+    });
+  }
   orbGloss(ctx);
+}
+
+/**
+ * Cadence (bloc 3) : orbe orange sombre, deux grosses balles (douille dorée, ogive blanche pointue) cerclées de
+ * sombre, décalées, avec un trait de vitesse derrière chacune (même vocabulaire que la vitesse). Reflet dessiné
+ * avant : il ne couvre aucune balle.
+ */
+export function drawPowerRapid(ctx: Ctx): void {
+  powerOrb(ctx, '#ffb07a', '#f0521f', '#7a1030', '#ff7a3d');
+  orbGloss(ctx);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const [x, y] of [[20, 17.5], [17, 30.5]] as const) {
+    // Trait de vitesse
+    ctx.strokeStyle = OUT;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x - 7.5, y);
+    ctx.lineTo(x - 4.5, y);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffe7b8';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    // Balle vers la droite : douille (x .. x+6) puis ogive pointue (x+6 .. x+15,5)
+    const b = new Path2D();
+    b.moveTo(x, y - 3.5);
+    b.lineTo(x + 9, y - 3.5);
+    b.quadraticCurveTo(x + 14.5, y - 2.4, x + 15.5, y);
+    b.quadraticCurveTo(x + 14.5, y + 2.4, x + 9, y + 3.5);
+    b.lineTo(x, y + 3.5);
+    b.closePath();
+    glow(ctx, '#fff1d6', 5, () => {
+      ctx.fillStyle = linGrad(ctx, 0, y - 3.5, 0, y + 3.5, [[0, '#ffffff'], [0.6, '#fff4e2'], [1, '#ffd6a0']]);
+      ctx.fill(b);
+    });
+    ctx.fillStyle = linGrad(ctx, 0, y - 3.5, 0, y + 3.5, [[0, '#fff0a8'], [0.5, '#ffc23a'], [1, '#c2701a']]);
+    ctx.fillRect(x, y - 3.5, 6, 7);
+    ctx.strokeStyle = OUT;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x + 6, y - 3.5);
+    ctx.lineTo(x + 6, y + 3.5);
+    ctx.stroke();
+    ctx.lineWidth = 2.6;
+    ctx.stroke(b);
+  }
 }
 
 export function drawPowerShield(ctx: Ctx): void {
@@ -226,27 +362,6 @@ export function drawPowerShield(ctx: Ctx): void {
     hex.push(24 + Math.cos(a) * 5.2, 23 + Math.sin(a) * 5.2);
   }
   fillOutlined(ctx, poly(hex), '#2fa8ff', '#16246a', 1.4);
-  orbGloss(ctx);
-}
-
-export function drawPowerDoubleJump(ctx: Ctx): void {
-  powerOrb(ctx, '#eaffb0', '#5ae04a', '#0e5a3a', '#7dff4a');
-  for (const dy of [-5, 5]) {
-    const ch = new Path2D();
-    ch.moveTo(14, 26 + dy);
-    ch.lineTo(24, 16 + dy);
-    ch.lineTo(34, 26 + dy);
-    glow(ctx, '#eaffb0', 5, () => {
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = OUT;
-      ctx.lineWidth = 7.5;
-      ctx.stroke(ch);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 4;
-      ctx.stroke(ch);
-    });
-  }
   orbGloss(ctx);
 }
 

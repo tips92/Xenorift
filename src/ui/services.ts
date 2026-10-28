@@ -8,6 +8,7 @@ import type {
   SfxId,
   Settings,
   TouchLayout,
+  TouchOptions,
 } from '../core/types';
 
 // Enveloppes protégées autour de l'audio et des entrées : une erreur dans un module ne doit
@@ -161,6 +162,14 @@ export function createSafeInput(make: () => InputApi): InputApi {
         a.setLayout(layout);
       } catch (err) {
         warn('input.setLayout', err);
+      }
+    },
+    setTouchOptions(opts: TouchOptions): void {
+      if (!a) return;
+      try {
+        a.setTouchOptions(opts);
+      } catch (err) {
+        warn('input.setTouchOptions', err);
       }
     },
     setTiltEnabled(on: boolean): void {

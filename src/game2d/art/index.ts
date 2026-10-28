@@ -1,22 +1,23 @@
 import type Phaser from 'phaser';
-import type { ThemeId } from '../../core/types';
+import type { ThemeId, WeaponId } from '../../core/types';
+import { drawDoor, drawInteractArrow, drawRoomWall } from './draw/doors';
 import { drawArmored, drawFlyer, drawSpitter, drawSpore, drawWalker } from './draw/enemies';
 import {
+  drawBullet,
   drawCheckpoint,
   drawCrystal,
-  drawLaser,
   drawMover,
-  drawPowerDoubleJump,
+  drawPowerRapid,
   drawPowerShield,
-  drawPowerTriple,
+  drawPowerSpeed,
   drawPuff,
   drawShieldBubble,
   drawSpark,
 } from './draw/items';
-import { PLAYER_FRAME_COUNT, drawPlayerFrame } from './draw/player';
+import { ARM_FRAME_COUNT, type ArmWeapon, PLAYER_FRAME_COUNT, drawArmFrame, drawPlayerFrame } from './draw/player';
 import { drawShip, drawShipFlame } from './draw/ship';
 import { drawTileset, tileRect } from './draw/tiles';
-import { ANIM, FRAMES, FRAME_SIZE, TEX, TILESET } from './keys';
+import { ANIM, ARM_TEX, BULLET_SIZE, BULLET_TEX, FRAMES, FRAME_SIZE, TEX, TILESET } from './keys';
 import { createParallaxImpl } from './parallax';
 import { buildSheet, registerCanvas } from './util';
 
@@ -25,6 +26,7 @@ import { buildSheet, registerCanvas } from './util';
 
 export { SHIP_NOZZLE } from './draw/ship';
 export { BG_TIMINGS } from './draw/backgrounds';
+export { PLAYER_SHOULDER } from './draw/player';
 
 /**
  * (Re)génère toutes les textures et animations de TEX / ANIM (voir ./keys.ts) pour le thème donné.
@@ -48,6 +50,11 @@ export function generatePlatformArt(scene: Phaser.Scene, theme: ThemeId): void {
   // --- Personnage (identique dans les deux thèmes)
   const P = FRAME_SIZE.player;
   buildSheet(scene, TEX.player, P.w, P.h, PLAYER_FRAME_COUNT, (ctx, i) => drawPlayerFrame(ctx, i));
+  // Bras armé : une planche (repos, recul) par arme
+  const Am = FRAME_SIZE.arm;
+  for (const weapon of Object.keys(ARM_TEX) as ArmWeapon[]) {
+    buildSheet(scene, ARM_TEX[weapon], Am.w, Am.h, ARM_FRAME_COUNT, (ctx, i) => drawArmFrame(ctx, weapon, i));
+  }
 
   // --- Ennemis (spécifiques au thème)
   const Wk = FRAME_SIZE.walker;
@@ -61,12 +68,17 @@ export function generatePlatformArt(scene: Phaser.Scene, theme: ThemeId): void {
   buildSheet(scene, TEX.spore, 24, 24, 1, (ctx) => drawSpore(ctx, theme));
 
   // --- Objets
-  buildSheet(scene, TEX.laser, 40, 10, 1, (ctx) => drawLaser(ctx));
+  // Projectiles de Kaï : un par arme (laser = TEX.laser), à la taille BULLET_SIZE
+  for (const weapon of Object.keys(BULLET_TEX) as WeaponId[]) {
+    const B = BULLET_SIZE[weapon];
+    buildSheet(scene, BULLET_TEX[weapon], B.w, B.h, 1, (ctx) => drawBullet(ctx, weapon));
+  }
   const Cr = FRAME_SIZE.crystal;
   buildSheet(scene, TEX.crystal, Cr.w, Cr.h, 6, (ctx, i) => drawCrystal(ctx, i));
-  buildSheet(scene, TEX.powerTriple, 48, 48, 1, (ctx) => drawPowerTriple(ctx));
+  // Bonus : vitesse (bloc 1), bouclier (bloc 2), cadence (bloc 3)
+  buildSheet(scene, TEX.powerSpeed, 48, 48, 1, (ctx) => drawPowerSpeed(ctx));
   buildSheet(scene, TEX.powerShield, 48, 48, 1, (ctx) => drawPowerShield(ctx));
-  buildSheet(scene, TEX.powerDoubleJump, 48, 48, 1, (ctx) => drawPowerDoubleJump(ctx));
+  buildSheet(scene, TEX.powerRapid, 48, 48, 1, (ctx) => drawPowerRapid(ctx));
   buildSheet(scene, TEX.shieldBubble, 96, 96, 1, (ctx) => drawShieldBubble(ctx));
   const Ck = FRAME_SIZE.checkpoint;
   buildSheet(scene, TEX.checkpoint, Ck.w, Ck.h, 3, (ctx, i) => drawCheckpoint(ctx, i));
@@ -74,6 +86,10 @@ export function generatePlatformArt(scene: Phaser.Scene, theme: ThemeId): void {
   const SF = FRAME_SIZE.shipFlame;
   buildSheet(scene, TEX.shipFlame, SF.w, SF.h, 2, (ctx, i) => drawShipFlame(ctx, i));
   buildSheet(scene, TEX.mover, 192, 32, 1, (ctx) => drawMover(ctx, theme));
+  const Dr = FRAME_SIZE.door;
+  buildSheet(scene, TEX.door, Dr.w, Dr.h, 2, (ctx, i) => drawDoor(ctx, theme, i));
+  buildSheet(scene, TEX.interactArrow, 28, 24, 1, (ctx) => drawInteractArrow(ctx));
+  buildSheet(scene, TEX.roomWall, 64, 64, 1, (ctx) => drawRoomWall(ctx, theme));
   buildSheet(scene, TEX.spark, 16, 16, 1, (ctx) => drawSpark(ctx));
   buildSheet(scene, TEX.puff, 32, 32, 1, (ctx) => drawPuff(ctx));
 
@@ -87,6 +103,9 @@ export function generatePlatformArt(scene: Phaser.Scene, theme: ThemeId): void {
   anim(ANIM.playerJump, TEX.player, [FRAMES.player.jump], 1, false);
   anim(ANIM.playerFall, TEX.player, [FRAMES.player.fall], 1, false);
   anim(ANIM.playerHurt, TEX.player, [FRAMES.player.hurt], 1, false);
+  anim(ANIM.playerCrouch, TEX.player, [FRAMES.player.crouch], 1, false);
+  anim(ANIM.playerCrouchShoot, TEX.player, [FRAMES.player.crouchShoot], 1, false);
+  anim(ANIM.playerCrawl, TEX.player, FRAMES.player.crawl, 6, true);
   anim(ANIM.walkerWalk, TEX.walker, FRAMES.walker.walk, 8, true);
   anim(ANIM.flyerFly, TEX.flyer, FRAMES.flyer.fly, 8, true);
   anim(ANIM.armoredWalk, TEX.armored, FRAMES.armored.walk, 8, true);

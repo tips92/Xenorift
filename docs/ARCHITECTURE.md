@@ -68,7 +68,8 @@ ennemi en « règle pure + rendu ». La rigueur s'applique là où elle paie :
 ```
 src/
   main.ts          point d'entrée → startApp()
-  core/            contrats (types.ts), étapes (stages.ts), sauvegarde (save.ts)
+  core/            contrats (types.ts), étapes (stages.ts), sauvegarde (save.ts), fiches des armes (weapons.ts),
+                   catalogue et calculs du hangar (hangar.ts)
   ui/              coquille : App.ts, HUD, écrans (screens/), fondu, icônes, utilitaires DOM
   input/           clavier, commandes tactiles, inclinaison → un état d'entrée unique
   audio/           moteur Web Audio, effets (sfx), musiques procédurales
@@ -92,7 +93,8 @@ Le détail fichier par fichier est dans la section « Architecture » de [CLAUDE
 - **Une étape** : `startStage` (fondu, carte d'intro) → `loadMode` (import dynamique du moteur) →
   `StartMode(conteneur, étape, hooks)` → `ModeHandle`. L'interface appelle `pause` / `resume` / `destroy` ;
   le mode appelle **une seule fois** `onComplete(résultat)` ou `onFail(raison)`. `endRun` enregistre le
-  résultat et affiche l'écran de résultats ou d'échec.
+  résultat (et ajoute les cristaux à la réserve) et affiche l'écran de résultats ou d'échec ; « Suivant »
+  ouvre le hangar, dont le bouton de départ lance l'étape suivante.
 - **Entrées** : événements → `InputManager` met à jour **un seul objet d'état**, modifié sur place (aucune
   allocation). Les modes lisent `hooks.input.state` à chaque image et `consumePress()` pour les appuis.
 - **HUD** : les modes envoient des mises à jour partielles par `HudApi` (le 2D les regroupe avec
@@ -163,19 +165,24 @@ Le détail fichier par fichier est dans la section « Architecture » de [CLAUDE
 
 ## 6. Où ranger le code à venir
 
-Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de-travail).
+Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de-travail). Ceux des étapes 1,
+2 et 3a sont les emplacements réels (étapes codées).
 
 | Besoin | Emplacement | Étape |
 |---|---|---|
-| Stick à 8 directions, appui `interact` | `input/touch.ts`, `input/index.ts`, `input/keyboard.ts` | 1 |
-| Visée, accroupi, descente d'étage | `game2d/engine/Player.ts`, `PlatformScene.ts` | 1 |
-| Portes | `game2d/engine/doors.ts` (nouveau), légende des niveaux | 1 |
-| Bras armé dessiné à part | `game2d/art/draw/player.ts`, `art/keys.ts` | 1 et 2 |
-| Fiches des armes | `core/weapons.ts` (données) | 2 |
-| Arme générique, projectiles | `game2d/engine/weapons.ts` (`Gun`), `projectiles.ts` | 2 |
-| Sauvegarde v2 (équipement, réserve, migration) | `core/save.ts`, `core/types.ts` | 2 et 3 |
-| Prix et conditions du hangar | `core/hangar.ts` (données) | 3 |
-| Écran du hangar | `ui/screens/hangar.ts` | 3 |
+| Stick à 8 directions, appui `interact` | `input/stick.ts` (secteurs), `input/touch.ts`, `input/index.ts`, `input/keyboard.ts` | 1 |
+| Réglage des commandes (taille, opacité, gaucher) | `ui/screens/options.ts` (`CHOICES`), `input/touch.ts` (`setOptions`), `core/save.ts` | 1 |
+| Visée, accroupi, descente d'étage | `game2d/engine/Player.ts`, `PlatformScene.ts`, `weapons.ts` ; constantes dans `game2d/constants.ts` | 1 |
+| Portes | `game2d/engine/doors.ts`, `game2d/art/draw/doors.ts`, `LEGEND` (`D`), `engine/mapBuilder.ts`, `scripts/check-levels.ts` | 1 |
+| Bras armé dessiné à part | `game2d/art/draw/player.ts` (`drawArmFrame`), `game2d/art/keys.ts` (`ARM_TEX`, `ARM_RIG`, `ARM_MUZZLE`) | 1 et 2 |
+| Fiches des armes | `core/weapons.ts` (`WEAPONS`, `WEAPON_IDS`, `resolveWeapon`, `WeaponMods` pour le hangar) | 2 |
+| Arme générique, projectiles | `game2d/engine/weapons.ts` (`Gun`), `projectiles.ts` (`ShotPool`) ; images `art/draw/items.ts` (`drawBullet`, `BULLET_TEX` / `BULLET_SIZE`) | 2 |
+| Bonus vitesse et cadence | `game2d/engine/PlatformScene.ts` (`speedLeftMs`, `rapidLeftMs`), `Player.ts` (`speedMul`), `effects.ts` ; `ui/hud.ts` (anneaux) | 2 |
+| Équipement (`Loadout` : arme, armes possédées, compétences ; `PlayLoadout` : équipement effectif d'une partie) | `core/save.ts` (`getLoadout`, `equipWeapon`, `setSessionWeapon`, `playLoadout`), `core/hangar.ts` (`buildPlayLoadout`), `ModeHooks.loadout` ; `?weapon=` (`ui/App.ts`) | 2 et 3a |
+| Sauvegarde v2 (réserve, migration) | `core/save.ts` (`load`, `readBase`, `readV2`, `recordResult`, `purchase`), `core/types.ts` | 3a |
+| Prix, conditions et effets du hangar | `core/hangar.ts` (catalogue `HANGAR_ITEMS`, `itemState`, `applyPurchase`, `departLabel` ; pur) | 3a |
+| Écran du hangar, aperçu | `ui/screens/hangar.ts`, `ui/hangarPreview.ts` (chargé à la demande) ; enchaînement dans `ui/App.ts` (`goHangar`, `makeResults`) | 3a |
+| Effets des achats en jeu | `game2d/engine/weapons.ts` (`Gun` : `mods`), `PlatformScene.ts` (`maxHearts`), `game3d/flight.ts` (`maxShield`, `boostDrain`, `boostFill`) ; `ui/hud.ts` (4-5 cœurs / boucliers) | 3a |
 | Tir et ennemis en vol | `game3d/shots.ts`, `game3d/enemies.ts` | 3 |
 | Table des mondes, liste des 20 étapes | `core/worlds.ts` (données) → `STAGES` construit à partir d'elle | 4 |
 | Niveaux par monde | `game2d/levels/<monde>/` | 4 |
@@ -187,15 +194,18 @@ Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de
 
 ### Points de vigilance avant de grandir
 
-- **Mondes codés en dur** : 61 tests `'jungle'` / `'moon'` dans 13 fichiers, et des choix `'nebula'` /
+- **Mondes codés en dur** : 63 tests `'jungle'` / `'moon'` dans 14 fichiers, et des choix `'nebula'` /
   `'asteroids'` dans 6. Les remplacer par des tables par monde (`Record<ThemeId, …>`) **avant** d'ajouter
   Boréa, sinon le nouveau monde prendra l'aspect d'un ancien sans erreur de compilation.
 - **Progression des joueurs** : `save.unlocked` est un **index** dans `STAGES`. Passer de 4 à 20 étapes
   en insérant des niveaux au milieu impose une migration (retrouver l'étape par son `id`). Ne jamais
   renommer les `id` existants (`j1`, `f1`, `m1`, `f2`) : ce sont les clés des meilleurs scores.
 - **Tests qui supposent 4 étapes et 16 / 22 portails** : les faire lire `STAGES` et `COURSES`.
-- **Gros fichiers** : `game3d/flight.ts` (~1050 lignes), `ui/App.ts` (~780), `game2d/engine/PlatformScene.ts`
-  (~710). Y sortir les nouveautés dans leurs propres fichiers (tir et ennemis du vol, enchaînement du
-  hangar, règles des portes et des boss) plutôt que de les allonger.
+- **Gros fichiers** : `game3d/flight.ts` (~1080 lignes), `ui/App.ts` (~870), `game2d/engine/PlatformScene.ts`
+  (~840), `ui/screens/hangar.ts` (~840), `game2d/engine/Player.ts` (~640). Y sortir les nouveautés dans leurs
+  propres fichiers (tir et ennemis du vol, boss ; les portes l'ont été dans `engine/doors.ts`, les règles du
+  hangar dans `core/hangar.ts`, son aperçu dans `ui/hangarPreview.ts`) plutôt que de les allonger. Les
+  décisions pures de l'enchaînement (étape suivante, libellé du départ) iront hors d'`App.ts` (`departLabel`
+  est déjà dans `core/hangar.ts`).
 - **Un seul contexte WebGL par moteur** : pas de second rendu 3D pour un aperçu ou une cinématique.
   Les cinématiques se jouent dans le moteur déjà ouvert, ou en DOM.

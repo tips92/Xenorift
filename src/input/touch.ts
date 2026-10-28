@@ -1,5 +1,6 @@
-import type { TouchLayout } from '../core/types';
-import { ICON_JUMP, ICON_LASER, ICON_LEFT, ICON_RIGHT, ICON_TURBO } from './icons';
+import type { TouchLayout, TouchOptions } from '../core/types';
+import { ICON_DOWN, ICON_JUMP, ICON_LASER, ICON_LEFT, ICON_RIGHT, ICON_TURBO, ICON_UP } from './icons';
+import { readStick, type StickDir } from './stick';
 import { injectTouchStyles } from './styles';
 
 // Commandes tactiles : événements pointer avec multi-touch suivi par pointerId (+ capture),
@@ -9,12 +10,26 @@ export type TouchPress = 'jump' | 'fire' | 'boost';
 
 /** Zone morte du joystick (fraction du rayon). */
 const STICK_DEAD_ZONE = 0.12;
+/** Course maximale de la bille du stick 2D (fraction du rayon) : elle reste dans la base. */
+const KNOB_TRAVEL = 0.56;
+/**
+ * Crans des réglages (cran 1 = valeurs d'origine) : échelle des commandes, opacité des couches. Repris par
+ * l'aperçu du panneau d'options (ui/screens/options.ts).
+ */
+export const TOUCH_SIZE_STEPS = [0.85, 1, 1.2] as const;
+export const TOUCH_OPACITY_STEPS = [0.45, 0.75, 0.95] as const;
 
 interface HoldButton {
   readonly el: HTMLDivElement;
   readonly action: TouchPress;
   readonly ids: Set<number>;
   down: boolean;
+}
+
+/** Dernière position connue d'un doigt posé sur le stick 2D. */
+interface FingerPos {
+  x: number;
+  y: number;
 }
 
 function div(className: string, parent: HTMLElement): HTMLDivElement {
@@ -44,6 +59,12 @@ function isSecondaryMouse(e: PointerEvent): boolean {
   return e.pointerType === 'mouse' && e.button !== 0;
 }
 
+/** Cran 0..2 (la sauvegarde ne valide pas les valeurs : on borne, 1 par défaut). */
+export function touchStep(v: unknown): 0 | 1 | 2 {
+  const n = typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 1;
+  return n <= 0 ? 0 : n >= 2 ? 2 : 1;
+}
+
 const prevent = (e: Event): void => {
   if (e.cancelable) e.preventDefault();
 };
@@ -69,11 +90,15 @@ function detectTouch(): boolean | null {
 
 export class TouchControls {
   // --- Sorties lues par le gestionnaire d'entrées
+  /** Stick 2D : directions booléennes (une diagonale en allume deux, ↓ compris). */
   left = false;
   right = false;
+  up = false;
+  down = false;
   jump = false;
   fire = false;
   boost = false;
+  /** Joystick du vol (analogique). */
   stickActive = false;
   stickX = 0;
   stickY = 0;
@@ -82,6 +107,9 @@ export class TouchControls {
   private capable: boolean;
   private readonly forced: boolean;
   private stickHidden = false;
+  private size: 0 | 1 | 2 = 1;
+  private opacity: 0 | 1 | 2 = 1;
+  private lefty = false;
   private readonly onPress: (a: TouchPress) => void;
   private readonly onChange: () => void;
 
@@ -89,14 +117,23 @@ export class TouchControls {
   private readonly platformLayer: HTMLDivElement;
   private readonly flightLayer: HTMLDivElement;
 
-  // Croix directionnelle
+  // Stick fixe à 8 directions (plateforme)
   private readonly dpad: HTMLDivElement;
-  private readonly dpadL: HTMLDivElement;
-  private readonly dpadR: HTMLDivElement;
-  /** pointerId → zone (-1 gauche, 0 neutre, 1 droite). */
-  private readonly dpadZones = new Map<number, number>();
+  private readonly dpadKnob: HTMLDivElement;
+  private readonly arrowL: HTMLDivElement;
+  private readonly arrowR: HTMLDivElement;
+  private readonly arrowU: HTMLDivElement;
+  private readonly arrowD: HTMLDivElement;
+  /** Doigts posés sur le stick (ordre d'arrivée) ; le plus récent commande. */
+  private readonly dpadFingers = new Map<number, FingerPos>();
+  private dpadId = -1;
+  /** Direction lue (sert aussi d'hystérésis à readStick : remise à zéro quand le doigt change). */
+  private readonly dpadDir: StickDir = { x: 0, y: 0 };
   private dpadCx = 0;
-  private dpadNeutral = 8;
+  private dpadCy = 0;
+  private dpadR = 1;
+  /** Centre et rayon à remesurer (taille de la fenêtre ou réglages changés). */
+  private dpadStale = true;
 
   // Boutons
   private readonly fireBtn: HoldButton;
@@ -130,11 +167,12 @@ export class TouchControls {
     this.platformLayer = div('xr-tc-layer xr-tc-platform', root);
     this.platformLayer.setAttribute('aria-hidden', 'true');
     this.dpad = div('xr-ctl xr-glass xr-dpad', this.platformLayer);
-    this.dpadL = div('xr-dpad-half xr-dpad-l', this.dpad);
-    this.dpadL.innerHTML = ICON_LEFT;
-    div('xr-dpad-mid', this.dpad);
-    this.dpadR = div('xr-dpad-half xr-dpad-r', this.dpad);
-    this.dpadR.innerHTML = ICON_RIGHT;
+    div('xr-dpad-ring', this.dpad);
+    this.arrowL = this.makeArrow('xr-dpad-l', ICON_LEFT);
+    this.arrowR = this.makeArrow('xr-dpad-r', ICON_RIGHT);
+    this.arrowU = this.makeArrow('xr-dpad-u', ICON_UP);
+    this.arrowD = this.makeArrow('xr-dpad-d', ICON_DOWN);
+    this.dpadKnob = div('xr-dpad-knob', this.dpad);
     this.fireBtn = this.makeButton(this.platformLayer, 'xr-fire', 'TIR', ICON_LASER, 'fire');
     this.jumpBtn = this.makeButton(this.platformLayer, 'xr-jump', 'SAUT', ICON_JUMP, 'jump');
 
@@ -190,6 +228,27 @@ export class TouchControls {
     this.applyVisibility();
   }
 
+  /**
+   * Taille (×0,85 / ×1 / ×1,2), opacité (0,45 / 0,75 / 0,95) et côté des commandes. Effet immédiat, sans
+   * recréer les éléments ; si une commande change de place, les doigts posés sont relâchés.
+   */
+  setOptions(opts: TouchOptions): void {
+    const size = touchStep(opts.touchSize);
+    const opacity = touchStep(opts.touchOpacity);
+    const lefty = opts.leftHanded === true;
+    if (size === this.size && opacity === this.opacity && lefty === this.lefty) return;
+    const moved = size !== this.size || lefty !== this.lefty;
+    this.size = size;
+    this.opacity = opacity;
+    this.lefty = lefty;
+    const st = this.root.style;
+    st.setProperty('--xr-scale', String(TOUCH_SIZE_STEPS[size]));
+    st.setProperty('--xr-tc-opacity', String(TOUCH_OPACITY_STEPS[opacity]));
+    this.root.classList.toggle('xr-touch--lefty', lefty);
+    this.updateMetrics();
+    if (moved) this.releaseAll();
+  }
+
   /** Masque le joystick (pilotage par inclinaison) ; le bouton TURBO reste visible. */
   setStickHidden(hidden: boolean): void {
     if (hidden === this.stickHidden) return;
@@ -205,12 +264,14 @@ export class TouchControls {
   /** Relâche tous les doigts suivis et remet les commandes au repos. */
   releaseAll(): void {
     let changed = false;
-    if (this.dpadZones.size > 0) {
-      for (const id of this.dpadZones.keys()) uncapture(this.dpad, id);
-      this.dpadZones.clear();
+    if (this.dpadFingers.size > 0) {
+      for (const id of this.dpadFingers.keys()) uncapture(this.dpad, id);
+      this.dpadFingers.clear();
       changed = true;
     }
-    this.syncDpadVisual(false, false);
+    this.dpadId = -1;
+    this.dpadDir.x = 0;
+    this.dpadDir.y = 0;
     for (const b of this.buttons) {
       if (b.ids.size > 0) {
         for (const id of b.ids) uncapture(b.el, id);
@@ -227,10 +288,13 @@ export class TouchControls {
       this.endStick();
       changed = true;
     }
-    const was = this.left || this.right || this.jump || this.fire || this.boost || this.stickActive;
-    this.left = this.right = this.jump = this.fire = this.boost = false;
+    const was =
+      this.left || this.right || this.up || this.down || this.jump || this.fire || this.boost || this.stickActive;
+    this.left = this.right = this.up = this.down = false;
+    this.jump = this.fire = this.boost = false;
     this.stickActive = false;
     this.stickX = this.stickY = 0;
+    this.syncDpadVisual();
     if (changed || was) this.onChange();
   }
 
@@ -246,8 +310,10 @@ export class TouchControls {
 
   private readonly updateMetrics = (): void => {
     const m = Math.min(window.innerWidth, window.innerHeight);
-    this.radius = m >= 720 ? 84 : m >= 520 ? 74 : 64;
+    const base = m >= 720 ? 84 : m >= 520 ? 74 : 64;
+    this.radius = Math.round(base * TOUCH_SIZE_STEPS[this.size]);
     this.root.style.setProperty('--xr-stick-r', `${this.radius}px`);
+    this.dpadStale = true;
   };
 
   private readonly onFirstTouch = (e: PointerEvent): void => {
@@ -298,59 +364,100 @@ export class TouchControls {
     this.onChange();
   }
 
-  // ---------------------------------------------------------------- croix directionnelle
+  // ---------------------------------------------------------------- stick 2D (8 directions)
 
-  private zoneOf(x: number): number {
-    const dx = x - this.dpadCx;
-    if (dx < -this.dpadNeutral) return -1;
-    if (dx > this.dpadNeutral) return 1;
-    return 0;
+  private makeArrow(cls: string, svg: string): HTMLDivElement {
+    const a = div(`xr-dpad-arrow ${cls}`, this.dpad);
+    a.innerHTML = svg;
+    return a;
+  }
+
+  private measureDpad(): void {
+    const r = this.dpad.getBoundingClientRect();
+    this.dpadCx = r.left + r.width * 0.5;
+    this.dpadCy = r.top + r.height * 0.5;
+    this.dpadR = Math.max(1, r.width * 0.5);
+    this.dpadStale = false;
   }
 
   private readonly onDpadDown = (e: PointerEvent): void => {
     if (isSecondaryMouse(e)) return;
     prevent(e);
     capture(this.dpad, e.pointerId);
-    const r = this.dpad.getBoundingClientRect();
-    this.dpadCx = r.left + r.width * 0.5;
-    // Bande neutre centrale étroite : on passe d'une flèche à l'autre sans lever le doigt.
-    this.dpadNeutral = Math.max(6, r.width * 0.045);
-    this.dpadZones.set(e.pointerId, this.zoneOf(e.clientX));
-    this.syncDpad();
+    this.measureDpad();
+    const id = e.pointerId;
+    // Le nouveau doigt prend la main ; les autres restent suivis (repli s'il est levé).
+    this.dpadFingers.delete(id);
+    this.dpadFingers.set(id, { x: e.clientX, y: e.clientY });
+    this.dpadId = id;
+    this.dpadDir.x = 0;
+    this.dpadDir.y = 0;
+    this.updateDpad();
   };
 
   private readonly onDpadMove = (e: PointerEvent): void => {
-    const z = this.dpadZones.get(e.pointerId);
-    if (z === undefined) return;
-    const nz = this.zoneOf(e.clientX);
-    if (nz === z) return;
-    this.dpadZones.set(e.pointerId, nz);
-    this.syncDpad();
+    const p = this.dpadFingers.get(e.pointerId);
+    if (p === undefined) return;
+    p.x = e.clientX;
+    p.y = e.clientY;
+    if (e.pointerId === this.dpadId) this.updateDpad();
   };
 
   private readonly onDpadUp = (e: PointerEvent): void => {
-    if (this.dpadZones.delete(e.pointerId)) this.syncDpad();
+    this.dropDpadFinger(e.pointerId);
   };
 
-  private syncDpad(): void {
-    let l = false;
-    let r = false;
-    for (const z of this.dpadZones.values()) {
-      if (z < 0) l = true;
-      else if (z > 0) r = true;
-    }
-    this.syncDpadVisual(l, r);
-    this.dpad.classList.toggle('is-active', this.dpadZones.size > 0);
-    if (l === this.left && r === this.right) return;
-    this.left = l;
-    this.right = r;
-    this.onChange();
+  private dropDpadFinger(id: number): void {
+    if (!this.dpadFingers.delete(id) || id !== this.dpadId) return;
+    // Doigt actif levé : le plus récent des doigts encore posés reprend la main.
+    let next = -1;
+    for (const k of this.dpadFingers.keys()) next = k;
+    this.dpadId = next;
+    this.dpadDir.x = 0;
+    this.dpadDir.y = 0;
+    this.updateDpad();
   }
 
-  private syncDpadVisual(l: boolean, r: boolean): void {
-    this.dpadL.classList.toggle('is-down', l);
-    this.dpadR.classList.toggle('is-down', r);
-    if (!l && !r && this.dpadZones.size === 0) this.dpad.classList.remove('is-active');
+  /** Lit la direction du doigt actif, place la bille et publie left/right/up/down. */
+  private updateDpad(): void {
+    const d = this.dpadDir;
+    const p = this.dpadId === -1 ? undefined : this.dpadFingers.get(this.dpadId);
+    if (p !== undefined) {
+      if (this.dpadStale) this.measureDpad();
+      const dx = p.x - this.dpadCx;
+      const dy = p.y - this.dpadCy;
+      readStick(dx, dy, this.dpadR, d);
+      const max = this.dpadR * KNOB_TRAVEL;
+      const len = Math.hypot(dx, dy);
+      const k = len > max ? max / len : 1;
+      this.dpadKnob.style.transform = `translate3d(${(dx * k).toFixed(1)}px, ${(dy * k).toFixed(1)}px, 0)`;
+    } else {
+      d.x = 0;
+      d.y = 0;
+      this.dpadKnob.style.transform = '';
+    }
+    const l = d.x < 0;
+    const r = d.x > 0;
+    const u = d.y > 0;
+    // Diagonale basse transmise entière (← → + ↓, comme au clavier) : Player n'accroupit que sur ↓ seul
+    // (downOnly), puis ↓ + côté fait ramper.
+    const dn = d.y < 0;
+    const same = l === this.left && r === this.right && u === this.up && dn === this.down;
+    this.left = l;
+    this.right = r;
+    this.up = u;
+    this.down = dn;
+    this.syncDpadVisual();
+    if (!same) this.onChange();
+  }
+
+  private syncDpadVisual(): void {
+    this.dpad.classList.toggle('is-active', this.dpadId !== -1);
+    this.arrowL.classList.toggle('is-down', this.left);
+    this.arrowR.classList.toggle('is-down', this.right);
+    this.arrowU.classList.toggle('is-down', this.up);
+    this.arrowD.classList.toggle('is-down', this.down);
+    if (this.dpadId === -1) this.dpadKnob.style.transform = '';
   }
 
   // ---------------------------------------------------------------- joystick
@@ -431,7 +538,7 @@ export class TouchControls {
 
   private readonly onAnyPointerEnd = (e: PointerEvent): void => {
     const id = e.pointerId;
-    if (this.dpadZones.delete(id)) this.syncDpad();
+    this.dropDpadFinger(id);
     for (const b of this.buttons) this.releaseButtonPointer(b, id);
     if (id === this.stickId) {
       this.endStick();

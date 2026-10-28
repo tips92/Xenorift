@@ -1,9 +1,9 @@
-// Endurance : 3 tours complets de campagne dans la même page (choix du niveau → j1 → f1 → m1 → f2 → fin → MENU),
-// victoires par les aides DEV. À chaque étape : images/s mesurées, au plus 2 canevas dans #game-root (Phaser +
-// three.js, réutilisés) dont un seul affiché. À la fin de chaque tour, sur l'accueil : tas JS après ramasse-miettes
-// et nombre de nœuds DOM ; ni l'un ni l'autre ne doit grimper d'un tour à l'autre (fuite).
+// Endurance : 3 tours complets de campagne dans la même page (choix du niveau → j1 → f1 → m1 → f2 → fin → MENU,
+// le hangar entre deux étapes), victoires par les aides DEV. À chaque étape : images/s mesurées, au plus 2 canevas
+// dans #game-root (Phaser + three.js, réutilisés) dont un seul affiché. À la fin de chaque tour, sur l'accueil : tas
+// JS après ramasse-miettes et nombre de nœuds DOM ; ni l'un ni l'autre ne doit grimper d'un tour à l'autre (fuite).
 import { assert, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
-import { domNodes, gameCanvases, heapMB, measureFps, press } from '../lib/core.mjs';
+import { domNodes, gameCanvases, heapMB, measureFps, nextViaHangar, press } from '../lib/core.mjs';
 
 export const meta = {
   title: 'Endurance : 3 tours de campagne (mémoire, images/s, canevas)',
@@ -58,7 +58,9 @@ export default async function (t) {
       if (lap === 1 || lap === LAPS) await t.shot(`lap${lap}-${id}`);
       await t.ev((k) => (k === '2d' ? window.__xr2d.win() : window.__xr3d.win()), kind);
       await waitForScreen(t, 'results', { timeout: 30000 });
-      await press(t, 'results', 'Suivant');
+      // Étape suivante par le hangar (plan 03) ; après f2, « Suivant » mène à la fin.
+      if (id === 'f2') await press(t, 'results', 'Suivant');
+      else await nextViaHangar(t, { timeout: 30000 });
     }
     await waitForScreen(t, 'end', { timeout: 20000 });
     await press(t, 'end', 'Menu');

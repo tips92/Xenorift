@@ -16,10 +16,14 @@ const CSS = `
   --xr-sl: env(safe-area-inset-left, 0px);
   --xr-sr: env(safe-area-inset-right, 0px);
   --xr-sb: env(safe-area-inset-bottom, 0px);
+  /* Réglages (touch.ts, setOptions) : échelle des commandes et opacité des couches (cran 1 = 1 et 0,75). */
+  --xr-scale: 1;
+  --xr-tc-opacity: 0.75;
   --xr-edge: clamp(14px, 3.2vmin, 30px);
-  --xr-pad: clamp(76px, 16vmin, 118px);
-  --xr-fire: clamp(78px, 16.5vmin, 120px);
-  --xr-jump: clamp(92px, 20.5vmin, 150px);
+  --xr-pad: calc(clamp(76px, 16vmin, 118px) * var(--xr-scale));
+  --xr-fire: calc(clamp(78px, 16.5vmin, 120px) * var(--xr-scale));
+  --xr-jump: calc(clamp(92px, 20.5vmin, 150px) * var(--xr-scale));
+  --xr-dstick: calc(var(--xr-pad) * 1.68);
   --xr-gap: clamp(10px, 2.6vmin, 22px);
   --xr-stick-r: 64px;
   --xr-cyan: 0, 240, 255;
@@ -31,10 +35,11 @@ const CSS = `
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.75;
+  opacity: var(--xr-tc-opacity);
   animation: xr-tc-in 220ms ease-out;
 }
-@keyframes xr-tc-in { from { opacity: 0; } to { opacity: 0.75; } }
+/* Sans image « to » : l'animation finit sur l'opacité réglée. */
+@keyframes xr-tc-in { from { opacity: 0; } }
 
 .xr-ctl {
   position: absolute;
@@ -57,54 +62,83 @@ const CSS = `
   color: rgb(214, 252, 255);
 }
 
-/* ---------- Croix directionnelle horizontale (une seule zone, glissement d'une flèche à l'autre) */
+/* ---------- Stick fixe à 8 directions (plateforme) : base ronde immobile, bille qui suit le doigt.
+   Garde la classe .xr-dpad de l'ancienne croix ◀ ▶ (visée par les tests). */
 .xr-dpad {
   left: calc(var(--xr-sl) + var(--xr-edge));
   bottom: calc(var(--xr-sb) + var(--xr-edge));
-  width: calc(var(--xr-pad) * 2 + 14px);
-  height: var(--xr-pad);
-  border-radius: calc(var(--xr-pad) * 0.5);
-  display: flex;
-  align-items: stretch;
+  width: var(--xr-dstick);
+  height: var(--xr-dstick);
+  border-radius: 50%;
   transition: box-shadow 90ms ease-out;
 }
+/* Zone de toucher élargie autour du cercle visible. */
 .xr-dpad::before {
   content: '';
   position: absolute;
-  inset: -18px -14px -14px -18px;
-  border-radius: calc(var(--xr-pad) * 0.5 + 16px);
+  inset: -18px;
+  border-radius: 50%;
 }
 .xr-dpad.is-active {
   box-shadow: 0 0 22px rgba(var(--xr-c), 0.65), inset 0 0 18px rgba(var(--xr-c), 0.3);
 }
-.xr-dpad-half {
-  flex: 1;
+.xr-dpad-ring {
+  position: absolute;
+  inset: 24%;
+  border-radius: 50%;
+  border: 1px dashed rgba(var(--xr-c), 0.35);
+}
+/* Flèches au-dessus de la bille (z-index) : une flèche allumée reste visible quand la bille passe dessus. */
+.xr-dpad-arrow {
+  position: absolute;
+  z-index: 1;
+  width: 20%;
+  height: 20%;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 80ms ease-out, box-shadow 80ms ease-out;
+  opacity: 0.45;
+  transition: opacity 70ms ease-out, transform 70ms ease-out, color 70ms ease-out;
 }
-.xr-dpad-l { border-radius: calc(var(--xr-pad) * 0.5) 0 0 calc(var(--xr-pad) * 0.5); }
-.xr-dpad-r { border-radius: 0 calc(var(--xr-pad) * 0.5) calc(var(--xr-pad) * 0.5) 0; }
-.xr-dpad-half svg {
+.xr-dpad-arrow svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 4px rgba(var(--xr-c), 0.9));
+}
+.xr-dpad-l { left: 5%; top: 40%; }
+.xr-dpad-r { right: 5%; top: 40%; }
+.xr-dpad-u { top: 5%; left: 40%; }
+.xr-dpad-d { bottom: 5%; left: 40%; }
+/* Allumée : couleur néon du contrôle, liseré sombre (lisible sur la bille claire) et halo. */
+.xr-dpad-arrow.is-down {
+  opacity: 1;
+  color: rgb(var(--xr-c));
+  transform: scale(1.2);
+}
+.xr-dpad-arrow.is-down svg {
+  filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000) drop-shadow(0 0 7px rgba(var(--xr-c), 1));
+}
+/* Bille : discrète au repos (elle ne délave pas ce qui passe dessous), vive quand un doigt la tient. */
+.xr-dpad-knob {
+  position: absolute;
+  box-sizing: border-box;
+  left: 50%;
+  top: 50%;
   width: 44%;
   height: 44%;
-  filter: drop-shadow(0 0 4px rgba(var(--xr-c), 0.9));
-  transition: transform 70ms ease-out;
+  margin: -22% 0 0 -22%;
+  border-radius: 50%;
+  border: 1.5px solid rgba(var(--xr-c), 0.8);
+  background: radial-gradient(circle at 42% 36%, rgba(235, 255, 255, 0.55), rgba(var(--xr-c), 0.45) 46%, rgba(0, 60, 140, 0.5) 100%);
+  box-shadow: 0 0 8px rgba(var(--xr-c), 0.4);
+  opacity: 0.5;
+  transition: opacity 90ms ease-out, box-shadow 90ms ease-out;
+  will-change: transform;
 }
-.xr-dpad-mid {
-  width: 2px;
-  margin: 22% 0;
-  background: linear-gradient(transparent, rgba(var(--xr-c), 0.55), transparent);
-}
-.xr-dpad-half.is-down {
-  background: radial-gradient(circle at 50% 50%, rgba(var(--xr-c), 0.5), rgba(var(--xr-c), 0.1) 72%);
-  box-shadow: inset 0 0 22px rgba(var(--xr-c), 0.55);
-  color: #fff;
-}
-.xr-dpad-half.is-down svg {
-  transform: scale(1.16);
-  filter: drop-shadow(0 0 9px rgba(var(--xr-c), 1));
+.xr-dpad.is-active .xr-dpad-knob {
+  opacity: 1;
+  background: radial-gradient(circle at 42% 36%, rgba(235, 255, 255, 0.9), rgba(var(--xr-c), 0.6) 46%, rgba(0, 60, 140, 0.55) 100%);
+  box-shadow: 0 0 18px rgba(var(--xr-c), 0.85);
 }
 
 /* ---------- Boutons ronds */
@@ -167,7 +201,7 @@ const CSS = `
   font-size: calc(var(--xr-jump) * 0.115);
 }
 
-/* ---------- Joystick flottant (moitié gauche de l'écran) */
+/* ---------- Joystick flottant (moitié gauche de l'écran, droite en mode gaucher) */
 .xr-stick-zone {
   left: 0;
   top: 0;
@@ -211,6 +245,29 @@ const CSS = `
   background: radial-gradient(circle at 42% 36%, rgba(235, 255, 255, 0.95), rgba(var(--xr-c), 0.7) 46%, rgba(0, 60, 140, 0.6) 100%);
   box-shadow: 0 0 18px rgba(var(--xr-c), 0.85);
   will-change: transform;
+}
+
+/* ---------- Mode gaucher : stick à droite, boutons à gauche (en 2D comme en vol) */
+.xr-touch--lefty .xr-dpad {
+  left: auto;
+  right: calc(var(--xr-sr) + var(--xr-edge));
+}
+.xr-touch--lefty .xr-jump,
+.xr-touch--lefty .xr-boost {
+  right: auto;
+  left: calc(var(--xr-sl) + var(--xr-edge));
+}
+.xr-touch--lefty .xr-fire {
+  right: auto;
+  left: calc(var(--xr-sl) + var(--xr-edge) + var(--xr-jump) + var(--xr-gap));
+}
+.xr-touch--lefty .xr-stick-zone {
+  left: auto;
+  right: 0;
+}
+.xr-touch--lefty .xr-stick-base.is-idle {
+  left: auto;
+  right: calc(var(--xr-sr) + var(--xr-edge) + 14px);
 }
 `;
 

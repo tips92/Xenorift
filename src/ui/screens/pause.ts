@@ -73,6 +73,8 @@ export function createPauseOverlay(ctx: UiCtx, stage: StageDef, a: PauseActions)
     if (!options) {
       options = createOptionsPanel(ctx);
       optBody.append(options.el);
+      // Confirmation hors de la zone qui défile (son masque de fondu la rognerait).
+      optView.append(options.overlay);
     }
     view = 'options';
     root.dataset.view = 'options';

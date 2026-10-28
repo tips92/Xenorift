@@ -1,6 +1,8 @@
 // Contrats partagés entre tous les modules du jeu.
 // Toute modification ici doit être répercutée dans chaque module qui les implémente.
 
+import type { WeaponMods } from './weapons';
+
 export type StageKind = 'platform' | 'flight';
 export type ThemeId = 'jungle' | 'moon';
 export type CourseId = 'nebula' | 'asteroids';
@@ -38,7 +40,73 @@ export interface StageResult {
   gatesTotal?: number;
 }
 
-export type PowerUpKind = 'triple' | 'shield' | 'doublejump';
+/** Bonus du mode plateforme : blocs `1` (vitesse), `2` (bouclier), `3` (cadence). Vitesse et cadence se cumulent. */
+export type PowerUpKind = 'speed' | 'rapid' | 'shield';
+
+// ---------------------------------------------------------------- Armes et équipement
+
+/** Armes de Kaï ; fiches et ordre d'affichage dans core/weapons.ts (WEAPONS, WEAPON_IDS). */
+export type WeaponId = 'laser' | 'machinegun' | 'shotgun' | 'rifle';
+
+/** Équipement du joueur, gardé d'un niveau à l'autre (SaveData.loadout). */
+export interface Loadout {
+  /** Arme équipée, toujours présente dans owned. */
+  equipped: WeaponId;
+  /** Armes possédées, dans l'ordre de WEAPON_IDS ; 'laser' toujours. */
+  owned: WeaponId[];
+  /** Compétences apprises. */
+  skills: {
+    /** Second saut en l'air (plus aucun bloc ne le donne). */
+    doubleJump: boolean;
+  };
+}
+
+// ---------------------------------------------------------------- Hangar (core/hangar.ts)
+
+/** Caractéristiques améliorables d'une arme ; mêmes clés que WeaponMods (core/weapons.ts). */
+export type UpgradeStat = 'damage' | 'fireRate' | 'range' | 'cooling';
+
+/** Niveaux d'amélioration achetés pour une arme : 0 (fiche d'origine) à 3, par caractéristique. */
+export type WeaponUpgrades = Record<UpgradeStat, number>;
+
+/** Membres d'équipage secourus (étape 4) : Tess (mécanicienne, monde 1), Mira (biologiste, monde 3). */
+export type CrewId = 'tess' | 'mira';
+
+/** Modules de la Comète achetés au hangar (niveaux). */
+export interface ShipModules {
+  /** Canon : 0 = canon léger (de série), 1 = mitrailleuse achetée, 2 et 3 = ses améliorations. */
+  gun: number;
+  /** Bouclier renforcé : 0 à 2. */
+  shield: number;
+  /** Turbo : 0 à 2. */
+  boost: number;
+}
+
+/** Effets des modules de la Comète pour une partie (shipLoadout de core/hangar.ts). */
+export interface ShipLoadout {
+  /** Canon : 0 = canon léger, 1 = mitrailleuse, 2 et 3 = améliorée. Effet en vol : étape 3b. */
+  gunLevel: number;
+  /** Boucliers au départ et au maximum : 3 + niveau du bouclier renforcé (3 à 5). */
+  maxShields: number;
+  /** Niveau du turbo, 0 à 2. */
+  boostLevel: number;
+  /** Multiplie la vidange de la jauge (BOOST_DRAIN de game3d/flight.ts) : 1, 0,8, 0,667 (jauge qui dure ×1,25, ×1,5). */
+  boostDrainMul: number;
+  /** Multiplie la recharge de la jauge (BOOST_FILL) : 1, 1,25, 1,5. */
+  boostFillMul: number;
+}
+
+/**
+ * Équipement EFFECTIF d'une partie (ModeHooks.loadout) : sauvegarde, mode test et arme de la session,
+ * résolu par playLoadout (core/save.ts). Jamais enregistré.
+ */
+export interface PlayLoadout extends Loadout {
+  /** Multiplicateurs de CHAQUE arme (améliorations achetées ; 1 partout sans achat, même en mode test). */
+  mods: Record<WeaponId, WeaponMods>;
+  /** Cœurs de Kaï au départ, au point de contrôle et à la réapparition : 3 + cœurs supplémentaires (3 à 5). */
+  maxHearts: number;
+  ship: ShipLoadout;
+}
 
 // ---------------------------------------------------------------- HUD
 
@@ -48,13 +116,17 @@ export interface PlatformHud {
   lives: number;
   crystals: number;
   crystalsTotal: number;
-  /** Chauffe du laser, 0..1. */
+  /** Arme équipée (icône de la jauge de chauffe). */
+  weapon: WeaponId;
+  /** Chauffe de l'arme équipée, 0..1. */
   heat: number;
   overheated: boolean;
-  /** Bonus actif (le bouclier dure jusqu'au prochain coup). */
-  power: PowerUpKind | null;
-  /** Temps restant du bonus, 0..1 (1 pour le bouclier). */
-  powerLeft: number;
+  /** Bonus de vitesse : temps restant 0..1 (0 = inactif), par pas de 0,02. */
+  speedLeft: number;
+  /** Bonus de cadence : temps restant 0..1 (0 = inactif), par pas de 0,02. */
+  rapidLeft: number;
+  /** Bouclier porté (dure jusqu'au prochain coup). */
+  shield: boolean;
 }
 
 export interface FlightHud {
@@ -84,11 +156,21 @@ export interface HudApi {
 
 // ---------------------------------------------------------------- Entrées
 
-export type InputAction = 'jump' | 'fire' | 'boost' | 'pause';
+/**
+ * Appuis mémorisés (voir consumePress).
+ * interact : front montant de « haut sans ← → » (clavier + stick 2D fusionnés) : stick qui entre dans le
+ * secteur haut (pas une diagonale), ↑ / W (Z en AZERTY) pressé sans ← → tenus, ou ← → relâché pendant que
+ * haut reste tenu ; ignoré si Tir est maintenu à cet instant. Sert aux portes (jeu 2D).
+ */
+export type InputAction = 'jump' | 'fire' | 'boost' | 'pause' | 'interact';
 export type TouchLayout = 'none' | 'platform' | 'flight';
 
 /** État courant des commandes, fusion clavier + tactile + inclinaison. */
 export interface InputState {
+  /**
+   * Directions : clavier, stick 2D à 8 directions (diagonales basses transmises telles quelles ; le jeu 2D
+   * n'accroupit que sur ↓ seul), et en vol l'axe analogique au-delà de 0,5.
+   */
   left: boolean;
   right: boolean;
   up: boolean;
@@ -97,9 +179,12 @@ export interface InputState {
   jump: boolean;
   fire: boolean;
   boost: boolean;
-  /** Axe horizontal -1 (gauche) .. 1 (droite). */
+  /**
+   * Axe horizontal -1 (gauche) .. 1 (droite). Analogique en vol (joystick, inclinaison) ; ailleurs (clavier,
+   * stick 2D) : -1 / 0 / 1, diagonales ramenées à ±0,707.
+   */
   stickX: number;
-  /** Axe vertical -1 (bas) .. 1 (haut). */
+  /** Axe vertical -1 (bas) .. 1 (haut), mêmes règles que stickX. */
   stickY: number;
 }
 
@@ -111,6 +196,8 @@ export interface InputApi {
   clearPresses(): void;
   /** Change les contrôles tactiles affichés. */
   setLayout(layout: TouchLayout): void;
+  /** Taille, opacité et côté des commandes tactiles ; appliqué tout de suite, même en partie. */
+  setTouchOptions(opts: TouchOptions): void;
   setTiltEnabled(on: boolean): void;
   /** iOS exige une autorisation déclenchée par un geste ; résout true sur Android et le web. */
   requestTiltPermission(): Promise<boolean>;
@@ -126,7 +213,11 @@ export type SfxId =
   | 'click'
   | 'jump'
   | 'doubleJump'
+  // Tirs : un son par arme (WeaponDef.sfx), le laser garde 'laser'.
   | 'laser'
+  | 'machinegun'
+  | 'shotgun'
+  | 'rifle'
   | 'laserHit'
   | 'overheat'
   | 'stomp'
@@ -146,7 +237,9 @@ export type SfxId =
   | 'crash'
   | 'warp'
   | 'win'
-  | 'lose';
+  | 'lose'
+  // Hangar : achat confirmé.
+  | 'buy';
 
 export type MusicId = 'menu' | 'jungle' | 'moon' | 'nebula' | 'asteroids';
 
@@ -176,13 +269,28 @@ export interface Settings {
   tilt: boolean;
   /** Mode test : toutes les étapes sont jouables. */
   unlockAll: boolean;
+  /** Commandes tactiles : taille du stick et des boutons (0 petit, 1 moyen = taille d'origine, 2 grand). */
+  touchSize: 0 | 1 | 2;
+  /** Commandes tactiles : opacité (0 discret, 1 moyen = opacité d'origine, 2 opaque). */
+  touchOpacity: 0 | 1 | 2;
+  /** Mode gaucher : stick à droite, boutons à gauche (en 2D comme en vol). */
+  leftHanded: boolean;
 }
+
+/** Réglages des commandes tactiles passés aux entrées (un Settings complet convient aussi). */
+export type TouchOptions = Pick<Settings, 'touchSize' | 'touchOpacity' | 'leftHanded'>;
 
 export interface ModeHooks {
   hud: HudApi;
   input: InputApi;
   audio: AudioApi;
   settings: Readonly<Settings>;
+  /**
+   * Équipement EFFECTIF de la partie, déjà résolu par l'interface (playLoadout de core/save.ts : mode test,
+   * arme de la session, améliorations, cœurs max, modules de la Comète). Fixe pendant la partie ; les modes
+   * ne le modifient pas.
+   */
+  loadout: Readonly<PlayLoadout>;
   /** Étape réussie. À appeler une seule fois, après l'animation de fin. */
   onComplete(result: StageResult): void;
   /** Étape perdue (plus de vies, chrono à zéro, vaisseau détruit). */
@@ -206,10 +314,28 @@ export interface BestScore {
   stars: 1 | 2 | 3;
 }
 
+/**
+ * Sauvegarde, version 2 (hangar). Une version 1 est migrée au chargement (progression, scores, réglages et
+ * loadout gardés ; le reste à sa valeur par défaut) ; une autre version est remise à zéro.
+ */
 export interface SaveData {
-  version: 1;
+  version: 2;
   /** Index de la dernière étape débloquée. */
   unlocked: number;
   best: Record<string, BestScore>;
   settings: Settings;
+  /** Armes et compétences (absent des anciennes sauvegardes v1 : valeur par défaut). */
+  loadout: Loadout;
+  /** Réserve de cristaux à dépenser au hangar (entier ≥ 0). */
+  crystals: number;
+  /** Améliorations achetées, pour chacune des 4 armes (0 partout pour une arme non possédée). */
+  upgrades: Record<WeaponId, WeaponUpgrades>;
+  /** Modules de la Comète. */
+  ship: ShipModules;
+  /** Cœurs supplémentaires de Kaï : 0 à 2. */
+  extraHearts: number;
+  /** Équipage secouru, dans l'ordre de CREW_IDS (core/hangar.ts). */
+  crew: CrewId[];
+  /** Plans d'armes récupérés, dans l'ordre de WEAPON_IDS ; jamais 'laser' (il n'en a pas besoin). */
+  blueprints: WeaponId[];
 }

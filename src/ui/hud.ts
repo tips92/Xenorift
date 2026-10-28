@@ -1,14 +1,18 @@
-import type { FlightHud, HudApi, PlatformHud, PowerUpKind, ToastKind } from '../core/types';
+import { BASE_HEARTS, BASE_SHIELDS } from '../core/hangar';
+import type { FlightHud, HudApi, PlatformHud, PowerUpKind, ToastKind, WeaponId } from '../core/types';
+import { WEAPONS, isWeaponId } from '../core/weapons';
 import { clamp, div, el, icon, play } from './dom';
-import { ICONS, ensureSvgDefs, powerIcon, powerLabel } from './icons';
+import { ICONS, ensureSvgDefs, powerIcon, powerLabel, weaponIcon } from './icons';
 
 // HUD en DOM, partagé par les modes 2D et 3D.
 // Règle de performance : le DOM n'est touché que lorsqu'une valeur affichée change réellement
 // (valeurs quantifiées, aucune allocation par image tant que rien ne change).
 
 const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'] as const;
-/** Circonférence de l'anneau du bonus (cercle r = 20). */
+/** Circonférence des anneaux de bonus (cercle r = 20). */
 const RING_C = 2 * Math.PI * 20;
+/** Temps restant des bonus : pas de 2 % (comme l'envoie le moteur). */
+const POWER_STEPS = 50;
 const HEAT_STEPS = 50;
 const BOOST_STEPS = 50;
 const PROGRESS_STEPS = 400;
@@ -36,6 +40,46 @@ const LOST: Keyframe[] = [
 const LOST_OPTS: KeyframeAnimationOptions = { duration: 480, easing: 'ease-out' };
 const BUMP: Keyframe[] = [{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }];
 const BUMP_OPTS: KeyframeAnimationOptions = { duration: 200, easing: 'ease-out' };
+const POWER_IN: Keyframe[] = [
+  { transform: 'scale(0.6)', opacity: 0 },
+  { transform: 'scale(1.18)', opacity: 1 },
+  { transform: 'scale(1)', opacity: 1 },
+];
+const POWER_IN_OPTS: KeyframeAnimationOptions = { duration: 300, easing: 'ease-out' };
+
+/** Anneau d'un bonus du HUD plateforme (vitesse, cadence : temps restant ; bouclier : anneau fixe). */
+interface PowerSlot {
+  readonly el: HTMLDivElement;
+  readonly fg: SVGCircleElement;
+  /** Temps restant affiché, 0..POWER_STEPS (-1 : à redessiner). */
+  q: number;
+  on: boolean;
+  ending: boolean;
+}
+
+function createPowerSlot(kind: PowerUpKind): PowerSlot {
+  const box = div(`hud-power hud-power--${kind}`);
+  box.dataset.kind = kind;
+  box.setAttribute('role', 'img');
+  box.setAttribute('aria-label', powerLabel(kind));
+  box.innerHTML =
+    '<svg class="power-ring" viewBox="0 0 48 48" aria-hidden="true"><circle class="ring-bg" cx="24" cy="24" r="20"/><circle class="ring-fg" cx="24" cy="24" r="20"/></svg>';
+  const fg = box.querySelector('.ring-fg') as SVGCircleElement;
+  // Bouclier : pointillés fixes (CSS) ; bonus à durée : l'anneau se vide avec le temps.
+  if (kind !== 'shield') fg.style.strokeDasharray = String(RING_C);
+  const ico = div('power-icon');
+  ico.innerHTML = powerIcon(kind);
+  box.append(ico);
+  return { el: box, fg, q: -1, on: false, ending: false };
+}
+
+/**
+ * Graduations de la jauge de chauffe : un tir (une rafale) de l'arme à froid, sans bonus de cadence ; au moins
+ * 10 % (mitrailleur : graduations de 10 %).
+ */
+function heatStep(id: WeaponId): string {
+  return `${(Math.max(0.1, WEAPONS[id].heatPerShot) * 100).toFixed(2)}%`;
+}
 
 function intOr(v: number, fallback: number, lo: number, hi: number): number {
   return Number.isFinite(v) ? clamp(Math.round(v), lo, hi) : fallback;
@@ -71,23 +115,25 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
 
   stats.append(heartsEl, div('hud-sep'), livesEl, div('hud-sep'), crystEl);
 
+  // Jauge de chauffe : l'icône montre l'arme équipée.
   const heat = div('hud-heat');
   heat.dataset.level = 'cool';
   const heatTrack = div('heat-track');
-  const heatCover = div('heat-cover');
-  heatTrack.append(div('heat-grad'), heatCover, div('heat-ticks'));
+  const heatGrad = div('heat-grad');
+  heatTrack.append(heatGrad, div('heat-ticks'));
   const heatLabel = el('span', 'heat-label', 'SURCHAUFFE');
-  heat.append(icon(ICONS.laser, 'ico ico-laser'), heatTrack, heatLabel);
+  const weaponIco = icon(weaponIcon('laser'), 'ico ico-weapon');
+  heat.append(weaponIco, heatTrack, heatLabel);
 
-  const power = div('hud-power');
-  power.innerHTML =
-    '<svg class="power-ring" viewBox="0 0 48 48" aria-hidden="true"><circle class="ring-bg" cx="24" cy="24" r="20"/><circle class="ring-fg" cx="24" cy="24" r="20"/></svg>';
-  const ringFg = power.querySelector('.ring-fg') as SVGCircleElement;
-  const powerIco = div('power-icon');
-  const powerLbl = el('span', 'power-label', '');
-  power.append(powerIco, powerLbl);
+  // Bonus : vitesse et cadence (cumulables, chacun son anneau), puis bouclier. Rangée calée à droite :
+  // seuls les bonus actifs prennent de la place.
+  const powers = div('hud-powers');
+  const speedSlot = createPowerSlot('speed');
+  const rapidSlot = createPowerSlot('rapid');
+  const shieldSlot = createPowerSlot('shield');
+  powers.append(speedSlot.el, rapidSlot.el, shieldSlot.el);
 
-  plat.append(stats, heat, power);
+  plat.append(stats, heat, powers);
 
   // ---------------------------------------------------------------- Vol : DOM
 
@@ -160,12 +206,10 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
   let pLives = -1;
   let pCrystals = -1;
   let pCrystalsTotal = -1;
+  let pWeapon: WeaponId | '' = '';
   let pHeatQ = -1;
   let pHeatLevel = '';
   let pOver = false;
-  let pPower: PowerUpKind | null = null;
-  let pPowerQ = -1;
-  let pEnding = false;
 
   function buildHearts(max: number): void {
     heartsEl.textContent = '';
@@ -182,6 +226,8 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
     if (n === pMaxHearts) return;
     pMaxHearts = n;
     buildHearts(n);
+    // Cœurs achetés au hangar (4 ou 5) : pastille plus longue, la jauge de chauffe se range à droite (styles.css).
+    plat.classList.toggle('has-extra-hearts', n > BASE_HEARTS);
     const keep = pHearts;
     pHearts = -1;
     setHearts(keep < 0 ? n : keep, false);
@@ -235,7 +281,8 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
     const q = Math.round(num01(v) * HEAT_STEPS);
     if (q === pHeatQ) return;
     pHeatQ = q;
-    heatCover.style.transform = `scaleX(${(HEAT_STEPS - q) / HEAT_STEPS})`;
+    // Part vide à droite (découpe du dégradé, voir .heat-grad).
+    heatGrad.style.setProperty('--heat-off', String((HEAT_STEPS - q) / HEAT_STEPS));
     const level = q < HEAT_STEPS * 0.5 ? 'cool' : q < HEAT_STEPS * 0.8 ? 'warm' : 'hot';
     if (level !== pHeatLevel) {
       pHeatLevel = level;
@@ -250,42 +297,45 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
     if (on) play(heat, SHAKE, SHAKE_OPTS);
   }
 
-  function setPower(kind: PowerUpKind | null, animate: boolean): void {
-    if (kind === pPower) return;
-    pPower = kind;
-    pPowerQ = -1;
-    pEnding = false;
-    power.classList.remove('is-ending');
-    if (!kind) {
-      power.classList.remove('is-on');
-      return;
-    }
-    power.dataset.kind = kind;
-    powerIco.innerHTML = powerIcon(kind);
-    powerLbl.textContent = powerLabel(kind);
-    if (kind === 'shield') {
-      // Bouclier : anneau statique en pointillés (dure jusqu'au prochain coup).
-      ringFg.style.strokeDasharray = '7 5.566';
-      ringFg.style.strokeDashoffset = '0';
-    } else {
-      ringFg.style.strokeDasharray = String(RING_C);
-      ringFg.style.strokeDashoffset = '0';
-    }
-    power.classList.add('is-on');
-    if (animate) play(power, POP, POP_OPTS);
+  function setWeapon(v: WeaponId): void {
+    const id: WeaponId = isWeaponId(v) ? v : 'laser';
+    if (id === pWeapon) return;
+    pWeapon = id;
+    weaponIco.innerHTML = weaponIcon(id);
+    heat.dataset.weapon = id;
+    heat.style.setProperty('--heat-step', heatStep(id));
   }
 
-  function setPowerLeft(v: number): void {
-    if (!pPower || pPower === 'shield') return;
-    const q = Math.round(num01(v) * 100);
-    if (q === pPowerQ) return;
-    pPowerQ = q;
-    ringFg.style.strokeDashoffset = String(RING_C * (1 - q / 100));
-    const ending = q <= 20;
-    if (ending !== pEnding) {
-      pEnding = ending;
-      power.classList.toggle('is-ending', ending);
+  /** Affiche ou masque un anneau de bonus (apparition animée). */
+  function showPower(s: PowerSlot, on: boolean, animate: boolean): void {
+    if (on === s.on) return;
+    s.on = on;
+    s.el.classList.toggle('is-on', on);
+    if (on && animate) play(s.el, POWER_IN, POWER_IN_OPTS);
+  }
+
+  /** Bonus à durée (vitesse, cadence) : temps restant 0..1, 0 = inactif. */
+  function setPowerLeft(s: PowerSlot, v: number, animate: boolean): void {
+    const q = Math.round(num01(v) * POWER_STEPS);
+    if (q === s.q) return;
+    const prev = s.q;
+    s.q = q;
+    s.fg.style.strokeDashoffset = String(RING_C * (1 - q / POWER_STEPS));
+    showPower(s, q > 0, animate);
+    // Même bonus repris : durée remise au maximum, petit rebond.
+    if (animate && prev > 0 && q > prev + 1) play(s.el, POP, POP_OPTS);
+    const ending = q > 0 && q <= POWER_STEPS * 0.2;
+    if (ending !== s.ending) {
+      s.ending = ending;
+      s.el.classList.toggle('is-ending', ending);
     }
+  }
+
+  /** État inverse de l'affichage : le prochain appel redessine tout. */
+  function resetPowerSlot(s: PowerSlot): void {
+    s.q = -1;
+    s.on = true;
+    s.ending = true;
   }
 
   function resetPlatform(): void {
@@ -294,18 +344,24 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
     pLives = -1;
     pCrystals = -1;
     pCrystalsTotal = -1;
+    pWeapon = '';
     pHeatQ = -1;
     pHeatLevel = '';
     pOver = true;
-    pPower = 'triple';
+    resetPowerSlot(speedSlot);
+    resetPowerSlot(rapidSlot);
+    resetPowerSlot(shieldSlot);
     setMaxHearts(3);
     setHearts(3, false);
     setLives(3, false);
     setCrystalsTotal(0);
     setCrystals(0, false);
+    setWeapon('laser');
     setHeat(0);
     setOverheated(false);
-    setPower(null, false);
+    setPowerLeft(speedSlot, 0, false);
+    setPowerLeft(rapidSlot, 0, false);
+    showPower(shieldSlot, false, false);
     stats.classList.remove('is-critical');
   }
 
@@ -377,6 +433,8 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
     const n = intOr(v, 3, 0, 12);
     if (n === fMaxShield) return;
     fMaxShield = n;
+    // Bouclier renforcé (4 ou 5) : pastilles plus serrées sur les petits écrans (styles.css).
+    flLeft.classList.toggle('has-extra-shields', n > BASE_SHIELDS);
     pips.textContent = '';
     pipEls.length = 0;
     for (let i = 0; i < n; i++) {
@@ -523,10 +581,12 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
       if (s.lives !== undefined) setLives(s.lives, true);
       if (s.crystalsTotal !== undefined) setCrystalsTotal(s.crystalsTotal);
       if (s.crystals !== undefined) setCrystals(s.crystals, true);
+      if (s.weapon !== undefined) setWeapon(s.weapon);
       if (s.heat !== undefined) setHeat(s.heat);
       if (s.overheated !== undefined) setOverheated(!!s.overheated);
-      if (s.power !== undefined) setPower(s.power, true);
-      if (s.powerLeft !== undefined) setPowerLeft(s.powerLeft);
+      if (s.speedLeft !== undefined) setPowerLeft(speedSlot, s.speedLeft, true);
+      if (s.rapidLeft !== undefined) setPowerLeft(rapidSlot, s.rapidLeft, true);
+      if (s.shield !== undefined) showPower(shieldSlot, !!s.shield, true);
     },
 
     updateFlight(s: Partial<FlightHud>): void {

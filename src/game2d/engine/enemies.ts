@@ -7,8 +7,10 @@ import {
   ACTIVE_RANGE_SCREENS,
   ARMORED_HP,
   ARMORED_SPEED,
+  ENEMY_HP,
   FLYER_AMPLITUDE,
   FLYER_PERIOD_S,
+  IMPACT_SFX_GAP_MS,
   SPITTER_INTERVAL_MS,
   SPITTER_RANGE,
   WALKER_SPEED,
@@ -16,7 +18,7 @@ import {
 
 // Ennemis : marcheur (w), volant (f), blindé (a), cracheur (p).
 // Marcheurs et blindés ont un corps Arcade (gravité + tuiles) ; volants et cracheurs sont cinématiques.
-// Toutes les interactions avec Kaï et le laser passent par des boîtes calculées ici (pas de callbacks Arcade).
+// Toutes les interactions avec Kaï et ses tirs passent par des boîtes calculées ici (pas de callbacks Arcade).
 
 const DEATH_NONE = 0;
 const DEATH_SQUASH = 1;
@@ -79,6 +81,8 @@ export class EnemyManager {
   /** Sprites à corps Arcade (collision avec les tuiles). */
   readonly physicsSprites: Phaser.Physics.Arcade.Sprite[] = [];
   private readonly box: Box = { l: 0, t: 0, r: 0, b: 0 };
+  /** Horloge de jeu du dernier son de touche (plombs simultanés : un seul son). */
+  private lastHitSfxAt = -1e9;
 
   constructor(
     private readonly scene: PlatformScene,
@@ -130,7 +134,7 @@ export class EnemyManager {
       alive: true,
       awake: true,
       dir,
-      hp: s.kind === 'a' ? ARMORED_HP : 1,
+      hp: s.kind === 'a' ? ARMORED_HP : ENEMY_HP,
       w: spec.w,
       h: spec.h,
       homeX: sprite.x,
@@ -312,7 +316,7 @@ export class EnemyManager {
     }
   }
 
-  /** Ennemi touché au point (x, y) par un laser (marge `pad`), ou null. */
+  /** Ennemi touché au point (x, y) par un tir (marge `pad`), ou null. */
   hitTestPoint(x: number, y: number, pad: number): Enemy | null {
     const box = this.box;
     for (let i = 0; i < this.list.length; i++) {
@@ -324,12 +328,18 @@ export class EnemyManager {
     return null;
   }
 
-  laserHit(e: Enemy): void {
+  /** Touché par un tir de Kaï : `damage` points de vie en moins (fiche de l'arme), détruit à 0. */
+  hit(e: Enemy, damage: number): void {
     if (!e.alive) return;
-    e.hp -= 1;
-    if (e.hp > 0) {
+    e.hp -= damage;
+    // Marge : dégâts non entiers (améliorations du hangar).
+    if (e.hp > 1e-6) {
       this.flash(e);
-      this.scene.playSfx('laserHit');
+      const now = this.scene.clockMs;
+      if (now - this.lastHitSfxAt >= IMPACT_SFX_GAP_MS) {
+        this.lastHitSfxAt = now;
+        this.scene.playSfx('laserHit');
+      }
       return;
     }
     this.kill(e, DEATH_POP);

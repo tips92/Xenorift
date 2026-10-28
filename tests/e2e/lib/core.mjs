@@ -134,6 +134,16 @@ export async function press(t, screen, label, { timeout = 20000 } = {}) {
 }
 
 /**
+ * « Suivant » des résultats → hangar (plan 03, étape suivante à venir) → bouton de départ (`.hg-depart`, libellé
+ * « Décoller ») : l'enchaînement continue vers la carte d'intro de l'étape suivante. Sans aide DEV.
+ */
+export async function nextViaHangar(t, { timeout = 20000 } = {}) {
+  await press(t, 'results', 'Suivant', { timeout });
+  await waitForScreen(t, 'hangar', { timeout });
+  await t.page.locator('.screens [data-screen="hangar"].is-active .hg-depart').click({ timeout: 5000 });
+}
+
+/**
  * Attend le menu Pause ouvert (open = true) ou fermé et la partie relancée (open = false).
  * En dev, vérifie aussi l'état de la partie (__xrShell) ; en production, seulement l'overlay.
  */
@@ -170,7 +180,7 @@ export function waitHud(t, mode, { timeout = 30000 } = {}) {
 
 // ---------------------------------------------------------------- Entrées (aide DEV __xrShell)
 
-/** Commandes vues par le jeu : { left, right, jump, fire, boost, stickX, stickY } (__xrShell, dev uniquement). */
+/** Commandes vues par le jeu : { left, right, up, down, jump, fire, boost, stickX, stickY } (__xrShell, dev uniquement). */
 export function input(t) {
   return t.ev(() => window.__xrShell.info().input);
 }
@@ -188,9 +198,13 @@ export async function waitInput(t, pred, label, { timeout = 3000 } = {}) {
   }
 }
 
-/** Commandes au repos (aucune touche ni doigt pris en compte). */
+/** Commandes au repos (aucune touche ni doigt pris en compte, ni direction du stick 2D). */
 export function waitInputIdle(t, label = 'tout relâché') {
-  return waitInput(t, (i) => !i.left && !i.right && !i.jump && !i.fire && !i.boost && i.stickX === 0 && i.stickY === 0, label);
+  return waitInput(
+    t,
+    (i) => !i.left && !i.right && !i.up && !i.down && !i.jump && !i.fire && !i.boost && i.stickX === 0 && i.stickY === 0,
+    label,
+  );
 }
 
 // ---------------------------------------------------------------- Images (captures décodées dans la page)

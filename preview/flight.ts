@@ -1,3 +1,4 @@
+import { defaultPlayLoadout, shipLoadout } from '../src/core/hangar';
 import { STAGES } from '../src/core/stages';
 import type {
   AudioApi,
@@ -16,7 +17,7 @@ import type {
 import { startFlight } from '../src/game3d';
 
 // Page d'aperçu du mode vol 3D (outil de développement, hors jeu), avec des « hooks » simulés.
-// Paramètres : ?stage=f1|f2 &autopilot=1 &ts=1..8
+// Paramètres : ?stage=f1|f2 &autopilot=1 &ts=1..8 &shield=0..2 &boost=0..2 (modules de la Comète du hangar)
 
 interface Dev3d {
   autopilot(on?: boolean): void;
@@ -31,6 +32,9 @@ const stageId = params.get('stage') === 'f2' ? 'f2' : 'f1';
 const stage = STAGES.find((s) => s.id === stageId) as StageDef;
 const auto = params.get('autopilot') === '1';
 const timeScale = Number(params.get('ts')) || 1;
+// Équipement de départ (rien d'acheté), sauf les modules de la Comète demandés (niveaux bornés par shipLoadout).
+const loadout = defaultPlayLoadout();
+loadout.ship = shipLoadout({ gun: 0, shield: Number(params.get('shield')) || 0, boost: Number(params.get('boost')) || 0 });
 
 const root = document.getElementById('root') as HTMLElement;
 const hudEl = document.getElementById('hud') as HTMLElement;
@@ -139,6 +143,7 @@ const input: InputApi = {
   },
   clearPresses: () => undefined,
   setLayout: () => undefined,
+  setTouchOptions: () => undefined,
   setTiltEnabled: () => undefined,
   requestTiltPermission: async () => true,
   calibrateTilt: () => undefined,
@@ -161,7 +166,16 @@ const audio: AudioApi = {
   resume: () => undefined,
 };
 
-const settings: Settings = { music: true, sfx: true, haptics: true, tilt: false, unlockAll: false };
+const settings: Settings = {
+  music: true,
+  sfx: true,
+  haptics: true,
+  tilt: false,
+  unlockAll: false,
+  touchSize: 1,
+  touchOpacity: 1,
+  leftHanded: false,
+};
 
 // ------------------------------------------------------------------ Partie
 let handle: ModeHandle | null = null;
@@ -181,6 +195,7 @@ const hooks: ModeHooks = {
   input,
   audio,
   settings,
+  loadout,
   onComplete(r: StageResult) {
     console.log('[complete]', JSON.stringify(r));
     showEnd(

@@ -1,6 +1,6 @@
 // Son et cycle de vie de l'application (AudioContext instrumenté, compteur de morceaux de musique) :
 //  1. Accueil : aucun AudioContext avant le premier geste ; après, un seul, actif. Musique coupée : graphe fixe
-//     mesuré, puis 24 effets x 3 et une rafale de 60 (vol de voix) : les nœuds branchés reviennent exactement
+//     mesuré, puis 28 effets x 3 et une rafale de 60 (vol de voix) : les nœuds branchés reviennent exactement
 //     au graphe fixe. Musique réactivée : le morceau du menu démarre une fois.
 //  2. Cycles arrière-plan / retour (visibilitychange 100, 500, 1200 ms ; Capacitor seul ; mélanges dans les deux
 //     ordres Android) : suspendu en arrière-plan, actif au retour et qui le reste ; « resume » Capacitor alors que
@@ -44,8 +44,8 @@ export const meta = {
 };
 
 const SFX = [
-  'click', 'jump', 'doubleJump', 'laser', 'laserHit', 'overheat', 'stomp', 'enemyDie', 'armorClank', 'crystal', 'bump',
-  'powerup', 'shieldBreak', 'hurt', 'death', 'checkpoint', 'takeoff', 'gate', 'gateMiss', 'boost', 'crash', 'warp', 'win', 'lose',
+  'click', 'jump', 'doubleJump', 'laser', 'machinegun', 'shotgun', 'rifle', 'laserHit', 'overheat', 'stomp', 'enemyDie', 'armorClank', 'crystal', 'bump',
+  'powerup', 'shieldBreak', 'hurt', 'death', 'checkpoint', 'takeoff', 'gate', 'gateMiss', 'boost', 'crash', 'warp', 'win', 'lose', 'buy',
 ];
 
 /** L'AudioContext doit rester 'running' pendant `ms` ms (relevé toutes les 100 ms dans la page). */
@@ -130,7 +130,7 @@ export default async function (t) {
   assertEq(await tracks(t), 0, 'musique coupée : aucun morceau lancé au premier geste');
   assert(n0 > 0, 'le graphe fixe du moteur doit être branché après le premier geste');
 
-  // Fuites par effet : 24 effets x 3, puis une rafale de 60 (plus de 24 voix : les plus anciennes sont coupées).
+  // Fuites par effet : 28 effets x 3, puis une rafale de 60 (plus de 24 voix : les plus anciennes sont coupées).
   for (let r = 0; r < 3; r++) {
     for (const id of SFX) {
       await t.ev((i) => window.__xrShell.audio.sfx(i), id);
@@ -151,7 +151,7 @@ export default async function (t) {
       }),
   );
   const nMid = await liveNodes(t);
-  await waitNodes(t, n0, 'après 72 effets et une rafale de 60');
+  await waitNodes(t, n0, 'après 84 effets et une rafale de 60');
   t.log(`nœuds : graphe fixe ${n0}, juste après la rafale ${nMid}, puis ${await liveNodes(t)}`);
   assert(nMid > n0, `les effets doivent brancher des nœuds pendant qu'ils jouent (${n0} -> ${nMid})`);
 

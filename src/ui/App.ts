@@ -7,17 +7,31 @@ import '@fontsource/exo-2/400.css';
 import '@fontsource/exo-2/600.css';
 import { App as CapApp } from '@capacitor/app';
 import { createAudio } from '../audio';
-import { getSave, getSettings, recordResult, updateSettings } from '../core/save';
+import {
+  addCrystals,
+  getCrystals,
+  getSave,
+  getSessionWeapon,
+  getSettings,
+  playLoadout,
+  recordResult,
+  setSessionWeapon,
+  updateSettings,
+  type RecordInfo,
+} from '../core/save';
 import { STAGES, getStage, nextStage } from '../core/stages';
 import type {
   ModeHandle,
   ModeHooks,
+  PlayLoadout,
   Settings,
   StageDef,
   StageKind,
   StageResult,
   StartMode,
+  WeaponId,
 } from '../core/types';
+import { isWeaponId } from '../core/weapons';
 import { createInput } from '../input';
 import { createSpaceBackground } from './background';
 import { deferred, delay, div, enableSecondFingerTaps, nextFrame } from './dom';
@@ -25,11 +39,12 @@ import { createHud } from './hud';
 import { ensureSvgDefs } from './icons';
 import { FADE_MS, createFader, createRotatePrompt } from './overlays';
 import type { Screen } from './screens/common';
+import { createHangarScreen } from './screens/hangar';
 import { createIntroScreen } from './screens/intro';
 import { createOptionsScreen } from './screens/options';
 import { createEndScreen, createErrorScreen, createFailScreen } from './screens/outcome';
 import { createPauseOverlay, type PauseOverlay } from './screens/pause';
-import { createResultsScreen } from './screens/results';
+import { createResultsScreen, type ResultsData } from './screens/results';
 import { createLevelSelect } from './screens/select';
 import { createTitleScreen } from './screens/title';
 import { createSafeAudio, createSafeInput, type UiCtx } from './services';
@@ -42,6 +57,8 @@ type Outcome = { ok: true; result: StageResult } | { ok: false; reason: string }
 
 interface Run {
   readonly stage: StageDef;
+  /** Équipement effectif passé au mode (ModeHooks.loadout). */
+  readonly loadout: Readonly<PlayLoadout>;
   handle: ModeHandle | null;
   /** onComplete / onFail reçu, ou étape abandonnée. */
   ended: boolean;
@@ -134,6 +151,13 @@ export function startApp(): void {
     if (patch.sfx !== undefined) audio.setSfxEnabled(next.sfx);
     if (patch.haptics !== undefined) audio.setHapticsEnabled(next.haptics);
     if (patch.tilt !== undefined) input.setTiltEnabled(next.tilt);
+    // Sortie du mode test : l'arme de session posée au hangar est oubliée (reste celle de ?weapon=, sauf si
+    // une arme possédée a été équipée depuis).
+    if (patch.unlockAll === false && getSessionWeapon() !== null) setSessionWeapon(urlWeapon);
+    // Commandes tactiles : effet immédiat (masquées en pause, elles reparaissent ainsi à la reprise).
+    if (patch.touchSize !== undefined || patch.touchOpacity !== undefined || patch.leftHanded !== undefined) {
+      input.setTouchOptions(next);
+    }
   }
 
   const ctx: UiCtx = { audio, input, hud, settings: live, setSettings };
@@ -145,6 +169,13 @@ export function startApp(): void {
   let run: Run | null = null;
   let pause: PauseOverlay | null = null;
   let introSkip: (() => void) | null = null;
+  /**
+   * Arme imposée par ?weapon= (valide), null sinon. L'arme de la session vit dans core/save.ts
+   * (setSessionWeapon : ?weapon=, puis le hangar en mode test), jamais enregistrée.
+   */
+  let urlWeapon: WeaponId | null = null;
+  /** ?weapon= inconnu : message affiché une fois, sur l'accueil ou au premier lancement (?stage=). */
+  let weaponWarning = '';
   let portrait = false;
   let backgrounded = false;
   let flowId = 0;
@@ -240,6 +271,36 @@ export function startApp(): void {
     return createLevelSelect(ctx, {
       back: () => goTitle(),
       start: (stage) => startStage(stage, true),
+      // Hangar sans départ : le retour ramène aux Niveaux.
+      hangar: () => goHangar(null, () => goSelect()),
+    });
+  }
+
+  /**
+   * Hangar. `next` : étape suivante (bouton de départ vers sa carte d'intro), ou null depuis les Niveaux (pas
+   * de départ). `back` : retour (bouton ◀, Android, Échap) une fois la confirmation d'achat fermée.
+   */
+  function makeHangar(next: StageDef | null, back: () => void): Screen {
+    return createHangarScreen(ctx, next, {
+      back,
+      depart: next ? () => startStage(next, true) : null,
+    });
+  }
+
+  function goHangar(next: StageDef | null, back: () => void): void {
+    showMenu(() => makeHangar(next, back));
+  }
+
+  /**
+   * Résultats d'une étape réussie. `settled` : retour du hangar (valeurs finales tout de suite, sans animation ni
+   * son ; réserve relue, achats déduits).
+   */
+  function makeResults(d: ResultsData, settled: boolean): Screen {
+    const data: ResultsData = settled ? { ...d, crystals: getCrystals(), settled: true } : d;
+    return createResultsScreen(ctx, data, {
+      next: () => goNext(d.stage, () => showMenu(() => makeResults(d, true))),
+      replay: () => startStage(d.stage, false),
+      menu: () => goTitle(),
     });
   }
 
@@ -315,9 +376,10 @@ export function startApp(): void {
     });
   }
 
-  function goNext(stage: StageDef): void {
+  /** « Suivant » des résultats : hangar avant l'étape suivante (`back` : retour aux résultats), sinon la fin. */
+  function goNext(stage: StageDef, back: () => void): void {
     const nxt = nextStage(stage);
-    if (nxt) startStage(nxt, true);
+    if (nxt) goHangar(nxt, back);
     else showEnd();
   }
 
@@ -394,12 +456,23 @@ export function startApp(): void {
     }, force);
   }
 
+  /** Toast « Arme inconnue » (hud.hide() vide les toasts : appelé une fois l'accueil ou le HUD affiché). */
+  function flushWeaponWarning(): void {
+    if (!weaponWarning) return;
+    hud.toast(weaponWarning, 'bad');
+    weaponWarning = '';
+  }
+
   function launch(stage: StageDef, start: StartMode, startPaused: boolean): boolean {
-    const r: Run = { stage, handle: null, ended: false, paused: false };
+    // Équipement effectif figé pour toute la partie : arme (de la session sinon de la sauvegarde), améliorations,
+    // cœurs max, modules de la Comète ; mode test : 4 armes et double saut.
+    const loadout = playLoadout(live);
+    const r: Run = { stage, loadout, handle: null, ended: false, paused: false };
     run = r;
     phase = 'playing';
     if (stage.kind === 'platform') hud.showPlatform();
     else hud.showFlight();
+    flushWeaponWarning();
     input.setLayout(stage.kind);
     input.clearPresses();
 
@@ -408,6 +481,7 @@ export function startApp(): void {
       input,
       audio,
       settings: live,
+      loadout,
       onComplete: (result) => endRun(r, { ok: true, result }),
       onFail: (reason) => endRun(r, { ok: false, reason: typeof reason === 'string' ? reason : '' }),
     };
@@ -446,19 +520,25 @@ export function startApp(): void {
     if (r !== run || r.ended) return;
     r.ended = true;
 
-    let result: StageResult | null = null;
-    let newRecord = false;
-    let best = 0;
+    let results: ResultsData | null = null;
     if (outcome.ok) {
-      result = sanitizeResult(outcome.result, r.stage);
+      const result = sanitizeResult(outcome.result, r.stage);
       const prev = getSave().best[r.stage.id];
-      newRecord = !!prev && result.score > prev.score;
+      // Cristaux de l'étape ajoutés à la réserve par recordResult (une seule fois : r.ended est déjà posé).
+      let info: RecordInfo = { crystalsGained: 0, crystals: getCrystals() };
       try {
-        recordResult(r.stage.index, result);
+        info = recordResult(r.stage.index, result);
       } catch (err) {
         console.error('[ui] sauvegarde impossible', err);
       }
-      best = getSave().best[r.stage.id]?.score ?? result.score;
+      results = {
+        stage: r.stage,
+        result,
+        newRecord: !!prev && result.score > prev.score,
+        best: getSave().best[r.stage.id]?.score ?? result.score,
+        crystalsGained: info.crystalsGained,
+        crystals: info.crystals,
+      };
     }
     input.setLayout('none');
 
@@ -476,16 +556,8 @@ export function startApp(): void {
         bg.setVisible(true);
         audio.music(null);
         let s: Screen;
-        if (result) {
-          s = createResultsScreen(
-            ctx,
-            { stage: r.stage, result, newRecord, best },
-            {
-              next: () => goNext(r.stage),
-              replay: () => startStage(r.stage, false),
-              menu: () => goTitle(),
-            },
-          );
+        if (results) {
+          s = makeResults(results, false);
         } else {
           s = createFailScreen(ctx, r.stage, outcome.ok ? '' : outcome.reason, {
             retry: () => startStage(r.stage, false),
@@ -495,8 +567,8 @@ export function startApp(): void {
         setScreen(s, true);
         await fader.clear();
         if (flow !== flowId) return;
-        audio.sfx(result ? 'win' : 'lose');
-        audio.haptic(result ? [30, 60, 30] : 160);
+        audio.sfx(results ? 'win' : 'lose');
+        audio.haptic(results ? [30, 60, 30] : 160);
         s.shown?.();
       }, true);
     }, 0);
@@ -715,12 +787,18 @@ export function startApp(): void {
   // ---------------------------------------------------------------- Démarrage
 
   const params = new URLSearchParams(window.location.search);
+  // ?weapon=laser|machinegun|shotgun|rifle : arme de la session, même hors mode test (comme ?stage=).
+  const weaponParam = params.get('weapon');
+  urlWeapon = isWeaponId(weaponParam) ? weaponParam : null;
+  setSessionWeapon(urlWeapon);
+  if (weaponParam && !urlWeapon) weaponWarning = `Arme inconnue : ${weaponParam}`;
   if (params.get('unlock') === '1' && !live.unlockAll) setSettings({ unlockAll: true });
 
   audio.setMusicEnabled(live.music);
   audio.setSfxEnabled(live.sfx);
   audio.setHapticsEnabled(live.haptics);
   input.setTiltEnabled(live.tilt);
+  input.setTouchOptions(live);
   input.setLayout('none');
   hud.hide();
 
@@ -750,6 +828,7 @@ export function startApp(): void {
       if (flow !== flowId) return;
       s.shown?.();
       if (devId) hud.toast(`Étape inconnue : ${devId}`, 'bad');
+      flushWeaponWarning();
     });
   }
 
@@ -758,14 +837,26 @@ export function startApp(): void {
     (window as unknown as Record<string, unknown>).__xrShell = {
       cap: (name: keyof typeof capHandlers) => capHandlers[name](),
       audio,
-      info: () => ({
-        phase,
-        run: run ? { stage: run.stage.id, paused: run.paused, ended: run.ended } : null,
-        backgrounded,
-        navLock,
-        fading: fader.busy,
-        input: { ...input.state },
-      }),
+      info: () => {
+        // Équipement effectif : celui de la partie en cours, sinon celui du prochain lancement.
+        const play = run ? run.loadout : playLoadout(live);
+        return {
+          phase,
+          run: run ? { stage: run.stage.id, paused: run.paused, ended: run.ended } : null,
+          screen: screen ? screen.name : null,
+          // Arme, armes possédées et compétences seulement ; `play` : tout (améliorations, cœurs, Comète).
+          loadout: { equipped: play.equipped, owned: [...play.owned], skills: { ...play.skills } },
+          play,
+          crystals: getCrystals(),
+          weapon: getSessionWeapon(),
+          backgrounded,
+          navLock,
+          fading: fader.busy,
+          input: { ...input.state },
+        };
+      },
+      /** Ajoute (ou retire) des cristaux à la réserve, enregistrée ; renvoie la réserve. Écran affiché non redessiné. */
+      addCrystals: (n: number) => addCrystals(Number(n)),
     };
   }
 

@@ -465,6 +465,26 @@ async function closeBrowser(browser, pid) {
   }
 }
 
+/** Agrandit une capture PNG `k` fois sans lissage (décodée et réencodée dans la page). */
+async function upscalePng(page, buf, k) {
+  const b64 = await page.evaluate(
+    async ([src, f]) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${src}`;
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = img.width * f;
+      c.height = img.height * f;
+      const g = c.getContext('2d');
+      g.imageSmoothingEnabled = false;
+      g.drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/png').split(',')[1];
+    },
+    [buf.toString('base64'), k],
+  );
+  return Buffer.from(b64, 'base64');
+}
+
 function makeT({ name, meta, browser, ctx, page, base, out, prod, t0 }) {
   let n = 0;
   let cdp = null;
@@ -479,10 +499,17 @@ function makeT({ name, meta, browser, ctx, page, base, out, prod, t0 }) {
     prod,
     dev: !prod,
     wait: (ms) => t.page.waitForTimeout(ms),
-    async shot(label) {
+    // opts.clip { x, y, width, height } : une zone de la page seulement, agrandie opts.zoom fois (sans lissage).
+    async shot(label, opts = {}) {
       const safe = String(label).replace(/[^\w.-]+/g, '_');
       const file = path.join(out, `${String(++n).padStart(2, '0')}-${safe}.png`);
-      await t.page.screenshot({ path: file });
+      if (opts.clip) {
+        const buf = await t.page.screenshot({ clip: opts.clip });
+        const k = Number(opts.zoom) > 1 ? Number(opts.zoom) : 1;
+        fs.writeFileSync(file, k > 1 ? await upscalePng(t.page, buf, k) : buf);
+      } else {
+        await t.page.screenshot({ path: file });
+      }
       t.log(`capture ${rel(file)}`);
       return file;
     },

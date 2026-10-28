@@ -142,6 +142,20 @@ export const RECIPES: Record<SfxId, Recipe> = {
     v.echo(b, 0.35);
   },
 
+  // Achat au hangar : déclic de caisse, cascade de cristaux montante, tintement final
+  buy(v, t, p) {
+    noiseHit(v, t, 'bandpass', 3400 * p, 5, 0.26, 0.03);
+    chirp(v, 'square', 520 * p, 780 * p, t, 0.045, 0.07);
+    const run = [1318.5, 1760, 2093, 2637];
+    for (let i = 0; i < run.length; i++) {
+      const g = bellNote(v, run[i] * p, t + 0.05 + i * 0.055, 0.13, 0.3);
+      v.echo(g, 0.22);
+    }
+    const ring = bellNote(v, 3520 * p, t + 0.3, 0.08, 0.55);
+    v.echo(ring, 0.35);
+    noiseHit(v, t + 0.3, 'highpass', 7500, 0.6, 0.05, 0.25);
+  },
+
   // Tête dans un bloc : coup de bois
   bump(v, t, p) {
     chirp(v, 'sine', 250 * p, 150 * p, t, 0.09, 0.45);
@@ -509,6 +523,62 @@ export const RECIPES: Record<SfxId, Recipe> = {
     a.connect(lp);
     b.connect(gb);
     gb.connect(lp);
+  },
+
+  // Mitrailleur : tic sec et feutré (un par tir, toutes les 80 ms, 48 avec la cadence : ≤ 70 ms et discret)
+  machinegun(v, t, p) {
+    const lp = v.filter('lowpass', 3600, 0.7);
+    lp.frequency.setValueAtTime(3600 * p, t);
+    lp.frequency.exponentialRampToValueAtTime(900 * p, t + 0.04);
+    lp.connect(v.env(t, 0.12, 0.001, 0.04));
+    const o = v.osc('square', 900 * p, t, t + 0.055);
+    o.frequency.exponentialRampToValueAtTime(210 * p, t + 0.04);
+    o.connect(lp);
+    noiseHit(v, t, 'bandpass', 2600 * p, 1.1, 0.13, 0.02);
+    chirp(v, 'sine', 170 * p, 80 * p, t, 0.035, 0.16);
+  },
+
+  // Pompe : détonation grave (souffle de bruit saturé, coup sourd, grondement) puis réarmement en deux clics
+  shotgun(v, t, p) {
+    const n = v.noise(t, t + 0.3, 0.7);
+    const lp = v.filter('lowpass', 5200, 0.8);
+    lp.frequency.setValueAtTime(5200 * p, t);
+    lp.frequency.exponentialRampToValueAtTime(350 * p, t + 0.24);
+    const d = v.drive();
+    n.connect(lp);
+    lp.connect(d);
+    d.connect(v.env(t, 0.36, 0.001, 0.26));
+    chirp(v, 'sine', 150 * p, 42 * p, t, 0.24, 0.55);
+    const s = v.osc('sawtooth', 95 * p, t, t + 0.17);
+    s.frequency.exponentialRampToValueAtTime(48 * p, t + 0.14);
+    const sl = v.filter('lowpass', 700, 1);
+    s.connect(sl);
+    sl.connect(v.env(t, 0.2, 0.002, 0.14));
+    noiseHit(v, t, 'highpass', 3200, 0.7, 0.26, 0.03);
+    // Réarmement (avant le tir suivant, même avec la cadence : 360 ms)
+    noiseHit(v, t + 0.24, 'bandpass', 2600 * p, 5, 0.3, 0.022);
+    noiseHit(v, t + 0.31, 'bandpass', 1900 * p, 5, 0.26, 0.028);
+  },
+
+  // Fusil d'assaut : claquement sec et saturé (un par balle, 3 par rafale à 70 ms : ≤ 100 ms, sans écho)
+  rifle(v, t, p) {
+    const d = v.drive();
+    const lp = v.filter('lowpass', 6500, 0.9);
+    lp.frequency.setValueAtTime(6500 * p, t);
+    lp.frequency.exponentialRampToValueAtTime(1200 * p, t + 0.06);
+    d.connect(lp);
+    lp.connect(v.env(t, 0.24, 0.001, 0.07));
+    const n = v.noise(t, t + 0.085);
+    const gn = v.gain(0.8);
+    n.connect(gn);
+    gn.connect(d);
+    const o = v.osc('square', 1400 * p, t, t + 0.085);
+    o.frequency.exponentialRampToValueAtTime(260 * p, t + 0.05);
+    const go = v.gain(0.5);
+    o.connect(go);
+    go.connect(d);
+    chirp(v, 'sine', 230 * p, 75 * p, t, 0.055, 0.34);
+    noiseHit(v, t, 'highpass', 4500, 0.8, 0.2, 0.018, 1.2);
   },
 
   // Impact de laser : petit grésillement électrique

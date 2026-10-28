@@ -7,16 +7,22 @@ de « à discuter » vers « retenu » quand elle est validée.
 Rappel des contraintes du projet : tout est dessiné par code et les sons sont synthétisés, donc chaque
 nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur un mobile milieu de gamme.
 
-## Où on en est (27/10/2026)
+## Où on en est (28/10/2026)
 
 - Toutes les décisions prises avec l'utilisateur sont dans ce fichier, dans [HISTOIRE.md](HISTOIRE.md)
   (validée) et dans la section « Décisions » de chaque plan technique.
-- Plans des étapes 1 à 3 **validés et prêts à coder** : [plans/README.md](plans/README.md) donne l'état
-  de chaque étape et la prochaine action.
-- **Aucun code de la feuille de route n'est écrit.** Git est en place depuis le 27/10 au soir (premier
-  commit `bda3e52`) : on peut commencer l'étape 1.
-- Reste à faire côté conception : le plan de l'étape 4 (monde 1 complet), le choix des styles de niveaux
-  bonus, les réglages chiffrés (armes, prix) après essai sur téléphone.
+- **Étape 1 (contrôles 2D) codée et vérifiée** (typecheck, check-levels, build, suite e2e complète) sur la
+  branche `plans-etapes-1-3` ; reste l'essai sur téléphone pour régler les secteurs d'angle et la taille du
+  stick. [plans/README.md](plans/README.md) donne l'état de chaque étape et la prochaine action.
+- **Étape 2 (armes et nouveaux bonus) codée et vérifiée** sur la même branche (typecheck, check-levels, build,
+  suite e2e complète avec les nouveaux scénarios `weapons` et `powerups`) ; reste à régler les armes sur
+  téléphone (et à écouter leurs sons).
+- **Étape 3a (hangar et armes de Kaï) codée et vérifiée** sur la même branche (suite e2e complète, nouveau
+  scénario `hangar`, hangar vérifié jusqu'à 568x320) ; reste l'essai sur téléphone. 3b (combat en vol) reste
+  à coder. Plan de l'étape 4 (monde 1 complet) **rédigé**, ses choix proposés attendent la validation
+  de l'utilisateur.
+- Reste à faire côté conception : valider les choix du plan 4, le choix des styles de niveaux bonus, les
+  réglages chiffrés (armes, prix) après essai sur téléphone.
 - Organisation du code et des documents : [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
@@ -41,24 +47,36 @@ la Comète et décolle. Le vol suit le même principe avec une créature spatial
 
 ### 2. Armes et bonus
 
-Aujourd'hui : pistolet laser avec jauge de surchauffe ; bonus temporaires tir triple (15 s), bouclier
-(1 coup) et double saut (20 s).
+Aujourd'hui : 4 armes à surchauffe (pistolet laser, mitrailleur, pompe, fusil d'assaut ; fiches dans
+`src/core/weapons.ts`), l'arme équipée dans la sauvegarde ; bonus vitesse et cadence (12 s, cumulables) et
+bouclier ; double saut = compétence (active en mode test). Avant l'étape 2 : laser seul ; tir triple (15 s),
+bouclier et double saut (20 s) en bonus.
 
 Plan technique : [plans/02-armes.md](plans/02-armes.md).
 
-- [ ] Arme équipée conservée d'un niveau à l'autre (enregistrée dans la sauvegarde)
-- [ ] Pistolet laser : arme de départ (l'actuelle)
-- [ ] Mitrailleur : moyenne portée, cadence élevée
-- [ ] Pompe : courte portée, tir en gerbe, gros dégâts
-- [ ] Fusil d'assaut : tir en rafale, longue portée
+**État (28/10/2026) :** codé sur la branche `plans-etapes-1-3` et vérifié par la suite e2e complète
+(scénarios `weapons` et `powerups` : projectiles, portée, visée, surchauffe et dégâts de chaque arme, bonus,
+bouclier, double saut selon le mode test). Reste le réglage sur téléphone (sons compris). La sauvegarde a
+un bloc `loadout` (arme équipée, armes possédées, double saut appris), relu à chaque étape ; depuis
+l'étape 3a, l'arme équipée se change au hangar (enregistrée). En mode test, une arme non possédée s'y équipe
+pour la session seulement, comme avec `?weapon=`. Les plans d'armes sur les boss et l'apprentissage du double
+saut auprès du premier gardien viennent avec l'étape 4.
+
+- [x] Arme équipée conservée d'un niveau à l'autre (enregistrée dans la sauvegarde : `loadout.equipped`)
+- [x] Pistolet laser : arme de départ (l'actuelle)
+- [x] Mitrailleur : moyenne portée, cadence élevée
+- [x] Pompe : courte portée, tir en gerbe, gros dégâts
+- [x] Fusil d'assaut : tir en rafale, longue portée
 - [ ] Déblocage : un plan d'arme sur chacun des boss des vols 1 à 3, puis achat et amélioration à l'établi
-- [ ] Chaque arme a sa portée, sa cadence, ses dégâts, sa surchauffe, son visuel et son son
-- [ ] Arme équipée visible sur Kaï et dans le HUD
-- [ ] Bonus temporaire : vitesse de course
-- [ ] Bonus temporaire : cadence de tir
-- [ ] Bonus bouclier conservé (absorbe 1 coup)
+- [x] Chaque arme a sa portée, sa cadence, ses dégâts, sa surchauffe, son visuel et son son (valeurs à
+      régler sur téléphone)
+- [x] Arme équipée visible sur Kaï et dans le HUD
+- [x] Bonus temporaire : vitesse de course
+- [x] Bonus temporaire : cadence de tir
+- [x] Bonus bouclier conservé (absorbe 1 coup)
 - [ ] Double saut retiré des bonus : compétence apprise en battant le premier gardien, gardée ensuite
-- [ ] Tir triple supprimé (la pompe prend le relais)
+      (retiré des bonus et rangé dans la sauvegarde à l'étape 2 ; appris auprès du gardien : étape 4)
+- [x] Tir triple supprimé (la pompe prend le relais)
 
 **Décidé :** surchauffe pour toutes les armes, pas de munitions (rien de plus à gérer sur un écran
 tactile). Chaque arme chauffe à son rythme.
@@ -69,18 +87,28 @@ tactile). Chaque arme chauffe à son rythme.
 
 Plan technique : [plans/03-hangar.md](plans/03-hangar.md).
 
+**État (28/10/2026) :** 3a codée (réserve de cristaux, sauvegarde version 2, écran du hangar entre deux étapes
+et depuis Niveaux, améliorations des armes de Kaï, cœurs supplémentaires, bouclier renforcé et turbo de la
+Comète, aperçu 2D), vérifiée par les tests navigateur (scénario `hangar`). Les plans d'armes et
+l'équipage (Tess, Mira) viendront avec l'étape 4 : d'ici là, hors mode test, seuls le niveau 1 des
+améliorations du laser et les modules de la Comète s'achètent. Restent l'essai sur téléphone (prix,
+multiplicateurs, lisibilité), 3b (combat en vol) et la balise de LUMA.
+
 - [ ] Hangar dans la Comète en orbite : on y monte par la balise de LUMA en fin de niveaux 1 et 2, et en
       décollant après le niveau 3
-- [ ] Établi : acheter les armes débloquées et les améliorer (dégâts, cadence, portée, refroidissement)
-- [ ] Atelier de la Comète : mitrailleuse, bouclier renforcé, meilleur turbo…
-- [ ] Les cristaux ramassés servent de monnaie
-- [ ] Aperçu de la Comète personnalisée et de Kaï avec son arme (en 2D d'abord, 3D plus tard)
+- [x] Établi : acheter les armes débloquées et les améliorer (dégâts, cadence, portée, refroidissement)
+- [ ] Atelier de la Comète : mitrailleuse, bouclier renforcé, meilleur turbo… (bouclier renforcé et turbo
+      faits en 3a ; mitrailleuse achetable et enregistrée, son effet en vol vient avec 3b)
+- [x] Les cristaux ramassés servent de monnaie
+- [x] Aperçu de la Comète personnalisée et de Kaï avec son arme (en 2D d'abord, 3D plus tard)
 - [ ] La Comète a un canon léger dès le départ ; la mitrailleuse est sa première amélioration
 - [ ] Ennemis spatiaux à abattre en vol 3D ; tir automatique quand une cible est devant (option tir manuel)
-- [ ] Tous les cristaux ramassés vont dans la réserve, même en rejouant ; perdus si l'étape est ratée
-- [ ] Hangar accessible entre deux étapes et depuis l'écran Niveaux
-- [ ] Les naufragés secourus rejoignent l'équipage et ouvrent de nouveaux services (voir l'histoire)
-- [ ] Cœur supplémentaire achetable (maximum 5)
+- [x] Tous les cristaux ramassés vont dans la réserve, même en rejouant ; perdus si l'étape est ratée
+- [x] Hangar accessible entre deux étapes et depuis l'écran Niveaux
+- [ ] Les naufragés secourus rejoignent l'équipage et ouvrent de nouveaux services (voir l'histoire) ; le
+      hangar sait déjà les attendre (Tess : niveaux 2 et 3 des améliorations, Mira : cœurs), le secours vient
+      avec l'étape 4
+- [x] Cœur supplémentaire achetable (maximum 5)
 - [ ] Drone compagnon achetable : suit Kaï, attire les cristaux proches ou tire de temps en temps
 
 ### 4. Boss
@@ -98,22 +126,28 @@ Toujours un point de contrôle juste avant chaque combat.
 
 ### 5. Contrôles 2D : stick à deux axes
 
-Aujourd'hui : pad gauche ◀ ▶ (horizontal seulement), boutons Saut et Tir à droite. Les plateformes
-traversables par le dessous existent déjà dans les niveaux.
+Aujourd'hui : stick rond fixe à 8 directions à gauche, boutons Saut et Tir à droite (l'inverse en mode
+gaucher) ; détail dans le [GDD](GDD.md). Avant l'étape 1 : pad ◀ ▶ (horizontal seulement).
 
 **Décidé :** le stick ne fait pas sauter, le saut reste sur le bouton Saut.
 
 Plan technique : [plans/01-controles.md](plans/01-controles.md).
 
-- [ ] Le pad gauche devient un stick à deux axes
-- [ ] Haut maintenu + Tir : tirer vers le haut
-- [ ] Haut + côté maintenus + Tir : tirer en diagonale
-- [ ] Haut devant une porte : entrer (ruines, salles secrètes, naufragés)
-- [ ] Bas : s'accroupir (esquiver les tirs ennemis hauts)
-- [ ] Bas sur un support traversable : descendre d'un étage
+**État (28/10/2026) :** codé et vérifié sur la branche `plans-etapes-1-3` (typecheck, check-levels, build,
+suite e2e complète, dont `touch-controls`, `aim-crouch-drop`, `touch-options` et `small-screens`). Reste
+l'essai sur téléphone pour régler les secteurs d'angle (`STICK_SECTORS`, `src/input/stick.ts`) et la taille
+du stick.
+
+- [x] Le pad gauche devient un stick à deux axes (stick rond à 8 directions)
+- [x] Haut maintenu + Tir : tirer vers le haut (Kaï s'arrête)
+- [x] Haut + côté maintenus + Tir : tirer en diagonale
+- [x] Haut devant une porte : entrer (portes `D` par paires ; pour l'instant une salle secrète dans la
+      Jungle, les ruines et les naufragés viendront avec le monde 1)
+- [x] Bas : s'accroupir (esquiver les tirs ennemis hauts ; ↓ + côté une fois accroupi : ramper lentement)
+- [x] Bas sur un support traversable : descendre d'un étage (↓ + Saut, sur `=` et sur les plateformes mobiles)
 - [ ] Nouveaux supports traversables : branches, lianes, passerelles…
-- [ ] Seuils d'angle nets entre droit devant, diagonale et vers le haut
-- [ ] Clavier : ↑ / Z pour viser en haut et entrer (avec ← → pour la diagonale), ↓ / S pour s'accroupir
+- [x] Seuils d'angle nets entre droit devant, diagonale et vers le haut (30° et 65°, à affiner sur téléphone)
+- [x] Clavier : ↑ / Z pour viser en haut et entrer (avec ← → pour la diagonale), ↓ / S pour s'accroupir
       et descendre
 
 ### 6. Niveaux bonus
@@ -148,7 +182,8 @@ Détail dans [HISTOIRE.md](HISTOIRE.md).
 ## Idées retenues (27/10/2026)
 
 - [ ] **Carte galactique** pour choisir l'étape : remplace les 4 cartes et grandit avec les mondes
-- [ ] **Réglage des contrôles tactiles** : taille, position et opacité des boutons, mode gaucher
+- [ ] **Réglage des contrôles tactiles** : taille, position et opacité des boutons, mode gaucher. Taille,
+      opacité et mode gaucher faits à l'étape 1 (rubrique Commandes des Options) ; position : plus tard.
 - [ ] **Objets secrets** : 3 par niveau, bien cachés ; les trouver débloque les niveaux bonus
 - [ ] **Les compétences ouvrent des passages dans les niveaux déjà finis** : certains objets secrets ne
       s'atteignent qu'en revenant avec le double saut, le saut mural ou le grappin
@@ -196,10 +231,12 @@ Détail dans [HISTOIRE.md](HISTOIRE.md).
 ## Ordre de travail
 
 1. **Contrôles** : stick à deux axes (viser en haut, portes, s'accroupir, descendre), réglage des boutons.
-   Petit, indépendant, vite testable sur téléphone.
-2. **Armes et nouveaux bonus** : le hangar et les boss en dépendent.
+   Petit, indépendant, vite testable sur téléphone. **Codé et vérifié** ; essai sur téléphone à faire.
+2. **Armes et nouveaux bonus** : le hangar et les boss en dépendent. **Codé et vérifié** ; essai sur
+   téléphone à faire (réglage des armes).
 3. **Hangar**, en deux parties : 3a (cristaux-monnaie, écran du hangar, améliorations des armes de Kaï),
    puis 3b (tir de la Comète, ennemis spatiaux, modules) ; la balise de LUMA à la fin ou en début d'étape 4.
+   **3a codée et vérifiée** ; essai sur téléphone à faire ; 3b et la balise à coder.
 4. **Monde 1 complet au nouveau format** : 3 niveaux, mini-boss, méduse-baleine, double saut, vol avec le
    léviathan, LUMA, prologue et cinématique de libération. Il sert de modèle : on valide tout sur un seul
    monde avant de multiplier les niveaux.

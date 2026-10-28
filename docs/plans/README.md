@@ -4,14 +4,14 @@ Un plan par étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). On 
 en lisant le code concerné ; l'utilisateur valide les choix proposés, qui passent dans la section
 « Décisions ». Organisation générale : [ARCHITECTURE.md](../ARCHITECTURE.md).
 
-## État au 27/10/2026
+## État au 28/10/2026
 
 | Étape | Plan | État |
 |---|---|---|
-| 1. Contrôles 2D (stick à 8 directions, visée, accroupi, descente, portes, réglage des boutons) | [01-controles.md](01-controles.md) | validé, prêt à coder |
-| 2. Armes et nouveaux bonus | [02-armes.md](02-armes.md) | validé, prêt à coder |
-| 3. Hangar (3a : hangar et armes de Kaï ; 3b : combat en vol) | [03-hangar.md](03-hangar.md) | validé, prêt à coder |
-| 4. Monde 1 complet au nouveau format | à écrire | — |
+| 1. Contrôles 2D (stick à 8 directions, visée, accroupi, descente, portes, réglage des boutons) | [01-controles.md](01-controles.md) | codé et vérifié par la suite e2e complète (branche `plans-etapes-1-3`) ; essai sur téléphone à faire (secteurs d'angle du stick, taille) |
+| 2. Armes et nouveaux bonus | [02-armes.md](02-armes.md) | codé et vérifié par la suite e2e complète (nouveaux scénarios `weapons` / `powerups`) ; essai sur téléphone à faire (réglage des armes, sons, vitesse) |
+| 3. Hangar (3a : hangar et armes de Kaï ; 3b : combat en vol) | [03-hangar.md](03-hangar.md) | 3a codée et vérifiée par la suite e2e complète (scénarios adaptés, nouveau scénario `hangar`, hangar de 844x390 à 568x320) ; essai sur téléphone à faire ; 3b (combat en vol) et la balise à coder |
+| 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | rédigé ; choix proposés en attente de validation |
 | 5. Monde 2 au même format | à écrire | — |
 | 6. Carte galactique, puis Boréa, Vulkar, Cœur de la Faille | à écrire | — |
 | 7. Objets secrets et niveaux bonus | à écrire | — |
@@ -21,17 +21,38 @@ d'armes de l'étape 2.
 
 ## Prochaine action
 
-1. Vérifier l'arbre Git : `git status`, `git log --oneline -3`. Git est en place depuis le 27/10 au soir
-   (premier commit `bda3e52`, « Démo v0.1 »). Des modifications non commitées doivent être comprises (ou
-   commitées sur demande de l'utilisateur) avant de commencer.
-2. `npm test` doit être vert avant de commencer.
-3. Coder l'**étape 1** en suivant son « Ordre de réalisation », point par point.
-4. En parallèle de l'attente ou de la relecture : écrire le plan de l'**étape 4** (3 niveaux de la Jungle,
-   2 mini-boss, méduse-baleine, prologue, LUMA, vol avec le léviathan) à partir de
-   [HISTOIRE.md](../HISTOIRE.md).
+1. **Vérifier l'arbre Git** : les étapes 1, 2 et 3a sont sur la branche `plans-etapes-1-3`, **non commitées** ;
+   commit sur demande de l'utilisateur (`npm run build` doit passer avant).
+2. **Trancher les points relevés** par les tests de 3a (fin de la section Tests de
+   [03-hangar.md](03-hangar.md) : cœurs au point de contrôle, musique au retour du hangar, message du hangar
+   par-dessus la liste, niveau 1 des dégâts sans effet visible).
+3. **Essai des étapes 1, 2 et 3a sur téléphone** (`tools\build-apk.cmd` puis `tools\install-apk.cmd`) :
+   - stick : secteurs d'angle (`STICK_SECTORS`, `src/input/stick.ts`) et taille (crans `TOUCH_SIZE_STEPS`,
+     `src/input/touch.ts`) ;
+   - armes : tableau des fiches (`WEAPONS`, `src/core/weapons.ts` ; les armes s'essaient au hangar en mode
+     test, pour la session, ou avec `?weapon=`), sons de tir (`src/audio/sfx.ts`), bonus de vitesse et de
+     cadence (`SPEED_BOOST_MUL`, `RAPID_FIRE_MUL`, `POWER_DURATION_MS`) ;
+   - hangar : lisibilité sur petit écran (cartes, message, confirmation), prix et multiplicateurs (`PRICES`,
+     `UPGRADE_MULS`, `BOOST_MULS` de `src/core/hangar.ts`), gain de cristaux par niveau.
+
+   Après un réglage : reporter les valeurs dans le GDD, dans la section « Décisions » du plan concerné et dans
+   les tests (`SPECS` de `tests/e2e/scenarios/weapons.mjs`, `SPEED_MUL` / `DURATION_MS` de `powerups.mjs`, prix
+   et multiplicateurs recopiés par `hangar.mjs` et `small-screens.mjs` : liste dans
+   [tests/e2e/README.md](../../tests/e2e/README.md), « Scénario du hangar »), puis `npm test` et
+   `npm run e2e -- weapons powerups hangar small-screens`.
+4. **Faire valider les choix proposés du plan 4** ([04-monde-1.md](04-monde-1.md), chacun finit par sa
+   question, dont « 4a peut-elle commencer avant la fin de 3b ? ») ; les réponses passent dans une section
+   « Décisions ».
+5. **Coder l'étape 3b** (combat en vol) en suivant l'« Ordre de réalisation » de [03-hangar.md](03-hangar.md) ;
+   sa section « Ce qui existe déjà » donne l'état après 3a (canon de la Comète déjà acheté et transmis au vol,
+   boucliers et turbo déjà branchés, cristaux du vol à remplir dans `StageResult.crystals`).
+6. **Balise de LUMA** (point 16 du plan 03) : à la fin de 3b, ou au début de l'étape 4 si le plan 4 est validé
+   tel quel (il la place dans 4a, avec les sorties communes).
 
 ## Questions encore ouvertes
 
+- Choix proposés du plan 4 (découpage 4a / 4b / 4c, progression par identifiants, étapes et noms, boss,
+  cinématiques, léviathan…).
 - Styles des niveaux bonus (étape 7, rien ne presse).
 - Valeurs chiffrées (armes, bonus, prix) : à régler après essai sur téléphone.
 

@@ -1,103 +1,174 @@
 import * as Phaser from 'phaser';
-import { TEX } from '../art/keys';
-import { DEPTH, LASER_RANGE, LASER_SPEED } from '../constants';
+import type { WeaponId } from '../../core/types';
+import { PELLET_SPEED_JITTER, WEAPON_IDS } from '../../core/weapons';
+import type { WeaponStats } from '../../core/weapons';
+import { BULLET_ADDITIVE, BULLET_SIZE, BULLET_TEX, TEX } from '../art/keys';
+import { DEPTH, PROJECTILE_POOL_SIZE, TILE } from '../constants';
 import type { PlatformScene } from './PlatformScene';
-import { SPORE_GRAVITY, SPORE_LIFE_S, SPORE_SPEED } from './tuning';
+import { IMPACT_SFX_GAP_MS, SPORE_GRAVITY, SPORE_LIFE_S, SPORE_SPEED } from './tuning';
 
-// Projectiles en pool, déplacés à la main (pas de corps Arcade) : tirs laser de Kaï et spores des cracheurs.
+// Projectiles en pool, déplacés à la main (pas de corps Arcade) : tirs de Kaï (toutes armes) et spores des cracheurs.
 
-interface Bolt {
+/** Tir de Kaï en vol. Vitesse, portée, dégâts, pointe et couleur sont copiés de la fiche de l'arme au départ. */
+export interface Bolt {
   img: Phaser.GameObjects.Image;
+  weapon: WeaponId;
   vx: number;
   vy: number;
   ux: number;
   uy: number;
+  /** Distance parcourue et portée (px). */
   dist: number;
+  range: number;
+  speed: number;
+  damage: number;
+  /** Distance du centre à la pointe (BULLET_SIZE), point testé contre tuiles et ennemis. */
+  tip: number;
+  /** Étincelles d'impact. */
+  color: number;
   alive: boolean;
 }
 
 /** Longueur max d'un sous-pas de déplacement (évite de traverser un coin de tuile ou un ennemi). */
 const SUB_STEP_PX = 14;
-/** Distance du centre du tir à sa pointe. */
-const BOLT_TIP = 16;
+/** Fin de portée : le tir pâlit sur cette distance. */
+const FADE_PX = 80;
 
-export class LaserPool {
-  private readonly bolts: Bolt[] = [];
+/**
+ * Tirs de Kaï, toutes armes (plombs et rafales compris). Pool plein : le plus ancien est recyclé.
+ * `bolts` est lu par les outils de test (__xr2d, tests e2e).
+ */
+export class ShotPool {
+  readonly bolts: Bolt[] = [];
   private cursor = 0;
+  /** Texture de chaque arme (celle du laser tant que la sienne n'est pas dessinée). */
+  private readonly tex: Record<WeaponId, string>;
+  private lastImpactSfxAt = -1e9;
 
   constructor(
     private readonly scene: PlatformScene,
-    size = 24,
+    size = PROJECTILE_POOL_SIZE,
   ) {
+    const tex = { ...BULLET_TEX } as Record<WeaponId, string>;
+    for (const id of WEAPON_IDS) {
+      if (!scene.textures.exists(tex[id])) tex[id] = TEX.laser;
+    }
+    this.tex = tex;
     for (let i = 0; i < size; i++) {
       const img = scene.add.image(-200, -200, TEX.laser);
       img.setDepth(DEPTH.projectiles).setBlendMode(Phaser.BlendModes.ADD).setVisible(false).setActive(false);
-      this.bolts.push({ img, vx: 0, vy: 0, ux: 1, uy: 0, dist: 0, alive: false });
+      this.bolts.push({
+        img,
+        weapon: 'laser',
+        vx: 0,
+        vy: 0,
+        ux: 1,
+        uy: 0,
+        dist: 0,
+        range: 0,
+        speed: 0,
+        damage: 0,
+        tip: BULLET_SIZE.laser.tip,
+        color: 0xffffff,
+        alive: false,
+      });
     }
   }
 
-  fire(x: number, y: number, angle: number): void {
+  /**
+   * Un projectile de l'arme `w` (valeurs effectives) depuis la bouche (x, y), angle Phaser (radians, y vers le
+   * bas). (ox, oy) : épaule de Kaï ; le segment épaule → pointe à la bouche est balayé au départ (un canon long
+   * ne traverse ni un mur d'une tuile ni un ennemi au contact). La portée compte depuis la bouche.
+   */
+  fire(x: number, y: number, angle: number, w: Readonly<WeaponStats>, ox: number, oy: number): void {
     // Premier tir libre, sinon on recycle le plus ancien.
-    let bolt: Bolt | null = null;
-    for (let i = 0; i < this.bolts.length; i++) {
-      const b = this.bolts[(this.cursor + i) % this.bolts.length];
-      if (!b.alive) {
-        bolt = b;
+    const n = this.bolts.length;
+    let idx = this.cursor;
+    for (let i = 0; i < n; i++) {
+      const j = (this.cursor + i) % n;
+      if (!this.bolts[j].alive) {
+        idx = j;
         break;
       }
     }
-    if (!bolt) bolt = this.bolts[this.cursor];
-    this.cursor = (this.bolts.indexOf(bolt) + 1) % this.bolts.length;
+    const bolt = this.bolts[idx];
+    this.cursor = (idx + 1) % n;
 
+    if (bolt.weapon !== w.id) {
+      bolt.weapon = w.id;
+      bolt.tip = BULLET_SIZE[w.id].tip;
+      bolt.img.setTexture(this.tex[w.id]).setBlendMode(BULLET_ADDITIVE[w.id] ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL);
+    }
     bolt.ux = Math.cos(angle);
     bolt.uy = Math.sin(angle);
-    bolt.vx = bolt.ux * LASER_SPEED;
-    bolt.vy = bolt.uy * LASER_SPEED;
+    // Plombs : vitesses un peu différentes, la gerbe s'étale au lieu de former une colonne.
+    const speed = w.pellets > 1 ? w.speed * (1 + PELLET_SPEED_JITTER * (Math.random() * 2 - 1)) : w.speed;
+    bolt.speed = speed;
+    bolt.vx = bolt.ux * speed;
+    bolt.vy = bolt.uy * speed;
+    bolt.range = w.rangeTiles * TILE;
+    bolt.damage = w.damage;
+    bolt.color = w.color;
     bolt.dist = 0;
     bolt.alive = true;
     bolt.img.setPosition(x, y).setRotation(angle).setVisible(true).setActive(true).setAlpha(1);
+
+    // Balayage du canon, par pas de SUB_STEP_PX au plus (l'épaule elle-même est dans le corps : non testée).
+    const ex = x + bolt.ux * bolt.tip;
+    const ey = y + bolt.uy * bolt.tip;
+    const dx = ex - ox;
+    const dy = ey - oy;
+    const k = Math.max(1, Math.ceil(Math.sqrt(dx * dx + dy * dy) / SUB_STEP_PX));
+    for (let s = 1; s <= k; s++) {
+      if (this.probe(bolt, ox + (dx * s) / k, oy + (dy * s) / k)) return;
+    }
+  }
+
+  /** Pointe du tir en (tx, ty) contre le décor, les ennemis et les spores ; vrai si le tir est détruit. */
+  private probe(b: Bolt, tx: number, ty: number): boolean {
+    const scene = this.scene;
+    const fx = scene.fx;
+    if (scene.grid.solidAtPx(tx, ty)) {
+      fx.spark(tx - b.ux * 4, ty - b.uy * 4, b.color, 7);
+      this.impactSfx();
+      this.kill(b);
+      return true;
+    }
+    const e = scene.enemies.hitTestPoint(tx, ty, 6);
+    if (e) {
+      fx.spark(tx, ty, b.color, 8);
+      scene.enemies.hit(e, b.damage);
+      this.kill(b);
+      return true;
+    }
+    if (scene.spores.hitTest(tx, ty, 18)) {
+      fx.spark(tx, ty, fx.colors.spore, 6);
+      this.kill(b);
+      return true;
+    }
+    return false;
   }
 
   update(dt: number): void {
-    const scene = this.scene;
-    const grid = scene.grid;
-    const enemies = scene.enemies;
-    const spores = scene.spores;
-    const n = Math.max(1, Math.ceil((LASER_SPEED * dt) / SUB_STEP_PX));
-    const sdt = dt / n;
-    const stepDist = LASER_SPEED * sdt;
+    const fx = this.scene.fx;
 
     for (let i = 0; i < this.bolts.length; i++) {
       const b = this.bolts[i];
       if (!b.alive) continue;
+      const n = Math.max(1, Math.ceil((b.speed * dt) / SUB_STEP_PX));
+      const sdt = dt / n;
+      const stepDist = b.speed * sdt;
       let x = b.img.x;
       let y = b.img.y;
       for (let s = 0; s < n; s++) {
         x += b.vx * sdt;
         y += b.vy * sdt;
         b.dist += stepDist;
-        const tx = x + b.ux * BOLT_TIP;
-        const ty = y + b.uy * BOLT_TIP;
-        if (grid.solidAtPx(tx, ty)) {
-          scene.fx.spark(tx - b.ux * 4, ty - b.uy * 4, scene.fx.colors.laser, 7);
-          scene.playSfx('laserHit', 0.45);
-          this.kill(b);
-          break;
-        }
-        const e = enemies.hitTestPoint(tx, ty, 6);
-        if (e) {
-          scene.fx.spark(tx, ty, scene.fx.colors.laser, 8);
-          enemies.laserHit(e);
-          this.kill(b);
-          break;
-        }
-        if (spores.hitTest(tx, ty, 18)) {
-          scene.fx.spark(tx, ty, scene.fx.colors.spore, 6);
-          this.kill(b);
-          break;
-        }
-        if (b.dist >= LASER_RANGE) {
-          scene.fx.spark(tx, ty, scene.fx.colors.laser, 3);
+        const tx = x + b.ux * b.tip;
+        const ty = y + b.uy * b.tip;
+        if (this.probe(b, tx, ty)) break;
+        if (b.dist >= b.range) {
+          fx.spark(tx, ty, b.color, 3);
           this.kill(b);
           break;
         }
@@ -105,10 +176,18 @@ export class LaserPool {
       if (b.alive) {
         b.img.setPosition(x, y);
         // Fin de portée : le tir pâlit légèrement.
-        const left = LASER_RANGE - b.dist;
-        b.img.alpha = left < 80 ? 0.35 + (0.65 * left) / 80 : 1;
+        const left = b.range - b.dist;
+        b.img.alpha = left < FADE_PX ? 0.35 + (0.65 * left) / FADE_PX : 1;
       }
     }
+  }
+
+  /** Impact sur le décor : un seul son pour des plombs qui touchent ensemble. */
+  private impactSfx(): void {
+    const now = this.scene.clockMs;
+    if (now - this.lastImpactSfxAt < IMPACT_SFX_GAP_MS) return;
+    this.lastImpactSfxAt = now;
+    this.scene.playSfx('laserHit', 0.45);
   }
 
   private kill(b: Bolt): void {

@@ -1,8 +1,11 @@
 // Contrôles tactiles réels (multi-touch CDP, un identifiant par doigt).
-// Plateforme (j1) : croix (gauche, glissement vers la droite : Kaï avance), SAUT + TIR en même temps,
+// Plateforme (j1) : stick rond à 8 directions (gauche, glissement vers la droite : Kaï avance ; glissement de →
+// vers ↑ sans lever le doigt : visée haute, Kaï s'arrête sans sauter ; ↗ = haut + droite, visée diagonale ;
+// ↘ = droite + bas, Kaï court sans s'accroupir ; ↓ seul : accroupi ; ↓ puis ↘ : reptation lente ; retour à → :
+// debout), SAUT + TIR en même temps,
 // lever des doigts sans perdre les autres, perte de focus et touchcancel qui relâchent tout, doigt qui glisse
 // hors de SAUT et reste attaché à SAUT jusqu'au lever, doigt posé sur une zone vide (et qui glisse) sans effet
-// ni annulation des autres doigts, PAUSE du HUD touchée par un 2e doigt pendant que le 1er tient la croix,
+// ni annulation des autres doigts, PAUSE du HUD touchée par un 2e doigt pendant que le 1er tient le stick,
 // REPRENDRE au 2e doigt (sans commande collée ensuite).
 // Vol (f1) : joystick (le vaisseau se déplace) + TURBO (vitesse), doigt vide sans effet, touchcancel et
 // passage en arrière-plan qui relâchent tout.
@@ -12,13 +15,29 @@ import { instrument, setHidden, uiState } from '../lib/shell.mjs';
 import { input, shipPos, trackThreeScenes, waitInput, waitInputIdle, waitPause } from '../lib/core.mjs';
 
 export const meta = {
-  title: 'Tactile : croix, SAUT + TIR, doigts multiples, pause au 2e doigt, joystick + TURBO',
+  title: 'Tactile : stick 8 directions, SAUT + TIR, doigts multiples, pause au 2e doigt, joystick + TURBO',
   suites: ['smoke', 'full'],
   dev: true,
   timeoutMs: 120000,
 };
 
 const r1 = (v) => Math.round(v * 10) / 10;
+
+/** Kaï (aide DEV) : position, visée, accroupi, hauteur du corps, vitesse horizontale. */
+function kai(t) {
+  return t.ev(() => {
+    const p = window.__xr2d.scene.player;
+    return { x: p.x, feetY: p.feetY, onGround: !!p.onGround, aim: p.aim, crouching: !!p.crouching, h: p.body.height, vx: p.body.velocity.x };
+  });
+}
+
+/** Glisse le doigt `id` (seul doigt posé) de `a` vers `b` en `n` pas, sans le lever. */
+async function slide(t, f, id, a, b, n = 6) {
+  for (let k = 1; k <= n; k++) {
+    await f.move([[a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n, id]]);
+    await t.wait(16);
+  }
+}
 
 /** Élément sous le point (x, y) : refuse une commande, un bouton ou le HUD (zone censée être « vide »). */
 async function assertBlank(t, x, y) {
@@ -45,8 +64,13 @@ async function platform(t, f) {
   // Invincible : les chutes ramènent au dernier sol sûr et les ennemis ne tuent pas Kaï pendant l'essai.
   await t.ev(() => window.__xr2d.god(true));
   assert((await uiState(t)).touch === '10', `couche tactile « plateforme » seule visible (${(await uiState(t)).touch})`);
+  // Stick rond : directions lues par secteurs d'angle autour du centre (src/input/stick.ts).
   const L = await center(t, '.xr-dpad', 0.2);
   const R = await center(t, '.xr-dpad', 0.8);
+  const U = await center(t, '.xr-dpad', 0.5, 0.12);
+  const UR = await center(t, '.xr-dpad', 0.78, 0.22);
+  const DR = await center(t, '.xr-dpad', 0.78, 0.78);
+  const D = await center(t, '.xr-dpad', 0.5, 0.88);
   const J = await center(t, '.xr-jump');
   const F = await center(t, '.xr-fire');
   const P = await center(t, '.hud-pause');
@@ -57,16 +81,145 @@ async function platform(t, f) {
   await assertBlank(t, B[0], B[1] - 90);
   await takeCancels(t);
 
-  // --- Croix : gauche, puis glissement vers la droite sans lever le doigt
+  // --- Secteurs du stick : un doigt neuf par point (pas d'hystérésis). Centre : zone morte ; au rayon 0,8,
+  // 20° = → seul, 40° et 58° = ↗, 72° = ↑ seul (frontières à 30° et 65°, src/input/stick.ts).
+  {
+    const C = await center(t, '.xr-dpad', 0.5, 0.5);
+    await f.start([[...C, 30]]);
+    await t.wait(120);
+    const i0 = await input(t);
+    assert(!i0.left && !i0.right && !i0.up && !i0.down, `stick : doigt au centre, aucune direction (${JSON.stringify(i0)})`);
+    await f.end();
+    await waitInputIdle(t, 'stick : doigt du centre levé');
+    const SECTORS = [
+      [20, { right: true, up: false }],
+      [40, { right: true, up: true }],
+      [58, { right: true, up: true }],
+      [72, { right: false, up: true }],
+    ];
+    for (const [deg, want] of SECTORS) {
+      const a = (deg * Math.PI) / 180;
+      const P = await center(t, '.xr-dpad', 0.5 + 0.4 * Math.cos(a), 0.5 - 0.4 * Math.sin(a));
+      await f.start([[...P, 31]]);
+      await waitInput(t, (i) => i.right === want.right && i.up === want.up && !i.left && !i.down, `stick à ${deg}° : ${want.right ? '→' : ''}${want.up ? '↑' : ''}`);
+      await f.end();
+      await waitInputIdle(t, `stick à ${deg}° : doigt levé`);
+    }
+  }
+
+  // --- Deux doigts sur le stick : le plus récent commande ; levé, le précédent reprend la main
+  await f.start([[...R, 32]]);
+  await waitInput(t, (i) => i.right && !i.left, 'stick : 1er doigt sur →');
+  await f.start([[...R, 32], [...L, 33]]);
+  await waitInput(t, (i) => i.left && !i.right, 'stick : 2e doigt sur ← (le plus récent commande)');
+  await f.end([[...R, 32]]);
+  await waitInput(t, (i) => i.right && !i.left, 'stick : 2e doigt levé, le 1er (→) reprend la main');
+  await f.end();
+  await waitInputIdle(t, 'stick : les deux doigts levés');
+
+  // --- Retour visuel au ↗ : flèches ↑ et → allumées (pas ← ni ↓), bille déplacée vers le haut à droite ;
+  // au lever, bille revenue au centre.
+  {
+    const P = await center(t, '.xr-dpad', 0.78, 0.22);
+    await f.start([[...P, 34]]);
+    await waitInput(t, (i) => i.up && i.right, 'stick ↗ (retour visuel)');
+    const vis = await t.ev(() => {
+      const d = document.querySelector('.xr-dpad');
+      const lit = (c) => d.querySelector(`.xr-dpad-${c}`).classList.contains('is-down');
+      const m = new DOMMatrixReadOnly(getComputedStyle(d.querySelector('.xr-dpad-knob')).transform);
+      return { l: lit('l'), r: lit('r'), u: lit('u'), d: lit('d'), dx: m.m41, dy: m.m42, active: d.classList.contains('is-active') };
+    });
+    assert(vis.u && vis.r && !vis.l && !vis.d && vis.active, `stick ↗ : flèches ↑ et → seules allumées, stick actif (${JSON.stringify(vis)})`);
+    assert(vis.dx > 5 && vis.dy < -5, `stick ↗ : bille déplacée vers le haut à droite (${JSON.stringify(vis)})`);
+    await f.end();
+    await waitInputIdle(t, 'stick ↗ : doigt levé');
+    const after = await t.ev(() => {
+      const d = document.querySelector('.xr-dpad');
+      return {
+        transform: d.querySelector('.xr-dpad-knob').style.transform,
+        lit: d.querySelectorAll('.xr-dpad-arrow.is-down').length,
+        active: d.classList.contains('is-active'),
+      };
+    });
+    assert(after.transform === '' && after.lit === 0 && !after.active, `stick levé : bille au centre, flèches éteintes (${JSON.stringify(after)})`);
+  }
+
+  // --- Stick : gauche, puis glissement vers la droite sans lever le doigt
   await f.start([[...L, 1]]);
-  await waitInput(t, (i) => i.left && !i.right, 'doigt sur ◀ : gauche');
+  await waitInput(t, (i) => i.left && !i.right && !i.up && !i.down, 'stick à gauche : gauche seule');
   await f.move([[...R, 1]]);
-  await waitInput(t, (i) => i.right && !i.left, 'glissé sur ▶ : droite seule');
+  await waitInput(t, (i) => i.right && !i.left && !i.up && !i.down, 'glissé à droite : droite seule');
   const x0 = (await player2d(t)).x;
   await t.wait(500);
   const x1 = (await player2d(t)).x;
   t.log(`▶ tenu 500 ms : x ${r1(x0)} -> ${r1(x1)}`);
   assert(x1 > x0 + 40, `▶ tenu : Kaï doit avancer (${r1(x0)} -> ${r1(x1)})`);
+
+  // --- Glissement de → vers ↑ sans lever le doigt : haut seul, visée haute, Kaï s'arrête et ne saute pas
+  const groundY = (await kai(t)).feetY;
+  await slide(t, f, 1, R, U);
+  await waitInput(t, (i) => i.up && !i.left && !i.right && !i.down, 'glissé de → vers ↑ : haut seul');
+  await t.wait(450);
+  const ku = await kai(t);
+  t.log(`↑ seul : ${JSON.stringify({ aim: ku.aim, vx: r1(ku.vx), feetY: r1(ku.feetY), onGround: ku.onGround })}`);
+  assert(ku.aim === 'up', `↑ seul : visée vers le haut (obtenu ${ku.aim})`);
+  assert(Math.abs(ku.vx) < 5, `↑ seul : Kaï s'arrête (vx ${r1(ku.vx)})`);
+  assert(ku.onGround && Math.abs(ku.feetY - groundY) < 1, `↑ seul : Kaï reste au sol, sans sauter (pieds ${r1(ku.feetY)})`);
+  await t.shot('stick-up-aim');
+
+  // --- ↗ : haut + droite, visée diagonale, Kaï court
+  await f.move([[...UR, 1]]);
+  await waitInput(t, (i) => i.up && i.right && !i.left && !i.down, '↗ : haut + droite');
+  const xd0 = (await kai(t)).x;
+  await t.wait(350);
+  const kd = await kai(t);
+  assert(kd.aim === 'diag', `↗ : visée diagonale (obtenu ${kd.aim})`);
+  assert(kd.x > xd0 + 40 && !kd.crouching, `↗ : Kaï avance debout (${r1(xd0)} -> ${r1(kd.x)})`);
+  await t.shot('stick-up-right-diag');
+  // Gros plan du stick : bille déplacée vers ↗, flèches ↑ et → allumées.
+  const pad = await t.ev(() => {
+    const r = document.querySelector('.xr-dpad').getBoundingClientRect();
+    const m = 24;
+    const x = Math.max(0, Math.floor(r.left - m));
+    const y = Math.max(0, Math.floor(r.top - m));
+    return { x, y, width: Math.min(window.innerWidth - x, Math.ceil(r.width + 2 * m)), height: Math.min(window.innerHeight - y, Math.ceil(r.height + 2 * m)) };
+  });
+  await t.shot('stick-knob-up-right-zoom', { clip: pad, zoom: 2 });
+
+  // --- ↘ : droite + bas transmis tous les deux, mais Kaï court sans s'accroupir (↓ seul accroupit)
+  await f.move([[...DR, 1]]);
+  await waitInput(t, (i) => i.right && i.down && !i.left && !i.up, '↘ : droite + bas');
+  const xr0 = (await kai(t)).x;
+  await t.wait(350);
+  const kr = await kai(t);
+  t.log(`↘ 350 ms : x ${r1(xr0)} -> ${r1(kr.x)}, accroupi ${kr.crouching}`);
+  assert(!kr.crouching && kr.h === 70, `↘ : Kaï ne s'accroupit pas en courant (accroupi ${kr.crouching}, corps ${kr.h})`);
+  assert(kr.x > xr0 + 80, `↘ : Kaï court (${r1(xr0)} -> ${r1(kr.x)})`);
+
+  // --- ↓ seul : accroupi (corps de 46 px), immobile
+  await f.move([[...D, 1]]);
+  await waitInput(t, (i) => i.down && !i.left && !i.right && !i.up, '↓ seul');
+  await waitFor(t, () => window.__xr2d.scene.player.crouching && window.__xr2d.scene.player.body.height === 46, {
+    timeout: 1500,
+    label: '↓ seul : Kaï accroupi (corps de 46 px)',
+  });
+  await t.wait(300);
+  await t.shot('stick-down-crouch');
+
+  // --- ↓ puis ↘ : reste accroupi et rampe lentement
+  await f.move([[...DR, 1]]);
+  await waitInput(t, (i) => i.right && i.down, '↓ puis ↘');
+  const xc0 = (await kai(t)).x;
+  await t.wait(500);
+  const kc = await kai(t);
+  t.log(`reptation 500 ms : x ${r1(xc0)} -> ${r1(kc.x)} (vx ${r1(kc.vx)})`);
+  assert(kc.crouching, '↓ puis ↘ : Kaï reste accroupi');
+  assert(kc.x > xc0 + 15 && kc.x < xc0 + 120, `↓ puis ↘ : reptation lente (${r1(xc0)} -> ${r1(kc.x)} en 500 ms)`);
+
+  // --- Retour à → : Kaï se relève et court
+  await f.move([[...R, 1]]);
+  await waitInput(t, (i) => i.right && !i.down && !i.up && !i.left, 'retour à → : droite seule');
+  await waitFor(t, () => !window.__xr2d.scene.player.crouching, { timeout: 1000, label: '→ : Kaï se relève' });
 
   // --- SAUT (2e doigt) puis TIR (3e doigt), ▶ toujours tenu
   const y0 = (await player2d(t)).feetY;

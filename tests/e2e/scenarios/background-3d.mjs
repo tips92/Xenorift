@@ -1,6 +1,6 @@
 // Arrière-plan et vol 3D (f1), commandes tactiles :
-//  A. Jungle (j1) gagnée → résultats : le canvas 2D est masqué derrière l'écran de résultats ; SUIVANT → carte
-//     d'intro du Vol 1, page cachée 3,5 s : aucune étape lancée ; au retour, le vol démarre EN PAUSE (un seul
+//  A. Jungle (j1) gagnée → résultats : le canvas 2D est masqué derrière l'écran de résultats ; SUIVANT → hangar →
+//     DÉCOLLER → carte d'intro du Vol 1, page cachée 3,5 s : aucune étape lancée ; au retour, le vol démarre EN PAUSE (un seul
 //     menu, un seul canvas visible, compte à rebours et chrono figés) ; REPRENDRE → le vol démarre.
 //  B. En vol, joystick + TURBO tenus puis page cachée : menu Pause, AudioContext suspendu, joystick et TURBO
 //     relâchés, progression et chrono figés, aucune source audio démarrée ; au retour, toujours en pause et figé ;
@@ -8,11 +8,11 @@
 //  C. Pause Capacitor seule : progression figée ; après « resume », toujours en pause ; REPRENDRE → ça repart.
 import { assert, assertEq, center, fmt, info3d, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
 import { canvases } from '../lib/gl.mjs';
+import { nextViaHangar } from '../lib/core.mjs';
 import { touches } from '../lib/touch.mjs';
 import {
   cap,
   clickResume,
-  clickThen,
   inputState,
   instrument,
   pauseState,
@@ -72,7 +72,7 @@ export default async function (t) {
   await waitForScreen(t, 'results', { timeout: 25000 });
   const onResults = await visibleCanvases(t);
   assertEq(onResults.length, 0, `écran de résultats : aucun canvas de jeu visible derrière (${fmt(await canvases(t))})`);
-  await clickThen(t, '.screens [data-screen="results"].is-active', 'Suivant');
+  await nextViaHangar(t);
   await waitIntroCard(t);
   await setHidden(t, true);
   await waitAudio(t, 'suspended', 'A : page cachée pendant l’intro → son suspendu');

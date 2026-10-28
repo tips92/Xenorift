@@ -422,3 +422,309 @@ export async function assertFrozen(t, label, ms = 700) {
   );
   return engine2d(t);
 }
+
+// ---------------------------------------------------------------- Kaï : visée, accroupi, tirs (aides DEV)
+
+/**
+ * Kaï : position (x, pieds), au sol, visée ('front' | 'diag' | 'up'), accroupi, hauteur du corps (70 debout,
+ * 46 accroupi), vitesses, sens (1 droite, -1 gauche), descente d'étage en cours, support touché (plateforme
+ * mobile : touching.down). Null hors partie 2D.
+ */
+export function kai2d(t) {
+  return t.ev(() => {
+    const s = window.__xr2d && window.__xr2d.scene;
+    if (!s || !s.player) return null;
+    const p = s.player;
+    const b = p.body;
+    return {
+      x: p.x,
+      feetY: p.feetY,
+      onGround: !!p.onGround,
+      aim: p.aim,
+      crouching: !!p.crouching,
+      h: b.height,
+      vx: b.velocity.x,
+      vy: b.velocity.y,
+      facing: p.facing,
+      dropThrough: !!p.dropThrough,
+      onMover: !!b.touching.down,
+    };
+  });
+}
+
+/** Tirs laser en vol : [{ x, y, vx, vy, dist }] (pool de la scène, du plus récent au plus ancien). */
+export function bolts2d(t) {
+  return t.ev(() => {
+    const s = window.__xr2d && window.__xr2d.scene;
+    if (!s || !s.lasers) return [];
+    return s.lasers.bolts
+      .filter((b) => b.alive)
+      .map((b) => ({ x: b.img.x, y: b.img.y, vx: b.vx, vy: b.vy, dist: b.dist }))
+      .sort((a, b) => a.dist - b.dist);
+  });
+}
+
+/**
+ * Zone de la page (pour t.shot(nom, { clip, zoom })) de `w` x `h` px centrée un peu au-dessus des pieds de Kaï,
+ * bornée à la fenêtre. `dy` : décalage vertical du centre (px de la page, négatif = plus haut), `dx` : décalage
+ * horizontal (positif = vers la droite, ex. pour voir les tirs devant Kaï).
+ */
+export function kaiClip(t, w = 240, h = 160, dy = -18, dx = 0) {
+  return t.ev(
+    ([cw, ch, oy, ox]) => {
+      const s = window.__xr2d.scene;
+      const p = s.player;
+      const v = s.cameras.main.worldView;
+      const r = s.game.canvas.getBoundingClientRect();
+      const px = r.left + ((p.x - v.x) / v.width) * r.width + ox;
+      const py = r.top + ((p.feetY - v.y) / v.height) * r.height + oy;
+      const W = window.innerWidth;
+      const H = window.innerHeight;
+      return {
+        x: Math.max(0, Math.min(W - cw, Math.round(px - cw / 2))),
+        y: Math.max(0, Math.min(H - ch, Math.round(py - ch / 2))),
+        width: cw,
+        height: ch,
+      };
+    },
+    [w, h, dy, dx],
+  );
+}
+
+/** Capture agrandie (x3) autour de Kaï : Kaï ne fait qu'une quarantaine de pixels de haut à l'écran. */
+export async function kaiShot(t, label, { w = 240, h = 160, dy = -18, dx = 0, zoom = 3 } = {}) {
+  return t.shot(label, { clip: await kaiClip(t, w, h, dy, dx), zoom });
+}
+
+// ---------------------------------------------------------------- Armes et bonus (plan 02, aides DEV)
+
+/**
+ * __xr2d.info() sans la liste des tirs : arme, chauffe, surchauffe, fiche effective (stats), bonus restants
+ * (speedLeftMs, rapidLeftMs), bouclier, speedMul, canDoubleJump. Null hors partie 2D.
+ */
+export function gun2d(t) {
+  return t.ev(() => {
+    if (!window.__xr2d || !window.__xr2d.info) return null;
+    const i = window.__xr2d.info();
+    delete i.shots;
+    return i;
+  });
+}
+
+/**
+ * Journal des tirs de Kaï (toutes armes), relevé à chaque image (évènement 'postupdate' de la scène) : à
+ * appeler une fois la partie jouable (une scène neuve à chaque t.goto). window.__xrShots.list :
+ * [{ weapon, at (horloge du jeu, ms), x, y (position à la première image vue), x0, y0 (bouche du canon : départ
+ * du tir, recalculé), vx, vy, damage, range, dist0 (distance à la première image vue), dist (distance finale,
+ * relevée à la disparition : kill() ne la remet pas à zéro), end (heure de disparition, null en vol) }].
+ * Un tir créé et détruit dans la même image n'est pas vu.
+ */
+export function recordShots(t) {
+  return t.ev(() => {
+    const s = window.__xr2d.scene;
+    if (window.__xrShots && window.__xrShots.off) window.__xrShots.off();
+    const bolts = s.lasers.bolts;
+    const rec = { list: [], prev: bolts.map((b) => ({ alive: b.alive, dist: b.dist, cur: null })) };
+    const onPost = () => {
+      for (let i = 0; i < bolts.length; i++) {
+        const b = bolts[i];
+        const pv = rec.prev[i];
+        if (b.alive && (!pv.alive || b.dist < pv.dist)) {
+          // Nouveau tir (emplacement libre ou recyclé).
+          if (pv.cur && pv.cur.end === null) pv.cur.end = s.clockMs;
+          const r = {
+            weapon: b.weapon,
+            at: s.clockMs,
+            x: b.img.x,
+            y: b.img.y,
+            x0: b.img.x - b.ux * b.dist,
+            y0: b.img.y - b.uy * b.dist,
+            vx: b.vx,
+            vy: b.vy,
+            damage: b.damage,
+            range: b.range,
+            dist0: b.dist,
+            dist: b.dist,
+            end: null,
+          };
+          rec.list.push(r);
+          pv.cur = r;
+        } else if (b.alive && pv.cur) {
+          pv.cur.dist = b.dist;
+        } else if (!b.alive && pv.alive && pv.cur) {
+          pv.cur.dist = b.dist;
+          pv.cur.end = s.clockMs;
+          pv.cur = null;
+        }
+        pv.alive = b.alive;
+        pv.dist = b.dist;
+      }
+    };
+    s.events.on('postupdate', onPost);
+    rec.off = () => s.events.off('postupdate', onPost);
+    window.__xrShots = rec;
+  });
+}
+
+/** Tirs relevés depuis l'heure de jeu `since` (voir recordShots), triés par heure de départ. */
+export function shotLog(t, since = -1) {
+  return t.ev((t0) => (window.__xrShots ? window.__xrShots.list.filter((r) => r.at >= t0) : []), since);
+}
+
+/** Heure du jeu (scene.clockMs), à passer à shotLog. */
+export function gameClock(t) {
+  return t.ev(() => window.__xr2d.scene.clockMs);
+}
+
+/** Direction d'un tir en degrés, comptée vers le haut depuis la droite (0 = droite, 90 = haut, 45 = haut-droite). */
+export function shotAngle(r) {
+  return (Math.atan2(-r.vy, r.vx) * 180) / Math.PI;
+}
+
+/** Retire de la partie (sans points ni effets) tous les ennemis vivants sauf ceux des index `keep`. */
+export function removeEnemies(t, keep = []) {
+  return t.ev((k) => {
+    const list = window.__xr2d.scene.enemies.list;
+    let n = 0;
+    list.forEach((e, i) => {
+      if (!e.alive || k.includes(i)) return;
+      e.alive = false;
+      e.dying = 0;
+      if (e.body) {
+        e.body.stop();
+        e.body.enable = false;
+      }
+      e.sprite.setVisible(false).setActive(false);
+      n++;
+    });
+    return n;
+  }, keep);
+}
+
+/**
+ * Déplace l'ennemi n° `index` : pieds en (x, feetY) (px du monde), immobile si `dir` = 0 (sinon il marche dans ce
+ * sens). Positions précédentes du corps Arcade recalées aussi : un ennemi endormi (corps désactivé, loin de la
+ * caméra) réveillé à sa nouvelle place ne doit pas recevoir tout le déplacement une seconde fois.
+ */
+export function moveEnemy(t, index, x, feetY, dir = 0) {
+  return t.ev(
+    ([i, px, py, d]) => {
+      const e = window.__xr2d.scene.enemies.list[i];
+      e.dir = d;
+      e.homeX = px;
+      e.homeY = py;
+      e.sprite.setPosition(px, py);
+      const b = e.body;
+      if (b) {
+        b.velocity.set(0, 0);
+        b.updateFromGameObject();
+        b.prev.copy(b.position);
+        b.prevFrame.copy(b.position);
+      }
+    },
+    [index, x, feetY, dir],
+  );
+}
+
+/**
+ * Pose l'ennemi vivant n° `nth` du type `kind` ('w' marcheur, 'a' blindé…) sur la case (col, row) (pieds au bas
+ * de la case), immobile si `dir` = 0 (sinon il marche dans ce sens). Renvoie { index, hp } ou null.
+ */
+export async function parkEnemy(t, kind, col, row, { dir = 0, nth = 0 } = {}) {
+  const found = await t.ev(
+    ([k, n]) => {
+      const list = window.__xr2d.scene.enemies.list;
+      const e = list.filter((x) => x.kind === k && x.alive)[n];
+      return e ? { index: list.indexOf(e), hp: e.hp } : null;
+    },
+    [kind, nth],
+  );
+  if (found) await moveEnemy(t, found.index, col * 64 + 32, (row + 1) * 64, dir);
+  return found;
+}
+
+/** Ennemi n° `index` de la scène : { alive, hp, x }. */
+export function enemy2d(t, index) {
+  return t.ev((i) => {
+    const e = window.__xr2d.scene.enemies.list[i];
+    return { alive: e.alive, hp: e.hp, x: e.sprite.x, kind: e.kind };
+  }, index);
+}
+
+/**
+ * HUD de la plateforme, partie armes et bonus : arme et graduations de la jauge, part vide de la jauge (`empty`,
+ * --heat-off : 1 = jauge vide, 0 = pleine ; null avant la première chauffe affichée), surchauffe, anneaux
+ * allumés (`powers`) et ceux qui clignotent (`ending`), cœurs.
+ */
+export function hudGun(t) {
+  return t.ev(() => {
+    const heat = document.querySelector('.hud-heat');
+    const on = [...document.querySelectorAll('.hud-powers .hud-power.is-on')].map((e) => e.dataset.kind);
+    const ending = [...document.querySelectorAll('.hud-powers .hud-power.is-on.is-ending')].map((e) => e.dataset.kind);
+    const ico = heat ? heat.querySelector('.ico-weapon') : null;
+    const grad = heat ? heat.querySelector('.heat-grad') : null;
+    const off = grad ? grad.style.getPropertyValue('--heat-off').trim() : '';
+    return {
+      weapon: heat ? heat.dataset.weapon || null : null,
+      step: heat ? heat.style.getPropertyValue('--heat-step').trim() : null,
+      empty: off === '' ? null : Number(off),
+      over: !!heat && heat.classList.contains('is-over'),
+      icon: ico ? ico.innerHTML : '',
+      powers: on,
+      ending,
+      hearts: document.querySelectorAll('.hud-hearts .hud-heart:not(.is-empty)').length,
+    };
+  });
+}
+
+/** Téléporte Kaï sur la case (col, row) (pieds au bas de la case) et attend qu'il soit posé et immobile. */
+export async function placeKai(t, col, row, label) {
+  await t.ev(([c, r]) => window.__xr2d.teleport(c, r), [col, row]);
+  await waitFor(
+    t,
+    () => {
+      const p = window.__xr2d.scene.player;
+      return p.onGround && Math.abs(p.body.velocity.x) < 1 && Math.abs(p.body.velocity.y) < 1;
+    },
+    { timeout: 3000, interval: 30, label: `${label} : Kaï posé en (${col}, ${row})` },
+  );
+}
+
+/** Kaï posé en (col, row), tourné vers la droite (petit appui sur →), arrêté, visée devant. */
+export async function placeKaiRight(t, col, row, label) {
+  await placeKai(t, col, row, label);
+  await t.key('ArrowRight', 40);
+  await waitFor(t, () => Math.abs(window.__xr2d.scene.player.body.velocity.x) < 1, { timeout: 2000, interval: 30, label: `${label} : arrêté` });
+  const k = await kai2d(t);
+  assert(k.facing === 1 && k.aim === 'front', `${label} : Kaï tourné vers la droite (${fmt(k)})`);
+}
+
+/**
+ * Arme au repos : rafale commencée finie (scene.gun.burstLeft, champ privé lisible) et plus aucun tir en vol.
+ * Attente d'état, pas de durée fixe : l'heure du jeu prend du retard sur l'heure réelle quand les images ralentissent.
+ */
+export function waitGunIdle(t, label, timeout = 3000) {
+  return waitFor(
+    t,
+    () => {
+      const s = window.__xr2d.scene;
+      return s.gun.burstLeft === 0 && !s.lasers.bolts.some((b) => b.alive);
+    },
+    { timeout, interval: 30, label: `${label} : rafale finie, plus aucun tir en vol` },
+  );
+}
+
+/** Arme au repos (waitGunIdle), puis arme `id` remise à zéro (jauge et cadence, __xr2d.weapon). */
+export async function readyGun(t, id, label) {
+  await waitGunIdle(t, label);
+  await t.ev((w) => window.__xr2d.weapon(w), id);
+}
+
+/** Fige (on) ou relance la scène 2D (scene.pause / resume) : plus de mise à jour, l'image reste affichée (captures). */
+export function freeze2d(t, on) {
+  return t.ev((v) => {
+    const s = window.__xr2d.scene;
+    if (v) s.scene.pause();
+    else s.scene.resume();
+  }, on);
+}

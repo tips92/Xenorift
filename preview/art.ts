@@ -1,29 +1,68 @@
 import Phaser from 'phaser';
 import '@fontsource/exo-2/600.css';
-import type { ThemeId } from '../src/core/types';
-import { createParallax, generatePlatformArt, type ParallaxHandle } from '../src/game2d/art';
-import { ANIM, FRAMES, TEX, TILESET, TILE_FRAME } from '../src/game2d/art/keys';
-import { DEPTH, LEVEL_ROWS, TILE, VIEW_H } from '../src/game2d/constants';
+import type { ThemeId, WeaponId } from '../src/core/types';
+import { PELLET_SPEED_JITTER, WEAPON_IDS, WEAPONS } from '../src/core/weapons';
+import { createParallax, generatePlatformArt, PLAYER_SHOULDER, type ParallaxHandle } from '../src/game2d/art';
+import { PLAYER_FRAME_COUNT } from '../src/game2d/art/draw/player';
+import { ANIM, ARM_MUZZLE, ARM_RIG, ARM_TEX, BULLET_ADDITIVE, BULLET_SIZE, BULLET_TEX, FRAMES, FRAME_SIZE, TEX, TILESET, TILE_FRAME } from '../src/game2d/art/keys';
+import { AIM_ANGLE, type AimDir, DEPTH, LEVEL_ROWS, TILE, VIEW_H } from '../src/game2d/constants';
 
 // Page d'aperçu du module graphique 2D (outil de développement, hors jeu).
-// Paramètres : ?theme=jungle|moon &view=world|sheet &w=1080..1600 &speed=90 &x=0 &vy=1 &regen=1 &ff=0 &z=1
+// Paramètres : ?theme=jungle|moon &view=world|sheet|weapons &w=1080..1600 &speed=90 &x=0 &vy=1 &regen=1 &ff=0
+// &z=1 (&cx, &cy) ; vue weapons : &bg=0 sans le décor du thème.
 
 const params = new URLSearchParams(location.search);
 const theme: ThemeId = params.get('theme') === 'moon' ? 'moon' : 'jungle';
-const view = params.get('view') === 'sheet' ? 'sheet' : 'world';
+const viewParam = params.get('view');
+const view = viewParam === 'sheet' || viewParam === 'weapons' ? viewParam : 'world';
 const viewW = Math.min(1600, Math.max(1080, Number(params.get('w')) || 1280));
+/** La planche est plus haute que la vue du jeu (rangée « Kaï + bras » et portes en bas). */
+const viewH = view === 'sheet' ? 880 : VIEW_H;
 const speed = params.has('speed') ? Number(params.get('speed')) : 90;
 const startX = Number(params.get('x')) || 0;
 const vertical = params.get('vy') === '1';
 const regen = params.get('regen') === '1';
 
 const LABEL = { fontFamily: '"Exo 2", sans-serif', fontSize: '11px', color: '#b8b0e0' };
+/** Étiquettes lisibles sur le décor du thème (vue weapons). */
+const TAG = { ...LABEL, color: '#ffffff', backgroundColor: 'rgba(5,1,15,0.6)', padding: { x: 4, y: 2 } };
+
+/** Nom court de chaque arme (étiquettes des planches). */
+const SHORT: Record<WeaponId, string> = { laser: 'laser', machinegun: 'mitr.', shotgun: 'pompe', rifle: 'fusil' };
+
+/** Kaï assemblé : corps animé + bras armé accroché à l'épaule de la frame affichée (comme Player.placeArm). */
+interface Kai {
+  body: Phaser.GameObjects.Sprite;
+  arm: Phaser.GameObjects.Image;
+  aim: AimDir;
+}
+
+/** Stand de tir de la vue weapons : Kaï tire en continu, projectiles à la vitesse et à la cadence réelles. */
+interface Range {
+  weapon: WeaponId;
+  shooter: Kai;
+  /** Bouche du canon (ARM_RIG, comme Player.gunX / gunY) et distance visible (portée ou bord de la vue). */
+  mx: number;
+  my: number;
+  maxD: number;
+  pool: Phaser.GameObjects.Image[];
+}
+
+/** Aléatoire reproductible dans [0, 1) (dispersion du mitrailleur). */
+function hash01(n: number): number {
+  const s = Math.sin(n * 12.9898) * 43758.5453;
+  return s - Math.floor(s);
+}
 
 class ArtScene extends Phaser.Scene {
   private parallax: ParallaxHandle | null = null;
   private mapW = 0;
   private movers: { s: Phaser.GameObjects.Image; x0: number }[] = [];
   private lasers: Phaser.GameObjects.Image[] = [];
+  private kais: Kai[] = [];
+  private ranges: Range[] = [];
+  /** Flèches ▲ qui oscillent au-dessus des portes (y de repos). */
+  private arrows: { s: Phaser.GameObjects.Image; y0: number }[] = [];
   private info!: Phaser.GameObjects.Text;
 
   constructor() {
@@ -39,6 +78,10 @@ class ArtScene extends Phaser.Scene {
     let t2 = t1;
     if (view === 'sheet') {
       this.buildSheet();
+    } else if (view === 'weapons') {
+      if (params.get('bg') !== '0') this.parallax = createParallax(this, theme);
+      t2 = performance.now();
+      this.buildWeapons();
     } else {
       this.parallax = createParallax(this, theme);
       t2 = performance.now();
@@ -47,7 +90,7 @@ class ArtScene extends Phaser.Scene {
       for (let k = 1; k <= ff * 60; k++) this.parallax.update(k * 16.67, 16.67);
       this.buildWorld();
     }
-    const msg = `${theme} — textures ${(t1 - t0).toFixed(1)} ms` + (view === 'world' ? ` · parallaxe ${(t2 - t1).toFixed(1)} ms` : '');
+    const msg = `${theme} — textures ${(t1 - t0).toFixed(1)} ms` + (this.parallax ? ` · parallaxe ${(t2 - t1).toFixed(1)} ms` : '');
     console.log('[art preview]', msg);
     this.info = this.add
       .text(viewW - 10, 8, msg, { ...LABEL, fontSize: '13px', color: '#ffffff', backgroundColor: 'rgba(0,0,0,0.45)', padding: { x: 6, y: 3 } })
@@ -84,6 +127,47 @@ class ArtScene extends Phaser.Scene {
     this.label(x, y + 2, name);
   }
 
+  /** Kaï complet (pieds en feetY) : corps animé, bras armé tourné selon la visée, vers la gauche si left. */
+  private kai(x: number, feetY: number, anim: string, aim: AimDir, left = false, recoil = false, weapon: WeaponId = 'laser'): Kai {
+    const body = this.add.sprite(x, feetY, TEX.player).setOrigin(0.5, 1).setDepth(DEPTH.player).setFlipX(left);
+    body.play(anim);
+    const arm = this.add
+      .image(x, feetY, ARM_TEX[weapon], recoil ? FRAMES.arm.recoil : FRAMES.arm.rest)
+      .setOrigin(ARM_RIG.pivotX / FRAME_SIZE.arm.w, ARM_RIG.pivotY / FRAME_SIZE.arm.h)
+      .setDepth(DEPTH.player + 0.5);
+    const k: Kai = { body, arm, aim };
+    this.kais.push(k);
+    this.placeArm(k);
+    return k;
+  }
+
+  /** Même calcul que Player.placeArm : épaule de la frame affichée, échelle négative pour la gauche. */
+  private placeArm(k: Kai): void {
+    const spr = k.body;
+    const f = spr.flipX ? -1 : 1;
+    const i = (+spr.frame.name | 0) * 2;
+    const sx =
+      (i + 1 < PLAYER_SHOULDER.length ? PLAYER_SHOULDER[i] : ARM_RIG.shoulderX) +
+      (k.aim === 'up' ? ARM_RIG.upShoulderX : k.aim === 'diag' ? ARM_RIG.diagShoulderX : 0);
+    const sy = (i + 1 < PLAYER_SHOULDER.length ? PLAYER_SHOULDER[i + 1] : ARM_RIG.shoulderY) + (k.aim === 'diag' ? ARM_RIG.diagShoulderY : 0);
+    k.arm.setPosition(spr.x + f * sx, spr.y + sy);
+    k.arm.setScale(f, 1);
+    k.arm.rotation = -f * AIM_ANGLE[k.aim];
+  }
+
+  /** Porte (pieds en feetY) : frame fermée ou ouverte, avec la flèche ▲ au-dessus si arrow. */
+  private door(x: number, feetY: number, open: boolean, arrow: boolean): void {
+    this.add
+      .image(x, feetY, TEX.door, open ? FRAMES.door.open : FRAMES.door.closed)
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH.decor);
+    if (!arrow) return;
+    // Même placement que engine/doors.ts : 8 px au-dessus de la porte.
+    const y0 = feetY - FRAME_SIZE.door.h - 8;
+    const s = this.add.image(x, y0, TEX.interactArrow).setOrigin(0.5, 1).setDepth(DEPTH.items + 1);
+    this.arrows.push({ s, y0 });
+  }
+
   private buildSheet(): void {
     this.cameras.main.setBackgroundColor('#140e26');
     // Tileset complet + frames 0..15
@@ -96,13 +180,9 @@ class ArtScene extends Phaser.Scene {
       const name = Object.entries(TILE_FRAME).find(([, v]) => v === i)?.[0] ?? String(i);
       this.label(x + 32, y + 62, name.replace('GROUND_', 'G_'));
     }
-    // Joueur
-    let x = this.frames(TEX.player, 11, 10, 186, 64, 80, 'p');
-    this.animSprite(x + 30, 266, TEX.player, ANIM.playerIdle, 'idle');
-    this.animSprite(x + 100, 266, TEX.player, ANIM.playerRun, 'run');
-    this.animSprite(x + 170, 266, TEX.player, ANIM.playerJump, 'jump');
-    this.animSprite(x + 240, 266, TEX.player, ANIM.playerFall, 'fall');
-    this.animSprite(x + 310, 266, TEX.player, ANIM.playerHurt, 'hurt');
+    // Joueur (corps sans le bras armé ; 11 = accroupi, 12 = accroupi qui tire), flèche ▲ ; bras armés plus bas
+    let x = this.frames(TEX.player, PLAYER_FRAME_COUNT, 10, 186, 64, 80, 'p');
+    this.single(TEX.interactArrow, x, 214, 28, 24, 'flèche');
     // Ennemis
     x = this.frames(TEX.walker, 5, 10, 300, 64, 56, 'walker');
     x = this.frames(TEX.flyer, 4, x, 300, 64, 56, 'flyer');
@@ -111,10 +191,14 @@ class ArtScene extends Phaser.Scene {
     // Objets
     x = this.frames(TEX.crystal, 6, 10, 400, 32, 40, 'cr');
     x = this.single(TEX.spore, x, 408, 24, 24, 'spore');
-    x = this.single(TEX.laser, x, 415, 40, 10, 'laser');
-    x = this.single(TEX.powerTriple, x, 396, 48, 48, 'triple');
-    x = this.single(TEX.powerShield, x, 396, 48, 48, 'shield');
-    x = this.single(TEX.powerDoubleJump, x, 396, 48, 48, 'dbljump');
+    // Projectiles des 4 armes (centrés sur la ligne y = 420), bonus vitesse / bouclier / cadence
+    for (const id of WEAPON_IDS) {
+      const b = BULLET_SIZE[id];
+      x = this.single(BULLET_TEX[id], x, 420 - b.h / 2, b.w, b.h, SHORT[id]);
+    }
+    x = this.single(TEX.powerSpeed, x, 396, 48, 48, 'vitesse');
+    x = this.single(TEX.powerShield, x, 396, 48, 48, 'bouclier');
+    x = this.single(TEX.powerRapid, x, 396, 48, 48, 'cadence');
     x = this.single(TEX.spark, x, 412, 16, 16, 'spark');
     x = this.single(TEX.puff, x, 404, 32, 32, 'puff');
     x = this.single(TEX.shieldBubble, x, 380, 96, 96, 'bubble');
@@ -135,13 +219,172 @@ class ArtScene extends Phaser.Scene {
     const flame = this.add.sprite(ship.x - 96 + 11, ay - 112 + 58, TEX.shipFlame).setOrigin(1, 0.5);
     flame.play(ANIM.shipFlame);
     this.label(x + 640, ay + 2, 'ship + flame');
-    // Loupe : &z=3&cx=200&cy=230
+    // Bras armés des 4 armes (repos, recul ; détail : &view=weapons)
+    let bx = 10;
+    for (const id of WEAPON_IDS) bx = this.frames(ARM_TEX[id], 2, bx, 664, FRAME_SIZE.arm.w, FRAME_SIZE.arm.h, SHORT[id]);
+    // Kaï assemblé (corps + bras armé) : visées devant / diagonale / haut, accroupi, tir, vers la gauche
+    const ky = 850;
+    const poses: [string, AimDir, boolean, boolean, string][] = [
+      [ANIM.playerIdle, 'front', false, false, 'idle'],
+      [ANIM.playerRun, 'diag', false, false, 'run ↗'],
+      [ANIM.playerIdle, 'up', false, false, 'idle ↑'],
+      [ANIM.playerJump, 'up', false, false, 'jump ↑'],
+      [ANIM.playerFall, 'diag', false, false, 'fall ↗'],
+      [ANIM.playerHurt, 'front', false, false, 'hurt'],
+      [ANIM.playerCrouch, 'front', false, false, 'crouch'],
+      [ANIM.playerCrouchShoot, 'front', false, true, 'crouch tir'],
+      [ANIM.playerCrawl, 'front', false, false, 'crawl'],
+      [ANIM.playerRun, 'diag', true, false, 'run ↖'],
+      [ANIM.playerIdle, 'up', true, true, '↑ tir (g.)'],
+    ];
+    for (let i = 0; i < poses.length; i++) {
+      const [anim, aim, left, recoil, name] = poses[i];
+      const px = 46 + i * 74;
+      this.kai(px, ky, anim, aim, left, recoil);
+      this.label(px, ky + 2, name);
+    }
+    // Portes : fermée avec la flèche ▲, ouverte avec Kaï devant, puis les deux frames brutes ; mur de fond
+    // d'une salle close (2x2 tuiles)
+    this.door(870, ky, false, true);
+    this.label(870, ky + 2, 'porte + ▲');
+    this.door(950, ky, true, false);
+    this.kai(950, ky, ANIM.playerIdle, 'up');
+    this.label(950, ky + 2, 'porte ouverte');
+    x = this.frames(TEX.door, 2, 998, ky - FRAME_SIZE.door.h, FRAME_SIZE.door.w, FRAME_SIZE.door.h, 'porte');
+    for (let k = 0; k < 4; k++) this.add.image(x + (k % 2) * 64, ky - 128 + Math.floor(k / 2) * 64, TEX.roomWall).setOrigin(0, 0);
+    this.label(x + 64, ky + 2, 'mur de salle');
+    this.zoom();
+  }
+
+  /** Loupe des vues fixes : &z=3&cx=200&cy=230. */
+  private zoom(): void {
     const z = Number(params.get('z')) || 1;
     if (z !== 1) {
       const cam = this.cameras.main;
       cam.setZoom(z);
-      cam.centerOn(Number(params.get('cx')) || viewW / 2, Number(params.get('cy')) || VIEW_H / 2);
+      cam.centerOn(Number(params.get('cx')) || viewW / 2, Number(params.get('cy')) || viewH / 2);
       this.info?.setVisible(false);
+    }
+  }
+
+  // ------------------------------------------------------------ Armes : bras (x2), visées, stand de tir, bonus
+  private buildWeapons(): void {
+    if (!this.parallax) this.cameras.main.setBackgroundColor('#140e26');
+    const text = (x: number, y: number, s: string, origin = 0) => this.add.text(x, y, s, TAG).setOrigin(origin, 0).setDepth(1000);
+    text(10, 6, 'Armes de Kaï : bras x2 (+ = bouche du canon), visées, tir continu à la cadence et à la vitesse réelles');
+    // Kaï dans les 6 visées testées : [anim, visée, gauche, recul, étiquette]
+    const poses: [string, AimDir, boolean, boolean, string][] = [
+      [ANIM.playerIdle, 'front', false, false, 'devant'],
+      [ANIM.playerRun, 'diag', false, false, 'course ↗'],
+      [ANIM.playerIdle, 'up', false, false, 'haut ↑'],
+      [ANIM.playerCrouch, 'front', false, false, 'accroupi'],
+      [ANIM.playerJump, 'diag', true, false, 'saut ↖'],
+      [ANIM.playerIdle, 'up', true, true, '↑ tir (g.)'],
+    ];
+    const Am = FRAME_SIZE.arm;
+    WEAPON_IDS.forEach((id, row) => {
+      const w = WEAPONS[id];
+      const feet = 140 + row * 146;
+      const shot = w.pellets > 1 ? `${w.pellets} plombs ±${w.spreadDeg}°` : w.burst > 1 ? `rafale de ${w.burst}` : w.spreadDeg ? `1 balle ±${w.spreadDeg}°` : '1 tir';
+      text(10, feet - 114, `${w.name} — portée ${w.rangeTiles} tuiles · ${shot} · ${w.cooldownMs} ms · dégâts ${w.damage}`);
+      // Planche du bras x2, bouche du canon (ARM_MUZZLE) et épaule (ARM_RIG.pivot) repérées
+      const m = ARM_MUZZLE[id];
+      for (let f = 0; f < 2; f++) {
+        const fx = 10 + f * (Am.w * 2 + 8);
+        const fy = feet - 88;
+        this.add.rectangle(fx + Am.w, fy + Am.h, Am.w * 2, Am.h * 2, 0x05010f, 0.55).setStrokeStyle(1, 0x3a3060);
+        this.add.image(fx, fy, ARM_TEX[id], f).setOrigin(0, 0).setScale(2);
+        for (const [px, py, col] of [[m.x, m.y, 0xff4fd8], [ARM_RIG.pivotX, ARM_RIG.pivotY, 0xffcc33]] as const) {
+          this.add.rectangle(fx + px * 2, fy + py * 2, 7, 1, col);
+          this.add.rectangle(fx + px * 2, fy + py * 2, 1, 7, col);
+        }
+        text(fx + Am.w, fy + Am.h * 2 + 2, f === FRAMES.arm.recoil ? 'recul' : 'repos', 0.5);
+      }
+      for (let k = 0; k < poses.length; k++) {
+        const [anim, aim, left, recoil, name] = poses[k];
+        const px = 330 + k * 76;
+        this.kai(px, feet, anim, aim, left, recoil, id);
+        text(px, feet + 2, name, 0.5);
+      }
+      // Stand de tir : Kaï debout qui vise devant
+      const sx = 830;
+      const shooter = this.kai(sx, feet, ANIM.playerIdle, 'front', false, false, id);
+      const mx = sx + ARM_RIG.shoulderX + (m.x - ARM_RIG.pivotX);
+      const my = feet + ARM_RIG.shoulderY + (m.y - ARM_RIG.pivotY);
+      const rangePx = w.rangeTiles * TILE;
+      const maxD = Math.min(rangePx, viewW - 10 - mx);
+      if (rangePx <= maxD) {
+        this.add.rectangle(mx + rangePx, my, 2, 30, 0xffffff, 0.5);
+        text(mx + rangePx, my + 16, 'portée', 0.5);
+      }
+      // Assez d'images pour tout ce qui est en vol (cycles visibles x balles x plombs, plombs lents compris)
+      const life = maxD / ((w.speed / 1000) * (w.pellets > 1 ? 1 - PELLET_SPEED_JITTER : 1)) + w.burst * w.burstGapMs;
+      const count = (Math.ceil(life / w.cooldownMs) + 1) * w.burst * w.pellets;
+      const pool: Phaser.GameObjects.Image[] = [];
+      const blend = BULLET_ADDITIVE[id] ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL;
+      for (let i = 0; i < count; i++) {
+        pool.push(this.add.image(0, 0, BULLET_TEX[id]).setDepth(DEPTH.projectiles).setBlendMode(blend).setVisible(false));
+      }
+      this.ranges.push({ weapon: id, shooter, mx, my, maxD, pool });
+    });
+    // Bonus x1,5 et x1 (taille du jeu), projectiles x3
+    const by = 612;
+    let x = 10;
+    const icons: [string, string][] = [[TEX.powerSpeed, 'vitesse'], [TEX.powerShield, 'bouclier'], [TEX.powerRapid, 'cadence']];
+    for (const [key, name] of icons) {
+      this.add.image(x, by, key).setOrigin(0, 0).setScale(1.5);
+      text(x + 36, by + 74, name, 0.5);
+      x += 86;
+    }
+    x += 16;
+    for (const id of WEAPON_IDS) {
+      const b = BULLET_SIZE[id];
+      this.add.rectangle(x + b.w * 1.5, by + 36, b.w * 3, b.h * 3, 0x05010f, 0.7).setStrokeStyle(1, 0x3a3060);
+      this.add
+        .image(x, by + 36 - b.h * 1.5, BULLET_TEX[id])
+        .setOrigin(0, 0)
+        .setScale(3)
+        .setBlendMode(BULLET_ADDITIVE[id] ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL);
+      // Pointe testée contre les tuiles et les ennemis (BULLET_SIZE.tip, depuis le centre)
+      this.add.rectangle(x + (b.w / 2 + b.tip) * 3, by + 36, 1, b.h * 3 + 8, 0xff4fd8);
+      text(x + b.w * 1.5, by + 74, `${SHORT[id]} x3`, 0.5);
+      x += b.w * 3 + 18;
+    }
+    x += 6;
+    for (const [key, name] of icons) {
+      this.add.image(x, by + 12, key).setOrigin(0, 0);
+      text(x + 24, by + 74, name, 0.5);
+      x += 62;
+    }
+    this.zoom();
+  }
+
+  /** Stand de tir : projectiles en vol (cycles de tir passés encore visibles) et recul du bras après chaque tir. */
+  private updateRanges(time: number): void {
+    for (const r of this.ranges) {
+      const w = WEAPONS[r.weapon];
+      const v = w.speed / 1000;
+      const spread = (w.spreadDeg * Math.PI) / 180;
+      const jitter = w.pellets > 1 ? PELLET_SPEED_JITTER : 0;
+      const life = r.maxD / (v * (1 - jitter)) + w.burst * w.burstGapMs;
+      let n = 0;
+      let recoil = false;
+      for (let c = Math.floor(time / w.cooldownMs); c >= 0 && time - c * w.cooldownMs <= life; c--) {
+        for (let b = 0; b < w.burst; b++) {
+          const age = time - c * w.cooldownMs - b * w.burstGapMs;
+          if (age < 0) continue;
+          if (age < 60) recoil = true;
+          for (let p = 0; p < w.pellets && n < r.pool.length; p++) {
+            // Comme le moteur : éventail régulier (plombs, vitesses un peu différentes) ou écart au hasard dans ±dispersion
+            const a = w.pellets > 1 ? spread * ((2 * p) / (w.pellets - 1) - 1) : spread * (2 * hash01(c * 3 + b) - 1);
+            const d = age * v * (1 + jitter * (2 * hash01(c * 7 + p * 13 + 1) - 1));
+            if (d > r.maxD) continue;
+            r.pool[n++].setPosition(r.mx + Math.cos(a) * d, r.my + Math.sin(a) * d).setRotation(a).setVisible(true);
+          }
+        }
+      }
+      for (let i = n; i < r.pool.length; i++) r.pool[i].setVisible(false);
+      r.shooter.arm.setFrame(recoil ? FRAMES.arm.recoil : FRAMES.arm.rest);
     }
   }
 
@@ -238,13 +481,23 @@ class ArtScene extends Phaser.Scene {
     // Acteurs (y = bas de la case)
     const at = (c: number, r: number) => ({ x: c * TILE + TILE / 2, y: (r + 1) * TILE });
     for (const o of [0, 64]) {
+      // Kaï : corps + bras armé (fusil visée haut, laser devant avec les tirs, mitrailleur en diagonale en saut),
+      // accroupi avec la pompe sur la plateforme `=`
       let p = at(o + 1, 10);
-      this.add.sprite(p.x, p.y, TEX.player).setOrigin(0.5, 1).setDepth(DEPTH.player).play(ANIM.playerIdle);
+      this.kai(p.x, p.y, ANIM.playerIdle, 'up', false, false, 'rifle');
       p = at(o + 3, 10);
-      this.add.sprite(p.x, p.y, TEX.player).setOrigin(0.5, 1).setDepth(DEPTH.player).play(ANIM.playerRun);
+      this.kai(p.x, p.y, ANIM.playerRun, 'front');
       p = at(o + 4, 8);
-      this.add.sprite(p.x, p.y, TEX.player).setOrigin(0.5, 1).setDepth(DEPTH.player).play(ANIM.playerJump);
+      this.kai(p.x, p.y, ANIM.playerJump, 'diag', false, false, 'machinegun');
       this.add.image(p.x, p.y - 40, TEX.shieldBubble).setDepth(DEPTH.player + 1).setAlpha(0.9);
+      p = at(o + 7, 6);
+      this.kai(p.x, p.y, ANIM.playerCrouch, 'front', true, false, 'shotgun');
+      // Paire de portes : ouverte (Kaï devant, flèche ▲) et fermée
+      p = at(o + 12, 10);
+      this.door(p.x, p.y, true, true);
+      this.kai(p.x, p.y, ANIM.playerIdle, 'up');
+      p = at(o + 51, 11);
+      this.door(p.x, p.y, false, false);
       p = at(o + 10, 10);
       this.add.sprite(p.x, p.y, TEX.walker).setOrigin(0.5, 1).setDepth(DEPTH.enemies).play(ANIM.walkerWalk);
       p = at(o + 16, 6);
@@ -264,11 +517,11 @@ class ArtScene extends Phaser.Scene {
       this.add.sprite(p.x, p.y, TEX.spitter).setOrigin(0.5, 1).setDepth(DEPTH.enemies).play(ANIM.spitterIdle);
       this.add.image(p.x - 50, p.y - 44, TEX.spore).setDepth(DEPTH.projectiles);
       p = at(o + 43, 10);
-      this.add.sprite(p.x, p.y, TEX.player).setOrigin(0.5, 1).setDepth(DEPTH.player).play(ANIM.playerHurt);
+      this.kai(p.x, p.y, ANIM.playerHurt, 'front');
       p = at(o + 12, 5);
-      this.add.image(p.x, p.y, TEX.powerTriple).setDepth(DEPTH.items);
+      this.add.image(p.x, p.y, TEX.powerSpeed).setDepth(DEPTH.items);
       this.add.image(p.x + 64, p.y, TEX.powerShield).setDepth(DEPTH.items);
-      this.add.image(p.x + 128, p.y, TEX.powerDoubleJump).setDepth(DEPTH.items);
+      this.add.image(p.x + 128, p.y, TEX.powerRapid).setDepth(DEPTH.items);
       // Plateforme mobile
       const mv = this.add.image(o * TILE + 48 * TILE, 8 * TILE, TEX.mover).setOrigin(0, 0).setDepth(DEPTH.tiles);
       this.movers.push({ s: mv, x0: mv.x });
@@ -283,7 +536,7 @@ class ArtScene extends Phaser.Scene {
         .play(ANIM.shipFlame);
       // Tirs laser
       for (let k = 0; k < 3; k++) {
-        const l = this.add.image(at(o + 3, 10).x + 40 + k * 120, at(o + 3, 10).y - 36, TEX.laser).setDepth(DEPTH.projectiles);
+        const l = this.add.image(at(o + 3, 10).x + 40 + k * 120, at(o + 3, 10).y - 38, TEX.laser).setDepth(DEPTH.projectiles);
         l.setData('x0', at(o + 3, 10).x + 40);
         this.lasers.push(l);
       }
@@ -307,6 +560,15 @@ class ArtScene extends Phaser.Scene {
   }
 
   update(time: number, delta: number): void {
+    // Bras recalés sur la frame affichée (rebond des poses), flèches ▲ qui oscillent (comme engine/doors.ts)
+    for (const k of this.kais) this.placeArm(k);
+    const bob = 6 * (0.5 + 0.5 * Math.sin(time * 0.006));
+    for (const a of this.arrows) a.s.y = a.y0 - bob;
+    if (view === 'weapons') {
+      this.updateRanges(time);
+      this.parallax?.update(time, delta);
+      return;
+    }
     if (view !== 'world') return;
     const cam = this.cameras.main;
     const t = time / 1000;
@@ -327,7 +589,7 @@ new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'root',
   width: viewW,
-  height: VIEW_H,
+  height: viewH,
   backgroundColor: '#05010f',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   input: { keyboard: false, mouse: false, touch: false, gamepad: false },
