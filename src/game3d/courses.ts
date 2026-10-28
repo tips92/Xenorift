@@ -18,8 +18,85 @@ export const SHIP_HIT_R = 1.05;
 export const MAX_ROCK_R = 12;
 /** Écart latéral entre deux portails ≤ 70 % de ce que permet la vitesse latérale max. */
 const REACH_FACTOR = 0.7;
+/**
+ * Graine des vagues d'ennemis : mulberry32(seed ^ WAVE_SEED_XOR), un générateur À PART. Le générateur des
+ * portails et des rochers n'est jamais touché : ils restent identiques au bit près (tests, records).
+ */
+export const WAVE_SEED_XOR = 0x5eed3b;
 
 export type Vec3Tuple = readonly [number, number, number];
+
+/** Ennemis spatiaux (game3d/enemies.ts) : chasseur, mine, essaim. */
+export type EnemyKind = 'fighter' | 'mine' | 'swarm';
+export const ENEMY_KINDS = ['fighter', 'mine', 'swarm'] as const satisfies readonly EnemyKind[];
+
+/** Vagues d'ennemis d'un parcours (réglages de genWaves ; champs ajoutables par le module ennemis). */
+export interface WavePlan {
+  /** Nombre de vagues (moins si la place manque : portails, rochers). */
+  count: number;
+  /** Types possibles. */
+  kinds: readonly EnemyKind[];
+  /** Fraction du parcours (0..1) avant laquelle aucun chasseur n'apparaît. */
+  fighterFrom: number;
+  /** Vagues de chasseurs parmi `count`, réparties après fighterFrom (les autres : mines et essaims en alternance). */
+  fighterWaves: number;
+  /** Chasseurs par vague au plus (1 ou 2). */
+  fighterMax: number;
+  /** Mines par vague, du début à la fin du parcours (1 à 3). */
+  mineMin: number;
+  mineMax: number;
+  /** Membres d'un essaim, du début à la fin du parcours (5 à 7). */
+  swarmMin: number;
+  swarmMax: number;
+  /** Première vague après ce portail (index dans gates). */
+  startGate: number;
+}
+
+// Géométrie des vagues, partagée par genWaves (placement) et game3d/enemies.ts (comportement).
+/** Mines et essaims apparaissent quand la Comète arrive à cette distance (u). */
+export const ENEMY_ACTIVATE_D = 620;
+/** Mine : explose si le centre de la Comète passe à moins de ce rayon (u). */
+export const MINE_TRIGGER_R = 3;
+/** Mines 2 et 3 d'une vague : à cette distance de la première, du même côté de la trajectoire (u). */
+export const MINE_SIDE_R = 5.6;
+/** Essaim : écart entre deux membres le long de la ligne ; ondulation (perpendiculaire) et balancement (u). */
+export const SWARM_SPACING = 2.5;
+export const SWARM_UNDULATE = 1.1;
+export const SWARM_SWAY = 1.4;
+/**
+ * Chasseur : entre en scène quand la Comète arrive à FIGHTER_SPAWN_D de WaveData.z, se cale devant elle et
+ * charge pendant FIGHTER_HOLD_SPAN u de trajet, tire quand elle passe en WaveData.z + FIGHTER_FIRE_DZ (le second
+ * d'une paire FIGHTER_STAGGER u plus loin). Repères en z de la Comète : même rendez-vous quelle que soit sa vitesse.
+ * Son orbe, presque immobile dans le décor (vitesse réglée sur la croisière, pas sur la vitesse du moment), est
+ * croisée vers WaveData.z (à ~10 u près ; le second d'une paire FIGHTER_STAGGER u plus loin) que la Comète
+ * turbote, relâche ou soit ralentie : ~1,75 s après le tir à la croisière (ORB_T de enemies.ts), plus tôt en turbo.
+ */
+export const FIGHTER_SPAWN_D = 400;
+export const FIGHTER_FIRE_DZ = 110;
+export const FIGHTER_HOLD_SPAN = 70;
+export const FIGHTER_STAGGER = 28;
+/** Écart latéral des deux chasseurs d'une paire (u). */
+export const FIGHTER_PAIR_DX = 3.4;
+
+/**
+ * Une vague, placée à la génération (déterministe). Jamais dans un portail ni sur sa ligne d'approche
+ * immédiate ; tout reste atteignable et le parcours faisable au chrono.
+ */
+export interface WaveData {
+  readonly kind: EnemyKind;
+  /**
+   * Profondeur (z < 0). Mine : sa position ; essaim : centre de la formation ; chasseur : profondeur où il
+   * entre en scène (devant la Comète, au fond du couloir).
+   */
+  readonly z: number;
+  /** Position latérale (centre de la formation pour l'essaim), dans le couloir. */
+  readonly x: number;
+  readonly y: number;
+  /** Ennemis de la vague : mines 1 à 3, essaim 5 à 7, chasseurs 1 ou 2. */
+  readonly count: number;
+  /** Variante tirée à la génération, 0..1 (sens de l'ondulation, écart des mines, côté du virage…). */
+  readonly variant: number;
+}
 
 /** Palette et ambiance d'un parcours (couleurs sRGB). */
 export interface CourseTheme {
@@ -79,6 +156,8 @@ export interface CourseDef {
   bigRocks: number;
   /** Gros rochers à la dérive dans le couloir (vol 2) ou seulement autour (vol 1). */
   bigInside: boolean;
+  /** Vagues d'ennemis (graine dérivée : WAVE_SEED_XOR). */
+  waves: WavePlan;
   theme: CourseTheme;
 }
 
@@ -114,6 +193,8 @@ export interface Course {
   rocks: RockData[];
   /** Trajectoire idéale : départ, centres des portails, portail de distorsion. */
   path: GateData[];
+  /** Vagues d'ennemis, triées par z décroissant (la première rencontrée d'abord). */
+  waves: WaveData[];
   warpZ: number;
   length: number;
 }
@@ -200,6 +281,19 @@ export const COURSES: Record<CourseId, CourseDef> = {
     farRocks: 90,
     bigRocks: 6,
     bigInside: false,
+    // Introduction douce : mines et essaims d'abord, un chasseur seul après la moitié.
+    waves: {
+      count: 6,
+      kinds: ['mine', 'swarm', 'fighter'],
+      fighterFrom: 0.5,
+      fighterWaves: 1,
+      fighterMax: 1,
+      mineMin: 1,
+      mineMax: 2,
+      swarmMin: 5,
+      swarmMax: 6,
+      startGate: 1,
+    },
     theme: NEBULA_THEME,
   },
   // Vol 2 : ceinture dense, ~90 s, gros rochers à la dérive dans le couloir.
@@ -221,6 +315,19 @@ export const COURSES: Record<CourseId, CourseDef> = {
     farRocks: 260,
     bigRocks: 18,
     bigInside: true,
+    // Les trois types, plus serrés.
+    waves: {
+      count: 10,
+      kinds: ['mine', 'swarm', 'fighter'],
+      fighterFrom: 0.15,
+      fighterWaves: 3,
+      fighterMax: 2,
+      mineMin: 2,
+      mineMax: 3,
+      swarmMin: 6,
+      swarmMax: 7,
+      startGate: 0,
+    },
     theme: ASTEROIDS_THEME,
   },
 };
@@ -398,6 +505,198 @@ function genRocks(def: CourseDef, gates: GateData[], path: GateData[], warpZ: nu
   return rocks;
 }
 
+/**
+ * Position de repos du membre `k` d'une vague, écrite dans `out` (placement et comportement des ennemis).
+ * Mines : la première en (x, y, z), les deux autres à MINE_SIDE_R d'elle, du côté `variant` (la trajectoire
+ * reste libre de l'autre côté), l'une avant, l'autre après. Essaim : ligne d'orientation `variant` passant par
+ * (x, y), en V (centre devant). Chasseurs : écart latéral de la paire, z = profondeur d'entrée en scène.
+ */
+export function waveSpot(w: Readonly<WaveData>, k: number, out: { x: number; y: number; z: number }): void {
+  if (w.kind === 'mine') {
+    if (k <= 0) {
+      out.x = w.x;
+      out.y = w.y;
+      out.z = w.z;
+      return;
+    }
+    const a = w.variant * Math.PI * 2 + (k === 1 ? 0.55 : -0.55);
+    out.x = w.x + Math.cos(a) * MINE_SIDE_R;
+    out.y = w.y + Math.sin(a) * MINE_SIDE_R;
+    out.z = w.z + (k === 1 ? 24 : -28);
+  } else if (w.kind === 'swarm') {
+    const th = w.variant * Math.PI;
+    const s = (k - (w.count - 1) / 2) * SWARM_SPACING;
+    out.x = w.x + Math.cos(th) * s;
+    out.y = w.y + Math.sin(th) * s;
+    out.z = w.z - Math.abs(s) * 0.3;
+  } else {
+    const s = w.count > 1 ? (k === 0 ? -FIGHTER_PAIR_DX : FIGHTER_PAIR_DX) : 0;
+    const th = (w.variant - 0.5) * 0.8;
+    out.x = w.x + Math.cos(th) * s;
+    out.y = w.y + Math.sin(th) * s;
+    out.z = w.z;
+  }
+}
+
+/** Zone réservée autour d'un portail (u) : ligne d'approche devant lui, sortie derrière lui. */
+const GATE_APPROACH = 75;
+const GATE_EXIT = 30;
+
+/** Types des `n` vagues : chasseurs répartis après fighterFrom, mines et essaims en alternance (mine d'abord). */
+function waveKinds(plan: WavePlan, n: number): EnemyKind[] {
+  const hasF = plan.kinds.includes('fighter');
+  const hasM = plan.kinds.includes('mine');
+  const hasS = plan.kinds.includes('swarm');
+  const fighterAt = new Set<number>();
+  if (hasF) {
+    const eligible: number[] = [];
+    for (let i = 0; i < n; i++) if ((i + 0.5) / n >= plan.fighterFrom) eligible.push(i);
+    const nf = !hasM && !hasS ? eligible.length : Math.min(Math.max(0, plan.fighterWaves), eligible.length);
+    for (let j = 0; j < nf; j++) fighterAt.add(eligible[Math.floor(((j + 0.5) * eligible.length) / nf)]);
+  }
+  const kinds: EnemyKind[] = [];
+  let alt = 0;
+  for (let i = 0; i < n; i++) {
+    if (fighterAt.has(i)) kinds.push('fighter');
+    else if (hasM && (!hasS || alt++ % 2 === 0)) kinds.push('mine');
+    else if (hasS) kinds.push('swarm');
+  }
+  return kinds;
+}
+
+/** Profondeurs occupées par une vague (z de la Comète, du premier tir au dernier danger) : jamais deux à la fois. */
+function waveBusy(kind: EnemyKind, z: number, out: [number, number]): [number, number] {
+  out[0] = z - (kind === 'fighter' ? 110 : 60);
+  out[1] = z + (kind === 'fighter' ? 240 : 160);
+  return out;
+}
+
+/**
+ * Vagues d'ennemis du parcours, triées par z décroissant. Générateur PROPRE (mulberry32(seed ^ WAVE_SEED_XOR)) :
+ * le générateur des portails et des rochers n'est pas consommé. Placement : réparties le long du parcours, hors
+ * des portails et de leur ligne d'approche (pour un chasseur : là où son orbe arrive), dans le couloir, sans
+ * chevaucher un rocher ; la première mine d'une vague barre la trajectoire mais laisse un passage sans rocher de
+ * l'autre côté, l'essaim la traverse.
+ */
+function genWaves(
+  def: CourseDef,
+  gates: readonly GateData[],
+  path: readonly GateData[],
+  warpZ: number,
+  rocks: readonly RockData[],
+): WaveData[] {
+  const plan = def.waves;
+  const n = Math.max(0, Math.floor(plan.count));
+  if (n === 0 || gates.length === 0) return [];
+  const rng = mulberry32((def.seed ^ WAVE_SEED_XOR) >>> 0);
+  const kinds = waveKinds(plan, n);
+  const zTop = gates[Math.min(Math.max(0, plan.startGate), gates.length - 1)].z - GATE_EXIT;
+  const zBot = warpZ + 150;
+  const slot = (zTop - zBot) / kinds.length;
+  const busy: [number, number][] = [];
+  const range: [number, number] = [0, 0];
+  const waves: WaveData[] = [];
+  const tmp = { x: 0, y: 0 };
+  const spot = { x: 0, y: 0, z: 0 };
+
+  // Profondeurs [lo, hi] hors des zones des portails et dans la partie jouable du parcours.
+  const gateFree = (lo: number, hi: number): boolean => {
+    if (lo < warpZ + 100 || hi > zTop + 20) return false;
+    for (const g of gates) if (hi > g.z - GATE_EXIT && lo < g.z + GATE_APPROACH) return false;
+    return true;
+  };
+  const busyFree = (kind: EnemyKind, z: number): boolean => {
+    waveBusy(kind, z, range);
+    for (const b of busy) if (range[1] > b[0] && range[0] < b[1]) return false;
+    return true;
+  };
+  // Sphère de rayon `rad` sans rocher (gros rochers : amplitude de dérive comprise).
+  const rockFree = (x: number, y: number, z: number, rad: number): boolean => {
+    for (const rk of rocks) {
+      const reach = rk.r + rk.drift + rad;
+      if (Math.abs(rk.z - z) > reach) continue;
+      if (Math.hypot(rk.x - x, rk.y - y, rk.z - z) < reach) return false;
+    }
+    return true;
+  };
+
+  const tryMine = (z: number, variant: number, frac: number): WaveData | null => {
+    const want = Math.round(clampN(plan.mineMin + (plan.mineMax - plan.mineMin) * frac + (rng() - 0.5) * 0.8, plan.mineMin, plan.mineMax));
+    const o = 1 + rng();
+    if (!gateFree(z - 40, z + 36) || !busyFree('mine', z)) return null;
+    pathAt(path, z, tmp);
+    const ux = Math.cos(variant * Math.PI * 2);
+    const uy = Math.sin(variant * Math.PI * 2);
+    const x = tmp.x + ux * o;
+    const y = tmp.y + uy * o;
+    if (Math.hypot(x, y) > CORRIDOR_R - 1.5) return null;
+    // Passage de l'autre côté (pilote automatique, joueur qui l'évite) : sans rocher sur ±12 u
+    const side = MINE_TRIGGER_R + 1.3 - o;
+    for (let dz = -12; dz <= 12; dz += 6) {
+      pathAt(path, z + dz, tmp);
+      const px = tmp.x - ux * side;
+      const py = tmp.y - uy * side;
+      if (Math.hypot(px, py) > CORRIDOR_R - 1.2 || !rockFree(px, py, z + dz, SHIP_HIT_R + 0.7)) return null;
+    }
+    let count = 0;
+    const w: WaveData = { kind: 'mine', x, y, z, count: want, variant };
+    for (let k = 0; k < want; k++) {
+      waveSpot(w, k, spot);
+      if (Math.hypot(spot.x, spot.y) > CORRIDOR_R - 1 || !rockFree(spot.x, spot.y, spot.z, 2.4)) break;
+      count++;
+    }
+    return count > 0 ? { kind: 'mine', x, y, z, count, variant } : null;
+  };
+
+  const trySwarm = (z: number, variant: number, frac: number): WaveData | null => {
+    const count = Math.round(clampN(plan.swarmMin + (plan.swarmMax - plan.swarmMin) * frac + (rng() - 0.5), plan.swarmMin, plan.swarmMax));
+    const a = rng() * Math.PI * 2;
+    const m = rng() * 1.8;
+    if (!gateFree(z - 14, z + 12) || !busyFree('swarm', z)) return null;
+    pathAt(path, z, tmp);
+    const w: WaveData = { kind: 'swarm', x: tmp.x + Math.cos(a) * m, y: tmp.y + Math.sin(a) * m, z, count, variant };
+    // Membres dans le couloir, loin des rochers (ondulation et balancement compris)
+    for (let k = 0; k < count; k++) {
+      waveSpot(w, k, spot);
+      if (Math.hypot(spot.x, spot.y) > CORRIDOR_R + 0.5) return null;
+      if (!rockFree(spot.x, spot.y, spot.z, 0.75 + SWARM_UNDULATE + SWARM_SWAY + 0.6)) return null;
+    }
+    return w;
+  };
+
+  const tryFighter = (z: number, variant: number, frac: number): WaveData | null => {
+    const count = plan.fighterMax > 1 && frac > 0.3 && rng() < 0.75 ? 2 : 1;
+    const jx = (rng() - 0.5) * 3;
+    const jy = (rng() - 0.5) * 2;
+    // Orbe : croisée vers WaveData.z quelle que soit la vitesse (à ~10 u près ; second tir décalé), fenêtre large
+    if (!gateFree(z - 75 - (count - 1) * FIGHTER_STAGGER, z + 30) || !busyFree('fighter', z)) return null;
+    pathAt(path, z, tmp);
+    return { kind: 'fighter', x: tmp.x * 0.6 + jx, y: tmp.y * 0.6 + jy, z, count, variant };
+  };
+
+  for (let i = 0; i < kinds.length; i++) {
+    const kind = kinds[i];
+    const frac = (i + 0.5) / kinds.length;
+    const target = zTop - slot * (i + 0.5);
+    let made: WaveData | null = null;
+    for (let attempt = 0; attempt < 60 && !made; attempt++) {
+      const spread = attempt < 30 ? 0.5 : 0.95;
+      const z = target + (rng() * 2 - 1) * slot * 0.5 * spread;
+      const variant = rng();
+      made = kind === 'mine' ? tryMine(z, variant, frac) : kind === 'swarm' ? trySwarm(z, variant, frac) : tryFighter(z, variant, frac);
+    }
+    if (!made) continue;
+    waves.push(made);
+    busy.push(waveBusy(made.kind, made.z, [0, 0]));
+  }
+  waves.sort((a, b) => b.z - a.z);
+  return waves;
+}
+
+function clampN(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
 export function buildCourse(id: CourseId): Course {
   const def = COURSES[id];
   const rng = mulberry32(def.seed);
@@ -405,5 +704,7 @@ export function buildCourse(id: CourseId): Course {
   const warpZ = gates[gates.length - 1].z - def.warpGap;
   const path: GateData[] = [{ x: 0, y: 0, z: 0 }, ...gates, { x: 0, y: 0, z: warpZ }];
   const rocks = genRocks(def, gates, path, warpZ, rng);
-  return { def, gates, rocks, path, warpZ, length: -warpZ };
+  // Après les rochers, avec son propre générateur : portails et rochers inchangés.
+  const waves = genWaves(def, gates, path, warpZ, rocks);
+  return { def, gates, rocks, path, waves, warpZ, length: -warpZ };
 }

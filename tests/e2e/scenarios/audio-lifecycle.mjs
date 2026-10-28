@@ -1,6 +1,6 @@
 // Son et cycle de vie de l'application (AudioContext instrumenté, compteur de morceaux de musique) :
 //  1. Accueil : aucun AudioContext avant le premier geste ; après, un seul, actif. Musique coupée : graphe fixe
-//     mesuré, puis les 47 effets x 3 et une rafale de 60 (vol de voix) : les nœuds branchés reviennent exactement
+//     mesuré, puis les 52 effets x 3 et une rafale de 60 (vol de voix) : les nœuds branchés reviennent exactement
 //     au graphe fixe. Musique réactivée : le morceau du menu démarre une fois.
 //  2. Cycles arrière-plan / retour (visibilitychange 100, 500, 1200 ms ; Capacitor seul ; mélanges dans les deux
 //     ordres Android) : suspendu en arrière-plan, actif au retour et qui le reste ; « resume » Capacitor alors que
@@ -49,6 +49,7 @@ const SFX = [
   // Monde 1 (audio/world1Sfx.ts)
   'bossAppear', 'bossHit', 'bossArmor', 'bossPhase', 'bossDefeat', 'barrier', 'mushroomBounce', 'quake', 'sporeDrop', 'radioOpen', 'lumaBip',
   'skill', 'liberation', 'blueprint', 'rescue', 'whaleCry', 'leviathanRoar', 'portalSwallow',
+  'shipGun', 'shipMachinegun', 'enemyOrb', 'enemyHit', 'enemyBlast',
 ];
 
 /** L'AudioContext doit rester 'running' pendant `ms` ms (relevé toutes les 100 ms dans la page). */

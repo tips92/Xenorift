@@ -3,10 +3,18 @@
 Troisième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail), après les
 [contrôles](01-controles.md) et les [armes](02-armes.md).
 
-**État (28/10/2026)** : **3a codée et vérifiée** (points 1 à 8, plus les effets bouclier et turbo de la Comète
-du point 14) sur la branche `plans-etapes-1-3` : scénarios e2e adaptés, nouveau scénario `hangar`, hangar
-vérifié de 844x390 à 568x320 (`small-screens`), suite complète verte (voir [Tests](#tests)). Reste l'essai sur
-téléphone. 3b (combat en vol) et la balise (16) restent à faire.
+**État (28/10/2026)** : **3a et 3b codées et vérifiées** sur la branche `plans-etapes-1-3` (3a commitée dans
+`f4275db`, 3b pas encore commitée).
+
+- **3a** (points 1 à 8, plus les effets bouclier et turbo de la Comète du point 14) : scénarios e2e adaptés,
+  nouveau scénario `hangar`, hangar vérifié de 844x390 à 568x320 (`small-screens`), suite complète verte.
+- **3b** (points 9 à 15, combat en vol ; voir « Choix de réalisation de 3b ») : scénarios e2e adaptés, nouveau
+  scénario `flight-combat`, portails et rochers de f1 / f2 identiques à ceux d'avant 3b, pilote automatique qui
+  finit f1 et f2 sans perdre de bouclier, suite complète verte (32 scénarios). Tests et captures relus, défauts de
+  rendu corrigés et tests complétés (« Corrigé après la relecture des tests et des captures de 3b »).
+- Reste l'essai sur téléphone des deux parties (3b : lisibilité des tirs et des ennemis, tir automatique, bouton
+  TIR, réglages ; points à trancher en fin de [Tests](#tests)).
+- La balise (16) est réalisée à l'étape 4 (4a), dans une autre branche (`claude/world-1-completion-866505`).
 
 ## Objectif
 
@@ -20,38 +28,69 @@ partie est jouable et testable seule.
 
 ## Ce qui existe déjà
 
-État après 3a (28/10/2026), pour coder 3b et la balise. Avant 3a : sauvegarde version 1, « Suivant » direct
-vers l'étape suivante, arme choisie sur la carte d'intro en mode test, `MAX_HEARTS` et `MAX_SHIELD` constants
-(détail dans l'historique git de ce plan).
+État après 3b (28/10/2026), pour l'étape 4 : balise (point 16) et boss du vol (plan 04, points 22 à 24). Avant
+3b : canon de la Comète enregistré mais lu par personne, HUD du vol sans chauffe ni cristaux, vol sans cristaux
+pour la réserve ; avant 3a : sauvegarde version 1, `MAX_HEARTS` et `MAX_SHIELD` constants (détail dans
+l'historique git de ce plan).
 
 - **Hangar et sauvegarde** : `core/hangar.ts` (catalogue `HANGAR_ITEMS`, `PRICES`, `itemState`,
   `applyPurchase`, `buildPlayLoadout`, `departLabel`), `core/save.ts` (version 2, `purchase`, `equipWeapon`,
   `recordResult`), écran `ui/screens/hangar.ts`, aperçu `ui/hangarPreview.ts`, enchaînement dans `ui/App.ts`
   (`goHangar`, `makeResults`). Voir « Choix de réalisation de 3a ».
-- **Canon de la Comète** : déjà achetable et enregistré (`ship.gun` : 0 canon léger, 1 mitrailleuse, 2-3 ses
-  améliorations) et transmis au vol (`hooks.loadout.ship.gunLevel`), mais lu par personne. Sa carte a
-  `soon: true` (note « Effet en vol : bientôt ») et des effets provisoires (« Cadence et dégâts + » / « ++ ») :
-  en 3b, retirer `soon` et écrire les vraies valeurs. L'aperçu du hangar dessine déjà la mitrailleuse (deux
-  canons sous les ailes, une bague cyan par amélioration) ; le modèle 3D (`game3d/ship.ts`, ~8 appels de
-  dessin) pas encore.
-- **Modules déjà branchés en vol** (point 14, sauf les canons) : `FlightRun` lit une fois `hooks.loadout.ship`
-  (`ShipLoadout` : `maxShields` 3 à 5, `boostDrainMul`, `boostFillMul` ; bornés par `shipValue`, repli sans
-  `loadout`) et l'applique à `BOOST_DRAIN` (jauge vidée en 2,5 s) et `BOOST_FILL` (rechargée en 5 s). HUD du
-  vol : 3 à 5 boucliers (`has-extra-shields`) ; ni jauge de chauffe ni cristaux (`FlightHud`, point 15).
-  `__xr3d.info()` : `maxShields`, `boostDrain`, `boostFill`. `preview/flight.html` : `&shield=` et `&boost=`
-  (pas encore `&gun=`).
-- **Cristaux du vol** : le vol ne remplit pas `StageResult.crystals` (commenté « Niveaux 2D uniquement » dans
-  `core/types.ts`) : 0 pour la réserve. Les cristaux des astéroïdes et des ennemis (points 11, 12) n'auront
-  qu'à le remplir : `recordResult` les ajoute à la réserve et les résultats affichent « +N cristaux ».
-- **Arme de Kaï, modèle pour le canon** : fiches `core/weapons.ts` (`resolveWeapon` sans allocation,
-  multiplicateurs `WeaponMods`) et surchauffe de `Gun` (`game2d/engine/weapons.ts`).
-- `src/game3d/flight.ts` (~1080 lignes) : pas de tir. `onRockHit` sait déjà faire éclater un astéroïde
-  (éclats, particules) et `rocks.destroyed[k]` le retire.
-- `src/game3d/asteroids.ts`, `effects.ts` : astéroïdes et éclats en `InstancedMesh` (budget de ~150 appels
-  de dessin respecté). Les futurs tirs et ennemis doivent suivre le même principe.
-- Commandes en vol : joystick flottant et TURBO (inversés en mode gaucher, taille et opacité réglables) ; le
-  clavier envoie déjà `fire` (J, X, F). L'option du tir manuel ira dans `TOGGLES` (rubrique `'controls'`,
-  `ui/screens/options.ts`).
+- **Modules de la Comète, tous branchés** : `FlightRun` lit une fois `hooks.loadout.ship` (`maxShields` 3 à 5,
+  `boostDrainMul`, `boostFillMul`, `gunLevel` 0 à 3 ; bornés, repli sans `loadout`). Canon : fiches
+  `core/shipGuns.ts`, carte du hangar aux effets réels (plus aucun `soon`), canons visibles sur le modèle 3D.
+- **Combat en vol** (voir « Choix de réalisation de 3b ») : `game3d/shots.ts` (canon `ShipGun`, visée,
+  projectiles `ShotPool`), `enemies.ts` (`EnemyField` : chasseur, mine, essaim, orbes), `pickups.ts`
+  (`CrystalPickups`), `courses.ts` (vagues `Course.waves`, `genWaves`), `asteroids.ts` (PV, cristal, `shotTest`,
+  `aim`) ; HUD `FlightHud.gunLevel` / `heat` / `overheated` / `crystals` ; réglage `Settings.manualFire` et bouton
+  `.xr-shoot`. `flight.ts` : ~1410 lignes, `enemies.ts` ~1510.
+- **Résultat du vol** : `StageResult.crystals` (ramassés, ajoutés à la réserve par `recordResult`),
+  `crystalsTotal` (rochers du couloir + vagues : `FlightRun.crystalsTotal()`), `enemies` (abattus par les tirs) ;
+  score = base d'avant 3b + `points` (rochers, ennemis, cristaux) ; étoiles : portails seulement.
+- **Boss du vol : où brancher une cible et des dégâts génériques** (léviathan, plan 04 point 23 : `targets` pour
+  la visée, `hitTarget`, `hitsShip`) :
+  - *Visée* : `FlightRun.updateGun` remplit `this.aim` (`AimTarget` : type, index, distance, position, vitesse)
+    par `EnemyField.aim` dans le cône sûr (`cosSure` : homingDeg + 1°) puis le cône de visée (`cosCone`), sinon
+    par `AsteroidField.aim`. Une plaque de boss se propose de même : `inAimCone(dx, dy, dz, cos, portée)` puis
+    `offerAim(aim, type, index, dist, x, y, z, vx, vy, vz)` (vitesse : visée en avance), en sautant une cible
+    condamnée (PV − `pending` ≤ 0). `AimKind` (`'none' | 'rock' | 'enemy'`) prend une valeur de plus ; `canHit`
+    (rayon de la cible + `SHOT_R` comparé à `shotMiss`) et `targetInfo` (`__xr3d.info().target`) lisent le rayon
+    et le nom selon le type.
+  - *Impacts* : `ShotPool.update(h, time, rocks, enemies, onHit)` teste le segment parcouru par chaque
+    projectile (`rocks.shotTest`, puis `enemies.shotTest` jusqu'au point d'entrée dans le rocher : premier
+    touché le long du segment) et appelle `ShotHitFn(kind, index, damage, x, y, z)` ; `FlightRun.shotHit`
+    répartit (`EnemyField.damage(i, dégâts)` → true si l'ennemi meurt). Boss : un `shotTest(x0, y0, z0, x1, y1,
+    z1, r)` de plus (sphères `segmentHitsSphere` de `util.ts`, ou capsules), une valeur de plus dans `ShotHitFn`
+    et `hitTarget(index, dégâts)` ; plutôt qu'un troisième paramètre typé, une petite interface commune
+    (`shotTest`, `pending`) passée à `update` et `claim`.
+  - *Réservation des dégâts* : `ShotPool.claim(aim, rocks, enemies)` ajoute les dégâts d'un tir qui doit toucher
+    à `pending[index]` de sa cible ; `release` les rend à l'impact ou à l'extinction (`T_ROCK`, `T_ENEMY` avec le
+    `serial` de l'occupant de l'emplacement). Une plaque ne renaît pas : pas besoin de `serial`.
+  - *Dégâts reçus* : `FlightRun.damageShip(fromX, fromY)` (bouclier, invulnérabilité, ralentissement, rebond,
+    explosion à 0). Il ne fait rien hors de la phase `fly`, comme le ramassage des cristaux
+    (`pickups.update(…, phase === 'fly')`), les chocs et tirs d'orbes des ennemis (`live`) et la visée
+    (`updateGun`, appelé par `simFly`) : une phase `boss` doit entrer dans chacun de ces tests.
+  - *Orbes* : pool d'`EnemyField` (16, `ORB_R` 1,1, lueur magenta du `glowMesh`, choc →
+    `EnemyEvents.shipHit('orb', …)`, déjà vues par `avoid`), mais `fireOrb(i, ship)` est privée et part d'un
+    chasseur (emplacement `i`, anticipation `ORB_LEAD`, vitesse réglée sur la croisière, `ORB_T`) : il faudra une
+    méthode publique qui lance une orbe depuis un point quelconque (même pool, mêmes chocs).
+  - *Rappels et récompenses* : `EnemyEvents` (`orbFired`, `enemyKilled(kind, x, y, z, points, crystals)`,
+    `shipHit`) sert de modèle aux rappels du boss vers `FlightRun` (son, `points`, cristaux lâchés par
+    `CrystalPickups.spawn(x, y, z, n)`) ; ajouter ceux du boss à `crystalsTotal()`.
+  - *Rendu* : coque « Vide » = `makeVoidMaterial(theme, bin)` d'`enemies.ts` (veines magenta, liseré froid
+    `#8f9cff`, un seul bruit sans boucle ; pas encore exportée), lueurs face caméra dans le style du `glowMesh`.
+    Appels de dessin relevés en vol avec le combat : 48 au plus (f1), 47 (f2) : le léviathan (≈ 4) tient
+    sous 150.
+  - *Parcours* : `genWaves` (graine dérivée) dépend des rochers (`rockFree`) et de `warpZ` (vagues jusqu'à
+    `warpZ` + 150). Toutes les vagues sont avant le dernier portail (f1 : dernière vague, 2 mines, à z ≈ −3817 ;
+    dernier portail ≈ −3955 ; distorsion ≈ −4285 ; f2 : −5228, −5364, −5704). Retirer les rochers au-delà du
+    dernier portail après `genWaves` et garder le `warpZ` du parcours (déplacer seulement `WarpPortal.z`) laisse
+    vagues et cristaux identiques ; le hachage `COURSE_FP` de `flight-combat` (rochers compris) est de toute
+    façon à remettre à jour pour f1 (plan 04, point 22), `WAVES` / `CRYSTALS_TOTAL` si les vagues bougent.
+  - *Aides et tests* : `__xr3d.info()` (combat), `spawn(type, distance, variant)`, `fire(on)`,
+    `advance(1 / 60)` (traces de `flight-combat`) ; le pilote automatique tire toujours en automatique et
+    s'écarte des mines, de l'essaim et des orbes (`EnemyField.avoid`).
 - **Balise** (point 16) : la fin d'un niveau 2D est la Comète (`X` de la légende, `game2d/engine/exitShip.ts`) ;
   check-levels exige exactement un `X`.
 
@@ -123,6 +162,109 @@ Données et calculs purs dans `core/hangar.ts` (catalogue `HANGAR_ITEMS`, `itemS
 - **I. Choix provisoire de l'arme** (carte d'intro) retiré ; `?weapon=` reste (paramètre de test, session).
 - **J. Aide de développement** : `__xrShell.addCrystals(n)` et la réserve dans `__xrShell.info()`.
 - Son : nouvel effet `buy` (achat confirmé).
+
+### Choix de réalisation de 3b (28/10/2026 ; valeurs de départ, à régler sur téléphone)
+
+- **A. Canons** (`core/shipGuns.ts`, `resolveShipGun(level, vitesse de croisière, out)` sans allocation) :
+  canon léger (niveau 0 : un canon sous le nez, 4 tirs/s, dégâts 1, trait cyan de 6 u) ; mitrailleuse (niveau 1 :
+  deux canons sous les ailes en alternance, 10 tirs/s en tout, dégâts 1, trait cyan clair `0x7ff6ff` de 5 u ; un
+  blanc-cyan saturait en blanc) ; niveaux 2 et 3 : dégâts
+  ×1,25 / ×1,5, cadence ×1,15 / ×1,3. Surchauffe comme au sol (reprise sous 30 %) : tir continu surchauffé au
+  bout de 4 s (canon léger : 16 tirs) et 3 s (mitrailleuse : 30 tirs, 39 au niveau 3 ; à tous ses niveaux, la
+  cadence divise aussi la chauffe par tir) ; refroidissement 0,5 / 0,55 par seconde après 400 / 300 ms sans tirer
+  (reprise en ~1,4 s / ~1,3 s). Portée = distance parcourue en 1,6 s à la vitesse de croisière (93 u en f1,
+  102 u en f2) ; projectiles à +190 / +220 u/s de la vitesse de la Comète, rayon d'impact 0,35 u (`SHOT_R`),
+  48 au plus.
+- **B. Visée** : cible = astéroïde du couloir ou ennemi le plus proche dans un cône de 10° (demi-angle) devant
+  la Comète et à portée ; tir visé en avance, écarté de l'axe d'au plus 6° (`SHIP_AIM`). Tir automatique par
+  défaut (tant qu'une cible est dans le cône, hors surchauffe) ; réglage « Tir manuel » (`Settings.manualFire`,
+  rubrique Commandes, aussi dans Pause, icône viseur) : bouton TIR tactile `.xr-shoot` (cyan, viseur), placé comme
+  le TIR 2D par rapport à SAUT (à gauche de TURBO, un peu plus haut), masqué hors tir manuel, en vol seulement.
+  J, X, F tirent dans les deux modes (appui bref gardé 150 ms, `FIRE_QUEUE`). Réalisé : les ennemis passent d'abord (un rocher du couloir, presque toujours
+  là, cachait le chasseur qui vire), le plus proche dans un cône de homingDeg + 1° (7°), sinon de 10° ; aucun ou
+  hors d'atteinte : le rocher du couloir choisi de même. Le tir automatique ne part que si le tir guidé peut
+  toucher (`shotMiss` ≤ rayon de la cible + `SHOT_R` ; sinon ~2 tirs sur 3 étaient perdus au bord du cône) ; le
+  tir manuel n'est pas filtré. Le pilote automatique tire toujours en automatique. Un tir qui doit toucher
+  réserve ses dégâts sur sa cible (`ShotPool.claim`, compteurs `pending` des rochers et des ennemis, rendus à
+  l'impact ou à l'extinction) : la visée ignore une cible que les tirs en route suffisent à détruire (sinon la
+  mitrailleuse perdait la moitié de ses tirs sur des cibles déjà condamnées, et toutes ses surchauffes en f2 en
+  venaient). Impact : le premier touché le long du segment, rochers et ennemis confondus.
+- **C. Astéroïdes destructibles** : PV selon le rayon (`rockHp` : 1 sous 1,6 u, 2 sous 3,4, 3 sous 5,5, 4 sous
+  8,5, sinon 5) ; détruits par un tir :
+  éclatement de `onRockHit` sans perte de bouclier ni ralentissement, 10 points ; ~1 rocher du couloir sur 4
+  lâche un cristal (`rockDropsCrystal` : graine du parcours + index ; 15 possibles en f1, 78 en f2). Cristaux du
+  vol (`game3d/pickups.ts`) aimantés près de la Comète, +1 réserve et 50 points chacun ; couleurs fixes, celles de
+  l'icône du HUD et du cristal 2D (facettes `#e8feff` / `#9ffbff` en haut, `#3ff7ff` / `#2a7dff` en bas, bipyramide
+  à 6 pans de 1,74 u), halo additif face caméra qui pulse et éclat bref (croix blanche ~0,15 s toutes les ~1,6 s) :
+  avant, couleur des facettes des rochers du thème (orange dans la Ceinture : pris pour des éclats de roche). Cristal lâché : glisse
+  de 45 % de l'écart latéral vers la ligne de la Comète (`PULL` ; les rochers du couloir sont à 7-13 u de la
+  trajectoire idéale), aimant de 7 u qui suit la Comète, ramassage à 1,6 u. Rocher détruit par un tir :
+  `enemyBlast` faible et grave ; touché sans être détruit : étincelles et `enemyHit` faible.
+- **D. Ennemis** (`game3d/enemies.ts`, un InstancedMesh par type + les orbes) : chasseur (3 PV, 150 points,
+  2 cristaux : arrive de face, tire une orbe vers la position anticipée, s'écarte en virant) ; mine (2 PV,
+  50 points, 1 cristal : immobile, clignote, explose à moins de 3 u) ; essaim (5 à 7, 1 PV, 30 points chacun,
+  1 cristal pour la vague entière abattue). Orbes lentes, grosses, magenta. Orbe, mine ou contact : un bouclier
+  perdu (même invulnérabilité que les rochers), l'ennemi percuté est détruit sans points ni cristal. Rendu : 3
+  InstancedMesh « touchés par le Vide » (shader à veines magenta, un seul bruit, sans boucle ; liseré froid
+  `#8f9cff` propre aux ennemis et fresnel discret : celui du thème Nébuleuse, magenta, rendait les coques roses) + 1
+  InstancedMesh de lueurs face caméra (œil du chasseur, balise de la mine, nuée de l'essaim, orbes, éclairs
+  d'explosion) : 4 appels de dessin au plus. Le magenta est réservé aux orbes et aux veines : œil du chasseur ambre
+  `#ffb030` (lueur de 1,2 à 2,6 u, plus petite que le corps ; elle faisait 4,8 u et cachait la silhouette), bouts
+  d'ailes et de griffes allumés ; explosion du chasseur blanc chaud et violet (éclair de 7 u qui pâlit en 0,18 s,
+  onde de choc, 8 étincelles magenta au plus : une orbe qui vient de partir reste lisible) ; essaim : lueur
+  max(2,4 u, distance × 0,02), plus vive (une ligne de points violets qui barre le passage, de loin).
+  Chasseur : entre en scène à 400 u, charge à portée + 8 u (100,8 u en f1, 110,4 u en f2 : son orbe part
+  toujours), tire quand la Comète passe en z + 110, orbe qui l'atteint en 1,75 s à la croisière (anticipation
+  0,65), puis virage lent (recul 35 u/s, latéral ≤ 12 u/s) pendant lequel on peut l'abattre. Vitesse de l'orbe
+  réglée sur la croisière, pas sur la vitesse du moment : presque immobile dans le décor, elle est croisée vers
+  `WaveData.z` même si la Comète tire en turbo puis le relâche (avant : jusqu'à 7 u d'un portail en f2). Mines et
+  essaims apparaissent à 620 u.
+- **E. Vagues** (`Course.waves`, `genWaves` de `game3d/courses.ts`) : générateur à part
+  (`mulberry32(seed ^ WAVE_SEED_XOR)`), portails et rochers identiques au bit près ; f1 : 6 vagues (mines et
+  essaims, un chasseur après la moitié) ; f2 : 10 vagues, les trois types. Jamais dans un portail ni sur sa
+  ligne d'approche. Le pilote automatique finit f1 et f2 en tir automatique avec au moins 1 bouclier
+  (`EnemyField.avoid` : écart latéral pour une mine, un membre d'essaim là où il sera, une orbe). Vagues obtenues :
+  f1 = mine, essaim de 5, mine, essaim de 6, chasseur seul (77 % du parcours), 2 mines ; f2 = 2 mines, essaim de
+  6, chasseur, mine, essaim de 7, 2 chasseurs, 3 mines, essaim de 7, 2 chasseurs, mine. Cristaux possibles : f1 23
+  (15 rochers + 8 ennemis), f2 98 (78 + 20). Simulation Node (sans rendu, bouches sans l'inclinaison du modèle) :
+  3 boucliers sur 3 en f1 et f2, canon 0 à 3 ; sans esquive, f2 perd tous ses boucliers (orbes, mine). Avec la
+  réservation des dégâts (B) : tous les tirs touchent ; f2 sans surchauffe à la mitrailleuse (6 au canon léger) ;
+  ennemis abattus en f2 : 14 sur 32 (canon léger), 29, 28 et 29 (mitrailleuse 1 à 3 ; avant : 9, 18, 19) ; f1 :
+  12, 15, 16, 16 sur 16. Au-delà du niveau 1, les améliorations abattent plus loin (distance moyenne en f2 :
+  68, 70, 72 u) et détruisent plus de rochers (163, 166, 172).
+- **F. Modèle** : canon léger = tourelle et canon court sous le nez ; mitrailleuse = nacelle sous chaque aile,
+  vers son bout (x = ±1,45 : bord d'attaque reculé) et prolongée loin devant (fourreau, long canon, bouche en
+  z = −1,12), bagues cyan, bouche lumineuse et une bague de plus par amélioration ; fusionnés avec les pièces et les
+  liserés (aucun appel de dessin de plus). Vue de la caméra de poursuite (~13° au-dessus), l'aile cache ce qui est
+  dessous jusqu'à ~0,5 u devant son bord d'attaque : sous l'aile à x = ±1,15 et bouche en z = −0,62, les canons
+  achetés ne se voyaient pas de dos. Éclair de bouche : halo additif par bouche, 70 ms (+1 ou +2 appels pendant le
+  tir). Trait du tir : cœur et halo en fuseaux (faces avant seulement), halo éteint à son anneau et allumé à ses
+  bouts (vu dans l'axe : un point qui s'estompe ; un anneau plus vif dessinait un hexagone blanc), épaissi avec la
+  distance à la caméra (0,005 u par u : lisible loin devant).
+- **G. HUD du vol** : jauge de chauffe du canon (`.fl-heat`, mêmes classes internes que la jauge 2D, `data-gun` =
+  `light` | `machinegun`) entre le chrono et le bouton pause (right : hud-right + 62 px, largeur clamp(116 px, 22vw,
+  220 px), 108 px sous 620 px), graduations = 1 s de tir continu (25 % canon léger, 33 % mitrailleuse) ; cristaux du
+  vol (`.fl-crystals`, pastille sous bouclier et turbo : hud-top + 56 px, + 48 px sous 380 px de haut). Vérifié
+  sans chevauchement de 844x390 à 568x320 avec 5 boucliers, mitrailleuse et tir manuel, aussi en surchauffe
+  (`small-screens`).
+- **H. Score** : points des rochers, ennemis et cristaux ajoutés au score du vol ; étoiles inchangées
+  (portails franchis). `StageResult` du vol : `crystals`, `crystalsTotal`, `enemies`.
+- **I. Sons** : `shipGun`, `shipMachinegun`, `enemyOrb`, `enemyHit`, `enemyBlast` ; cristal ramassé : `crystal`.
+- **J. Hangar** : carte du canon sans « bientôt », effets réels (« Canon léger → Mitrailleuse : cadence ×2,5 »,
+  « Dégâts ×1,25, cadence ×1,15 », « Dégâts ×1,5, cadence ×1,3 ») ; `preview/flight.html` : `&gun=0..3`,
+  `&manual=1`, J / X / F tir, G gagner (avant : W, qui est Z en AZERTY : on montait en gagnant), L échouer (avant :
+  F, désormais tir), 1 / 2 / 3 : chasseur, mine, essaim devant la Comète ; l'écran de fin donne cristaux et ennemis.
+- **K. Aides DEV** : `__xr3d.info()` (`heat`, `overheated`, `gunLevel`, `manualFire`, `shotsActive`, `target`,
+  `enemies`, `orbsActive`, `crystals`, `crystalsTotal`, `rocksDestroyed`, `points`, `drawCalls` ; en plus :
+  `range`, `waves`, `crystalsActive`, `crystalsDropped`, `target.hit`), `__xr3d.spawn(type, distance = 60,
+  variant)` (nombre placé ; chasseur tenu à max(30, distance), il tire après 42 u de trajet ; `variant` 0..1, au
+  hasard sans lui : orientation de l'essaim et phase de son ondulation comptée depuis la pose, côté du virage du
+  chasseur, clignotement de la mine), `__xr3d.fire(on = true)`.
+- **L. Cycle de vie** : ennemis mis à jour une fois par sous-pas (`live` en vol ; ensuite ils finissent leur
+  mouvement sans toucher la Comète ; jamais pendant l'intro) ; projectiles et cristaux dans toutes les phases,
+  ramassage en vol seulement. Tout est dans la scène et le `Bin` (perte de contexte : rien de plus ; `envMap` →
+  `swapEnv`) ; `destroy()` : `EnemyField.dispose`, puis tampons d'instances de tous les InstancedMesh libérés.
+  Appels de dessin ajoutés : ennemis 4, tirs 1, cristaux 2 (cristaux et halos), éclairs de bouche 0 à 2 (+9 au plus).
 
 ## Le hangar
 
@@ -218,12 +360,13 @@ Un monde complet rapportera environ 150 cristaux (3 niveaux de ~50) plus ceux de
     Leurs tirs sont des orbes lentes et lumineuses, faciles à lire. Chaque ennemi détruit rapporte des
     points et des cristaux.
 13. **Parcours** (`game3d/courses.ts`) : vagues d'ennemis ajoutées aux parcours Nébuleuse et Ceinture
-    d'Orak, générées avec la même graine que les portails (parcours identique à chaque partie).
+    d'Orak, générées avec la même graine que les portails (parcours identique à chaque partie ; réalisé avec un
+    générateur dérivé de cette graine, qui laisse portails et rochers inchangés : choix E).
 14. **Modules de la Comète** : boucliers max, turbo (faits en 3a), et canons visibles sur le modèle
     (`game3d/ship.ts`).
 15. **HUD du vol** (`ui/hud.ts`) : jauge de chauffe du canon, compteur de cristaux.
 
-### Pour l'étape 4
+### Pour l'étape 4 (réalisée en 4a, branche `claude/world-1-completion-866505`)
 
 16. **Balise de LUMA** (`game2d/engine`, légende des niveaux) : nouvel objet de fin de niveau qui
     remplace la Comète dans les niveaux 1 et 2. Kaï l'active, un faisceau l'emporte, puis on passe aux
@@ -292,6 +435,93 @@ Un monde complet rapportera environ 150 cristaux (3 niveaux de ~50) plus ceux de
   (absent depuis Niveaux), canvas `.hg-canvas-el` (après l'import dynamique). Aides : `__xrShell.addCrystals(n)`
   (avant d'ouvrir le hangar), `__xrShell.info()` (`crystals`, `play`, `screen`), `__xr2d.info()` (`mods`,
   `stats`, `hearts`, `maxHearts`), `__xr3d.info()` (`maxShields`, `boostDrain`, `boostFill`).
+- **Adaptés et écrits après 3b** (28/10/2026) :
+  - `hangar` : carte du canon sans « Effet en vol : bientôt », ligne d'effet réelle (« Canon léger → Mitrailleuse :
+    cadence ×2,5 », puis « Dégâts ×1,25, cadence ×1,15 ») ; réglages relus avec `manualFire: false` (absent des
+    sauvegardes écrites par le scénario) ;
+  - `audio-lifecycle` : 33 effets (`shipGun`, `shipMachinegun`, `enemyOrb`, `enemyHit`, `enemyBlast`) ;
+  - `campaign-flow` : f1 gagné aussitôt rapporte les cristaux ramassés avant `win()` (0 en général), la réserve suit ;
+  - `flight-autopilot` : au moins 1 bouclier, ennemis abattus et cristaux ramassés, appels de dessin relevés chaque
+    seconde sous 150 (obtenus : f1 3 boucliers sur 3, 12 ennemis, 8 cristaux sur 23, 25 rochers, 48 appels au plus ;
+    f2 3 sur 3, 15 ennemis sur 32 au canon léger, 22 cristaux sur 98, 96 rochers, 45 appels) ;
+  - `small-screens` : `.fl-heat` et `.fl-crystals` dans les vérifications du HUD du vol ; vol à 5 boucliers,
+    mitrailleuse et tir manuel de 844x390 à 568x320 (TIR à gauche de TURBO, rien ne se chevauche) ; ligne « Tir
+    manuel » des Options de la Pause amenée à l'écran et entière ; en gaucher grand, TIR à gauche (à droite de
+    TURBO) ;
+  - `touch-controls` : pas de TIR en tir automatique ; `touch-options` : en gaucher et tir manuel, TIR à gauche,
+    de la taille du TIR de la plateforme au même cran, opacité de la couche, tir avec le joystick à droite ;
+  - `f1-play`, `f1-ctx-*`, `fps-flight` : verts sans changement ;
+  - **nouveau `flight-combat`** (≈ 1 min 40) : parcours (vagues déterministes et attendues, empreintes des portails et
+    des rochers d'avant 3b) ; f1 au canon léger en tir automatique : mine posée à 60 u abattue en 0,65 s de jeu sans
+    bouclier perdu, chasseur abattu en 0,8 s, points exacts (rochers 10, cristaux 50, mine 50, chasseur 150, essaim
+    30), cristaux ramassés et compteur du HUD, rocher visé (`target`) et détruits sans bouclier perdu, un son par
+    tir ; victoire : « +N cristaux », réserve et sauvegarde ; mitrailleuse : essaim de 6 abattu en 0,8 s (jusqu'à
+    3 essais, voir plus bas) et cristal de la vague, cadence 10 tirs/s, bouches alternées, surchauffe après 30 tirs
+    (2,9 s), reprise en 1,28 s ; tir manuel (5 boucliers) : aucun tir sans appui, mine frôlée et orbe reçue (un bouclier chacune, au même sous-pas
+    que leur disparition, ni points ni ennemi compté), TIR tactile, joystick + TURBO + TIR, J / X / F, canon léger
+    (4 tirs/s, surchauffe après 16 tirs en 3,75 s, reprise en 1,42 s), option coupée depuis la Pause (TIR masqué,
+    tir automatique revenu) ; f2 au pilote automatique (x2,5) : les trois types rencontrés, 47 appels de dessin au
+    plus. Captures pour la revue : gros plans des trois ennemis (nébuleuse et ceinture), orbe, explosion, cristaux,
+    Comète armée (de face au compte à rebours, de dos, en plein tir), HUD à 844x390 et 640x320, TIR, option.
+- **Aide ajoutée pour les tests** : `__xr3d.info()` donne aussi `shotsFired` et `lastMuzzle` (cadence, alternance des
+  canons). Aucun bogue du jeu trouvé par ces tests.
+- **Suite complète verte** (28/10/2026, après `npm run build`) : 32 scénarios en ≈ 27 min.
+- **Corrigé après la relecture des tests et des captures de 3b** (28/10/2026) :
+  - jeu (rendu seulement, règles inchangées) : tirs vus de dos qui saturaient en hexagones blancs (halo éteint à son
+    anneau, faces avant seulement, cyan franc, épaissis avec la distance, traits plus longs) ; œil du chasseur
+    magenta plus gros que lui (ambre, plus petit) ; cristaux du vol de la couleur des facettes des rochers (couleurs
+    fixes de l'icône, halo et éclat : +1 appel de dessin) ; canons de la mitrailleuse invisibles de dos (vers le bout
+    de l'aile, prolongés devant) ; explosion du chasseur magenta où l'orbe se noyait, et petit disque blanc de loin
+    (blanc et violet, éclair de 0,18 s, onde de choc) ; coques roses de près (liseré froid propre, fresnel discret) ;
+    essaim illisible de loin (lueurs plus grosses et plus vives) — voir « Choix de réalisation de 3b », C, D et F ;
+  - `__xr3d.spawn(type, distance, variant)` déterministe (l'essaim tiré au hasard faisait échouer `flight-combat`
+    environ une fois sur huit) et `info().crystalsDropped` ;
+  - `flight-combat` : parcours (fenêtres des vagues contre les zones des portails ; hachage de tous les champs des
+    rochers, de la trajectoire et de la distorsion, relevé dans Chrome sur f4275db) ; score du vol = base d'avant 3b
+    + points du combat, étoiles inchangées, score affiché = record ; tir automatique jamais sans cible atteignable
+    (toutes les traces) et J qui tire sans cible en tir automatique ; cristaux attribués au pas même de chaque
+    destruction (mine 1, chasseur 2, dernier membre d'une vague entière 1, aucun pour une vague incomplète ni pour
+    un choc) ; essaims à un avancement fixé du vol et à variante mesurée (un abattu en entier, un qui laisse filer un
+    membre) ; tir forcé et trace dans la même tâche ; coups pour abattre un chasseur (3 au canon léger et à la
+    mitrailleuse, 2 au niveau 3) ; nouvelle partie B3 (mitrailleuse niveau 3 : 13 tirs/s, 39 tirs avant la
+    surchauffe ; membre d'essaim percuté ; mine percutée pendant l'invulnérabilité) ; jauge du HUD rallumée après la
+    surchauffe ;
+  - `flight-autopilot` : partie neuve au départ de chaque vol (aucun ennemi, orbe, tir, cristal, compteur ni
+    cristal au HUD de la précédente), « +N cristaux » et réserve = f1 + f2 ; `stress-laps` : géométries, textures et
+    programmes du renderer à l'entrée en vol, égaux au 1er et au 3e tour ; `f1-ctx-loss` : après chaque restauration
+    sur place, mine abattue en moins de 1 s de jeu et appels de dessin revenus ; `touch-options` : TIR du vol aux
+    crans Grands et Discrète (taille du TIR 2D au même cran, couche du vol à 0,45) ; `small-screens` : HUD du vol en
+    surchauffe (libellé SURCHAUFFE) de 844x390 à 568x320 ;
+  - relevés : hachage des parcours identique dans Chrome entre f4275db et 3b (sous Node aussi, avec d'autres
+    valeurs : fonctions Math.* d'une autre version de V8) ; f1 au pilote automatique : score = base + 1 040 points,
+    3 étoiles ; essaim à 6 % du parcours (variante 0,3) : 6 sur 6 et 1 cristal ; à 13 % (variante 0,4) : 5 sur 6,
+    aucun cristal (mêmes résultats sur 2 à 8 passages ; l'issue dépend de l'endroit, presque toutes les variantes
+    laissent filer un membre à 13 %) ; mine abattue en 25 à 37 sous-pas après une restauration, appels de dessin 39
+    → 42 ; renderer à l'entrée en vol : f1 36 géométries, 6 textures, 24 programmes, f2 33 / 6 / 23, aux 3 tours ;
+    pilote automatique inchangé (f1 3 boucliers, 12 ennemis, 8 cristaux, 26 rochers ; f2 3 boucliers, 15 ennemis,
+    22 cristaux, 97 rochers). Aucun bogue des règles du jeu trouvé ;
+  - première suite complète après ces changements : l'essaim à orientation libre, posé à 17 % du parcours, a croisé
+    la première mine de f1 (z ≈ −849, abattue pendant la trace : 20 points de trop). Il est désormais posé une fois
+    cette mine passée ou abattue (dès 18 %, avant l'entrée en scène du premier essaim à 22 %) et n'est que journalisé
+    si une vague s'en mêle (les essais à variante fixée, eux, le refusent). Même suite : la mine percutée de B3 a
+    déclenché au moment où la première mine de f1 entrait en scène (Comète en z ≈ −229) : nombre de mines inchangé.
+    B3 et C posent désormais leurs mines après cette entrée en scène (`afterFirstWave`, 6 % du parcours).
+  - **Suite complète verte** (28/10/2026, après `npm run build`) : 32 scénarios en ≈ 33 min (`flight-combat`
+    ≈ 1 min 45 seul, 2 min 25 dans la suite).
+- **Points relevés par les captures (3b), à juger sur téléphone** :
+  - les tirs restent des points vus presque dans l'axe depuis la caméra de poursuite (cyan désormais, épaissis
+    au loin) ; l'éclair de bouche se voit mieux ;
+  - le chasseur vu de face reste fin (ailes plates vues par la tranche) : œil ambre et bouts d'ailes allumés ;
+    l'essaim se lit bien ; la mine se lit dans la nébuleuse mais se perd parmi les rochers serrés de la ceinture ;
+    l'orbe magenta, cerclée de sombre, se distingue bien des portails et des cristaux ;
+  - essaim de 6 posé à 95 u devant la mitrailleuse et le pilote automatique : selon l'orientation et l'endroit, un
+    membre peut sortir du cône de visée de près (le bonus de vague est alors perdu) ; au pilote automatique, f1
+    abat 12 ennemis sur 16 ;
+  - un appui bref sur TIR (ou J / X / F) moins de 100 ms après un tir est perdu : la mémoire de l'appui (150 ms,
+    comme au sol) est plus courte que la cadence du canon léger (250 ms) ; à garder ou à allonger ;
+  - cristaux attirés par l'aimant mais pas encore ramassés au début de la distorsion : perdus (ramassage en vol
+    seulement) ;
+  - l'aperçu du hangar ne dessine pas le canon léger (niveau 0), le modèle 3D si ; inchangé.
 - **Vérifications habituelles** : `npm run typecheck`, `npm run check-levels`, `npm run build`, puis la
   suite e2e complète, et un essai sur téléphone (lisibilité du hangar, tir auto, fluidité en vol).
 
@@ -302,18 +532,22 @@ Un monde complet rapportera environ 150 cristaux (3 niveaux de ~50) plus ceux de
   de travail), `CLAUDE.md` (architecture, contrats, recettes Sauvegarde et Achat du hangar, déroulement d'une
   étape, aides DEV), `docs/ARCHITECTURE.md`, `README.md`, `tests/e2e/README.md` (scénario `hangar`,
   sélecteurs, valeurs recopiées).
-- **3b** : `docs/GDD.md` (« Mode vol spatial 3D » : tir, tir automatique, ennemis, cristaux du vol ; canon
-  de la Comète au hangar), `docs/SOUHAITS.md` (section 3), `CLAUDE.md` (`game3d/shots.ts`, `enemies.ts`,
-  option du tir manuel, recette Parcours de vol : vagues d'ennemis ; retirer « Effet en vol : bientôt »),
-  `tests/e2e/README.md` (`flight-combat`, aides de `__xr3d`).
+- **3b (fait le 28/10/2026)** : `docs/GDD.md` (« Mode vol spatial 3D » : tir, tir automatique, ennemis, cristaux
+  du vol ; canon de la Comète au hangar ; score, HUD, options, résultats), `docs/SOUHAITS.md` (section 3, « Où on
+  en est », ordre de travail), `CLAUDE.md` (`game3d/shots.ts`, `enemies.ts`, `pickups.ts`, `core/shipGuns.ts`,
+  contrats, option du tir manuel, recette Parcours de vol : vagues d'ennemis, empreintes de `flight-combat` ; aides
+  DEV, clavier), `docs/ARCHITECTURE.md` (arborescence, emplacements réels), `README.md` (canon, tir en vol),
+  `tests/e2e/README.md` (`flight-combat`, aides de `__xr3d`, sélecteurs du HUD du vol et du TIR),
+  `docs/plans/README.md` (état, prochaine action) ; ici : état, « Ce qui existe déjà » pour l'étape 4.
 
 ## Ordre de réalisation
 
 **3a** (fait) — sauvegarde v2 et gain de cristaux (points 1, 2) ; enchaînement et écran du hangar (3 à 5) ;
 améliorations dans le jeu 2D (6) ; aperçu (7) ; retrait du choix provisoire (8) ; tests.
 
-**3b** — tir de la Comète et tir automatique (9, 10) ; astéroïdes destructibles (11) ; ennemis et vagues
-(12, 13) ; canons visibles de la Comète et HUD (14, 15 ; boucliers et turbo du point 14 faits en 3a) ; tests
-et essai sur téléphone.
+**3b** (codée et vérifiée dans le navigateur ; reste l'essai sur téléphone) — tir de la Comète et tir automatique
+(9, 10) ; astéroïdes destructibles (11) ; ennemis et vagues (12, 13) ; canons visibles de la Comète et HUD (14, 15 ;
+boucliers et turbo du point 14 faits en 3a) ; tests et essai sur téléphone.
 
-**Balise** (16) : à la fin, ou au début de l'étape 4 (le plan 4, pas encore validé, la place dans 4a).
+**Balise** (16) : à l'étape 4 (4a, avec les sorties communes du plan 04), dans la branche
+`claude/world-1-completion-866505`.

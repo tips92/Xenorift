@@ -22,7 +22,7 @@
 //  F. Mode test : réserve insuffisante toujours refusée (les prix restent) ; conditions levées (note « Mode test ») ;
 //     pompe (non possédée) équipée pour la session puis achetée (rangée dans l'ordre des armes, devient l'arme
 //     enregistrée, focus sur Équiper) ; laser rééquipé (dernier choix gagnant) puis Cadence et Refroidissement ;
-//     Portée du fusil ; mitrailleuse de la Comète (« Effet en vol : bientôt ») ; cœur supplémentaire ; j1 : pompe,
+//     Portée du fusil ; mitrailleuse de la Comète (effets réels, sans « bientôt ») ; cœur supplémentaire ; j1 : pompe,
 //     4 cœurs (HUD), cœur perdu puis réapparition à 4 cœurs, portée d'une balle du fusil, cadence et refroidissement
 //     du laser ; second cœur (Max) : 5 cœurs (HUD).
 //  G. Hors mode test, équipage et plan présents dans la sauvegarde : Dégâts 2 (Tess), mitrailleur (son plan) et cœur
@@ -48,6 +48,8 @@ const SAVE_KEY = 'xeno-rift-save-v1';
 const HG = '.screens [data-screen="hangar"].is-active';
 const RES = '.screens [data-screen="results"].is-active';
 const SETTINGS = { music: true, sfx: true, haptics: false, tilt: false, unlockAll: false, touchSize: 2, touchOpacity: 0, leftHanded: true };
+/** Réglages relus par le jeu : le tir manuel (3b), absent des sauvegardes écrites ici, prend sa valeur par défaut. */
+const SETTINGS_READ = { ...SETTINGS, manualFire: false };
 const RECORD = { score: 99999, stars: 2 };
 const V1 = {
   version: 1,
@@ -429,7 +431,7 @@ export default async function (t) {
   t.log(`sauvegarde après j1 : ${fmt(save)}`);
   assertEq(
     { version: save.version, unlocked: save.unlocked, best: save.best.j1, settings: save.settings, loadout: save.loadout, crystals: save.crystals },
-    { version: 2, unlocked: 1, best: RECORD, settings: SETTINGS, loadout: V1.loadout, crystals: picked },
+    { version: 2, unlocked: 1, best: RECORD, settings: SETTINGS_READ, loadout: V1.loadout, crystals: picked },
     'sauvegarde réécrite en version 2 (progression, record, réglages et équipement gardés, réserve)',
   );
   assertEq(
@@ -488,7 +490,10 @@ export default async function (t) {
   st = await selectTab(t, 'ship');
   assertEq(st.msg, null, 'changement d’onglet : message effacé');
   const gun = st.items['ship.gun'];
-  assert(gun.price === 100 && gun.locked && gun.notes.includes('Effet en vol : bientôt') && !gun.notes.some((n) => /Réserve/.test(n)), `mitrailleuse : 100, réserve insuffisante (prix éteint), effet bientôt (${fmt(gun)})`);
+  assert(
+    gun.price === 100 && gun.locked && !gun.notes.some((n) => /bientôt|Réserve/.test(n)) && gun.line === 'Canon léger → Mitrailleuse : cadence ×2,5',
+    `mitrailleuse : 100, réserve insuffisante (prix éteint), effet réel en vol (${fmt(gun)})`,
+  );
   await refuse(t, 'ship.gun', 'Réserve insuffisante');
   await previewShot(t, 'preview-ship');
   st = await buy(t, 'ship.shield', 80, 'Installer le bouclier renforcé (4 boucliers)', 1);
@@ -667,7 +672,10 @@ export default async function (t) {
   await previewShot(t, 'preview-kai-rifle-owned');
   st = await selectTab(t, 'ship');
   st = await buy(t, 'ship.gun', 100, 'Installer la mitrailleuse', 1);
-  assert(st.items['ship.gun'].notes.includes('Effet en vol : bientôt'), `mitrailleuse achetée : effet bientôt (${fmt(st.items['ship.gun'])})`);
+  assert(
+    !st.items['ship.gun'].notes.some((n) => /bientôt/.test(n)) && st.items['ship.gun'].line === 'Dégâts ×1,25, cadence ×1,15',
+    `mitrailleuse achetée : amélioration suivante annoncée (${fmt(st.items['ship.gun'])})`,
+  );
   await previewShot(t, 'preview-ship-gun');
   st = await selectTab(t, 'kai');
   assert(st.items['kai.heart'].notes.includes('Mode test') && !st.items['kai.heart'].locked, `mode test : cœur achetable (${fmt(st.items['kai.heart'])})`);
@@ -815,7 +823,7 @@ export default async function (t) {
     { version: 2, unlocked: 0, best: {}, loadout: { equipped: 'laser', owned: ['laser'], skills: { doubleJump: false } }, crystals: 0, upgrades: ZERO_UPGRADES, ship: { gun: 0, shield: 0, boost: 0 }, extraHearts: 0, crew: [], blueprints: [] },
     'réinitialisation : tout vidé (équipage et plans compris)',
   );
-  assertEq(save.settings, SETTINGS, 'réinitialisation : réglages gardés');
+  assertEq(save.settings, SETTINGS_READ, 'réinitialisation : réglages gardés');
   sh = await shell(t);
   assert(sh.play.maxHearts === 3 && sh.play.ship.maxShields === 3 && sh.play.mods.laser.damage === 1, `réinitialisation : équipement de départ (${fmt(sh.play)})`);
 }

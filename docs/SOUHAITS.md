@@ -17,12 +17,16 @@ nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur 
 - **Étape 2 (armes et nouveaux bonus) codée et vérifiée** sur la même branche (typecheck, check-levels, build,
   suite e2e complète avec les nouveaux scénarios `weapons` et `powerups`) ; reste à régler les armes sur
   téléphone (et à écouter leurs sons).
-- **Étape 3a (hangar et armes de Kaï) codée et vérifiée** sur la même branche (suite e2e complète, nouveau
-  scénario `hangar`, hangar vérifié jusqu'à 568x320) ; reste l'essai sur téléphone. 3b (combat en vol) reste
-  à coder. Plan de l'étape 4 (monde 1 complet) **rédigé**, ses choix proposés attendent la validation
-  de l'utilisateur.
-- Reste à faire côté conception : valider les choix du plan 4, le choix des styles de niveaux bonus, les
-  réglages chiffrés (armes, prix) après essai sur téléphone.
+- **Étape 3 (hangar) codée et vérifiée** sur la même branche : 3a (hangar et armes de Kaï ; nouveau scénario
+  `hangar`, hangar vérifié jusqu'à 568x320) et 3b (combat en vol : canon et mitrailleuse de la Comète, tir
+  automatique ou manuel, astéroïdes destructibles, ennemis spatiaux, cristaux du vol ; nouveau scénario
+  `flight-combat`), suite e2e complète verte, captures et tests relus. 3b n'est pas encore commitée. Reste
+  l'essai sur téléphone des étapes 1 à 3. La balise de LUMA (fin de l'étape 3) est faite avec l'étape 4.
+- **Étape 4 (monde 1 complet) en cours** dans une autre discussion, sur sa propre branche
+  (`claude/world-1-completion-866505`) : choix du plan 4 validés le 28/10 tels quels (le plan à jour est sur
+  cette branche).
+- Reste à faire côté conception : le choix des styles de niveaux bonus, les réglages chiffrés (armes, canons,
+  ennemis du vol, prix) après essai sur téléphone.
 - Organisation du code et des documents : [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
@@ -89,20 +93,25 @@ Plan technique : [plans/03-hangar.md](plans/03-hangar.md).
 
 **État (28/10/2026) :** 3a codée (réserve de cristaux, sauvegarde version 2, écran du hangar entre deux étapes
 et depuis Niveaux, améliorations des armes de Kaï, cœurs supplémentaires, bouclier renforcé et turbo de la
-Comète, aperçu 2D), vérifiée par les tests navigateur (scénario `hangar`). Les plans d'armes et
-l'équipage (Tess, Mira) viendront avec l'étape 4 : d'ici là, hors mode test, seuls le niveau 1 des
-améliorations du laser et les modules de la Comète s'achètent. Restent l'essai sur téléphone (prix,
-multiplicateurs, lisibilité), 3b (combat en vol) et la balise de LUMA.
+Comète, aperçu 2D), vérifiée par les tests navigateur (scénario `hangar`). 3b codée (canon léger et
+mitrailleuse de la Comète, tir automatique ou manuel, astéroïdes destructibles, chasseurs, mines, essaims et
+leurs orbes, cristaux du vol pour la réserve, jauge du canon et cristaux dans le HUD du vol), vérifiée par les
+tests navigateur (scénario `flight-combat`). Les plans d'armes et l'équipage (Tess, Mira) viendront avec
+l'étape 4 : d'ici là, hors mode test, seuls le niveau 1 des améliorations du laser et les modules de la Comète
+s'achètent. Restent l'essai sur téléphone (prix, multiplicateurs, lisibilité du hangar ; tirs, ennemis, bouton
+TIR et réglages du vol) et la balise de LUMA (faite avec l'étape 4).
 
 - [ ] Hangar dans la Comète en orbite : on y monte par la balise de LUMA en fin de niveaux 1 et 2, et en
       décollant après le niveau 3
 - [x] Établi : acheter les armes débloquées et les améliorer (dégâts, cadence, portée, refroidissement)
-- [ ] Atelier de la Comète : mitrailleuse, bouclier renforcé, meilleur turbo… (bouclier renforcé et turbo
-      faits en 3a ; mitrailleuse achetable et enregistrée, son effet en vol vient avec 3b)
+- [x] Atelier de la Comète : mitrailleuse, bouclier renforcé, meilleur turbo… (bouclier renforcé et turbo
+      en 3a ; mitrailleuse et ses deux améliorations en 3b, vérifiées par `flight-combat`)
 - [x] Les cristaux ramassés servent de monnaie
 - [x] Aperçu de la Comète personnalisée et de Kaï avec son arme (en 2D d'abord, 3D plus tard)
-- [ ] La Comète a un canon léger dès le départ ; la mitrailleuse est sa première amélioration
-- [ ] Ennemis spatiaux à abattre en vol 3D ; tir automatique quand une cible est devant (option tir manuel)
+- [x] La Comète a un canon léger dès le départ ; la mitrailleuse est sa première amélioration (3b)
+- [x] Ennemis spatiaux à abattre en vol 3D ; tir automatique quand une cible est devant (option tir manuel) :
+      chasseur, mine, essaim et leurs orbes, astéroïdes destructibles, cristaux du vol (3b ; réglages à faire sur
+      téléphone)
 - [x] Tous les cristaux ramassés vont dans la réserve, même en rejouant ; perdus si l'étape est ratée
 - [x] Hangar accessible entre deux étapes et depuis l'écran Niveaux
 - [ ] Les naufragés secourus rejoignent l'équipage et ouvrent de nouveaux services (voir l'histoire) ; le
@@ -235,11 +244,12 @@ Détail dans [HISTOIRE.md](HISTOIRE.md).
 2. **Armes et nouveaux bonus** : le hangar et les boss en dépendent. **Codé et vérifié** ; essai sur
    téléphone à faire (réglage des armes).
 3. **Hangar**, en deux parties : 3a (cristaux-monnaie, écran du hangar, améliorations des armes de Kaï),
-   puis 3b (tir de la Comète, ennemis spatiaux, modules) ; la balise de LUMA à la fin ou en début d'étape 4.
-   **3a codée et vérifiée** ; essai sur téléphone à faire ; 3b et la balise à coder.
+   puis 3b (tir de la Comète, ennemis spatiaux, modules) ; la balise de LUMA en début d'étape 4.
+   **3a et 3b codées et vérifiées** (suite e2e) ; essai sur téléphone à faire ; balise faite avec l'étape 4 (4a).
 4. **Monde 1 complet au nouveau format** : 3 niveaux, mini-boss, méduse-baleine, double saut, vol avec le
    léviathan, LUMA, prologue et cinématique de libération. Il sert de modèle : on valide tout sur un seul
-   monde avant de multiplier les niveaux.
+   monde avant de multiplier les niveaux. **En cours** dans une autre discussion (plan validé, branche
+   `claude/world-1-completion-866505`).
 5. **Monde 2** au même format.
 6. **Carte galactique**, puis Boréa, Vulkar et le Cœur de la Faille, avec les cinématiques de fin.
 7. **Objets secrets et niveaux bonus**.

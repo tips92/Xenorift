@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { SHIP_GUNS, shipGunId } from '../core/shipGuns';
 import { type Bin, makeGlowTexture } from './util';
 
 // La Comète en 3D (même design que le sprite 2D) : coque blanche effilée, ailes en delta, cockpit
 // et bandes cyan, deux réacteurs à flamme orange. Nez vers −Z, dessus vers +Y.
-// Longueur ≈ 4,35 u, envergure ≈ 4,3 u. ~8 appels de dessin (pièces fusionnées par matériau).
+// Longueur ≈ 4,35 u, envergure ≈ 4,3 u. ~8 appels de dessin (pièces fusionnées par matériau) ; canons fusionnés
+// avec les pièces et les liserés (aucun appel de plus), éclairs de bouche : +1 ou +2 pendant le tir.
 
 const CYAN = '#3ff0ff';
 const ENGINE_X = 0.62;
@@ -13,6 +15,22 @@ const NOZZLE_Z = 2.12;
 const HULL_TAIL = -1.95;
 const HULL_NOSE = 2.4;
 const WING_Y = -0.14;
+/**
+ * Bouches des canons (repère de la maquette, nez vers −Z) : canon léger sous le nez (niveau 0), mitrailleuse
+ * sous les ailes (niveaux 1 à 3 ; bouches 0 et 1 en alternance). Les canons modélisés doivent finir là. Vue de
+ * la caméra de poursuite (derrière, ~13° au-dessus), l'aile cache ce qui est dessous jusqu'à ~0,5 u devant son
+ * bord d'attaque : la mitrailleuse est placée vers l'extérieur de l'aile (bord d'attaque reculé, en z ≈ 0,33) et
+ * dépasse loin devant (nacelle, fourreau, bague et bouche visibles de dos).
+ */
+const NOSE_MUZZLES: readonly (readonly [number, number, number])[] = [[0, -0.34, -1.95]];
+const WING_MUZZLES: readonly (readonly [number, number, number])[] = [
+  [-1.45, -0.3, -1.12],
+  [1.45, -0.3, -1.12],
+];
+/** Éclair de bouche : durée (s) et taille du halo (canon léger, mitrailleuse). */
+const FLASH_TIME = 0.07;
+const FLASH_SIZE_LIGHT = 1.05;
+const FLASH_SIZE_MG = 0.8;
 
 /** Profil du fuselage (t = 0 à l'arrière, 1 au nez). */
 function hullRadius(t: number): number {
@@ -46,6 +64,52 @@ function merge(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
   for (const g of list) g.dispose();
   if (!m) throw new Error('La Comète : fusion de géométries impossible');
   return m;
+}
+
+/** Tube le long de Z, de cz − len/2 à cz + len/2 : rayon avant (−Z) rFront, arrière rBack. */
+function tube(rFront: number, rBack: number, len: number, seg: number, x: number, y: number, cz: number, open = false): THREE.BufferGeometry {
+  // Après rotateX(π/2), le haut du cylindre (+Y) passe à l'arrière (+Z).
+  const g = new THREE.CylinderGeometry(rBack, rFront, len, seg, 1, open);
+  g.rotateX(Math.PI / 2);
+  g.translate(x, y, cz);
+  return g;
+}
+
+/**
+ * Canons, fusionnés avec les pièces et les liserés (aucun appel de dessin de plus). Niveau 0 : canon léger sous
+ * le nez. Niveaux 1 à 3 : mitrailleuse, une nacelle sous chaque aile prolongée par un fourreau et un long canon
+ * qui dépassent devant l'aile, bague cyan au bout du fourreau, bouche lumineuse et une bague de plus par
+ * amélioration (comme l'aperçu du hangar). Ils finissent aux bouches.
+ */
+function addGuns(level: number, parts: THREE.BufferGeometry[], glows: THREE.BufferGeometry[]): void {
+  if (level < 1) {
+    const [mx, my, mz] = NOSE_MUZZLES[0];
+    // Tourelle à demi rentrée dans la coque, canon court
+    const turret = new THREE.SphereGeometry(0.13, 14, 8);
+    turret.scale(1, 0.75, 1.5);
+    turret.translate(mx, my + 0.05, -1.22);
+    parts.push(paint(turret, '#6a7298'));
+    parts.push(paint(tube(0.04, 0.05, 0.62, 10, mx, my, mz + 0.31), '#2a2e48'));
+    glows.push(paint(tube(0.052, 0.052, 0.035, 10, mx, my, mz + 0.03, true), CYAN));
+    return;
+  }
+  for (const [mx, my, mz] of WING_MUZZLES) {
+    // Nacelle (z de −0,35 à 0,65 ; l'arrière sous l'aile), mât sous l'aile, avant effilé, fourreau, canon
+    parts.push(paint(tube(0.1, 0.075, 1.0, 14, mx, my, 0.15), '#b4bcdc'));
+    parts.push(paint(tube(0.07, 0.1, 0.22, 14, mx, my, -0.46), '#8e97bd'));
+    const fairing = new THREE.BoxGeometry(0.06, 0.06, 0.34);
+    fairing.translate(mx, my + 0.11, 0.5);
+    parts.push(paint(fairing, '#d3d9ef'));
+    parts.push(paint(tube(0.06, 0.07, 0.25, 12, mx, my, -0.695), '#6a7298'));
+    parts.push(paint(tube(0.042, 0.042, 0.32, 10, mx, my, mz + 0.16), '#2a2e48'));
+    // Bagues de la nacelle et du fourreau (devant l'aile : visibles de la caméra), bouche, bagues des améliorations
+    glows.push(paint(tube(0.13, 0.13, 0.08, 14, mx, my, -0.8, true), CYAN));
+    glows.push(paint(tube(0.104, 0.1, 0.05, 14, mx, my, -0.3, true), CYAN));
+    glows.push(paint(tube(0.052, 0.052, 0.03, 10, mx, my, mz + 0.02, true), CYAN));
+    for (let i = 1; i < level; i++) {
+      glows.push(paint(tube(0.058, 0.058, 0.035, 10, mx, my, mz + 0.2 - (i - 1) * 0.08, true), CYAN));
+    }
+  }
 }
 
 /** Parallélogramme plat (bande décorative) dans le plan XY, entre deux bords. */
@@ -177,8 +241,22 @@ export class ShipModel {
   private readonly sprites: THREE.Sprite[] = [];
   private readonly spriteMat: THREE.SpriteMaterial;
   private readonly flameU: { uTime: { value: number }; uPower: { value: number } };
+  /** Canon (hooks.loadout.ship.gunLevel, 0..3) : 0 canon léger, 1 à 3 mitrailleuse (bagues selon le niveau). */
+  readonly gunLevel: number;
+  private readonly muzzles: readonly (readonly [number, number, number])[];
+  /** Éclairs de bouche (un halo par bouche, masqué au repos) : intensité 0..1, allumé depuis cette image. */
+  private readonly flashes: THREE.Sprite[] = [];
+  private readonly flashMats: THREE.SpriteMaterial[] = [];
+  private readonly flashLeft: number[] = [];
+  private readonly flashFresh: boolean[] = [];
+  private readonly flashSize: number;
+  private lastTime = -1;
 
-  constructor(bin: Bin, env: THREE.Texture | null) {
+  /** `gunLevel` : canon léger sous le nez (0), mitrailleuse sous les ailes et ses bagues lumineuses (1 à 3). */
+  constructor(bin: Bin, env: THREE.Texture | null, gunLevel = 0) {
+    this.gunLevel = Number.isFinite(gunLevel) ? Math.min(3, Math.max(0, Math.floor(gunLevel))) : 0;
+    this.muzzles = this.gunLevel >= 1 ? WING_MUZZLES : NOSE_MUZZLES;
+    this.flashSize = this.gunLevel >= 1 ? FLASH_SIZE_MG : FLASH_SIZE_LIGHT;
     this.root.add(this.body);
 
     // --- Fuselage (tour) avec texture : bandes cyan émissives, nez sombre
@@ -317,6 +395,8 @@ export class ShipModel {
     finTip.translate(0, 1.25, 1.86);
     glows.push(paint(finTip, '#ff4a4a'));
 
+    addGuns(this.gunLevel, parts, glows);
+
     const partsMat = bin.add(
       new THREE.MeshStandardMaterial({
         vertexColors: true,
@@ -390,10 +470,78 @@ export class ShipModel {
       this.sprites.push(s);
       this.body.add(f, s);
     }
+
+    // --- Éclairs de bouche : halo de la couleur du tir, un peu devant chaque bouche (masqués au repos)
+    const flashColor = new THREE.Color(SHIP_GUNS[shipGunId(this.gunLevel)].color).lerp(new THREE.Color(0xffffff), 0.35);
+    for (const m of this.muzzles) {
+      const mat = bin.add(
+        new THREE.SpriteMaterial({
+          map: glowTex,
+          color: flashColor,
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        }),
+      );
+      const s = new THREE.Sprite(mat);
+      s.position.set(m[0], m[1], m[2] - 0.12);
+      s.renderOrder = 5;
+      s.visible = false;
+      this.flashes.push(s);
+      this.flashMats.push(mat);
+      this.flashLeft.push(0);
+      this.flashFresh.push(false);
+      this.body.add(s);
+    }
   }
 
-  /** thrust : 0..1.5 (poussée), boost : 0..1.3 (turbo / distorsion). */
+  /** Bouches du canon : 1 (canon léger) ou 2 (mitrailleuse). */
+  get muzzleCount(): number {
+    return this.muzzles.length;
+  }
+
+  /**
+   * Position dans le monde de la bouche `i`, pour une Comète en (x, y, z) (position simulée de FlightRun),
+   * avec l'inclinaison actuelle de la maquette (body). Écrite dans `out`, sans allocation.
+   */
+  muzzleWorld(i: number, x: number, y: number, z: number, out: THREE.Vector3): THREE.Vector3 {
+    const m = this.muzzles[((i % this.muzzles.length) + this.muzzles.length) % this.muzzles.length];
+    out.set(m[0], m[1], m[2]).applyQuaternion(this.body.quaternion);
+    return out.set(out.x + x, out.y + y, out.z + z);
+  }
+
+  /** Éclair de bouche du canon `i` (au tir) ; il s'éteint de lui-même dans update() (FLASH_TIME). */
+  fireFlash(i: number): void {
+    const n = this.flashes.length;
+    if (n === 0 || !Number.isFinite(i)) return;
+    const k = ((Math.floor(i) % n) + n) % n;
+    this.flashLeft[k] = 1;
+    // Affiché entier à l'image du tir, il ne décroît qu'aux suivantes.
+    this.flashFresh[k] = true;
+    const s = this.flashes[k];
+    s.visible = true;
+    s.scale.set(this.flashSize, this.flashSize, 1);
+    this.flashMats[k].opacity = 1;
+  }
+
+  /** thrust : 0..1.5 (poussée), boost : 0..1.3 (turbo / distorsion). Éteint aussi les éclairs de bouche. */
   update(time: number, thrust: number, boost: number): void {
+    const dt = this.lastTime < 0 ? 0 : Math.min(0.1, Math.max(0, time - this.lastTime));
+    this.lastTime = time;
+    for (let i = 0; i < this.flashes.length; i++) {
+      let left = this.flashLeft[i];
+      if (left <= 0) continue;
+      if (this.flashFresh[i]) this.flashFresh[i] = false;
+      else left = Math.max(0, left - dt / FLASH_TIME);
+      this.flashLeft[i] = left;
+      const s = this.flashes[i];
+      s.visible = left > 0;
+      if (left > 0) {
+        const k = this.flashSize * (0.55 + 0.45 * left) * (0.9 + 0.1 * Math.sin(time * 91 + i * 1.7));
+        s.scale.set(k, k, 1);
+        this.flashMats[i].opacity = Math.min(1, 0.3 + 0.8 * left);
+      }
+    }
     this.flameU.uTime.value = time;
     this.flameU.uPower.value = 0.55 + thrust * 0.35 + boost * 0.45;
     for (let i = 0; i < 2; i++) {

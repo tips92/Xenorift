@@ -17,7 +17,8 @@ import type {
 import { startFlight } from '../src/game3d';
 
 // Page d'aperçu du mode vol 3D (outil de développement, hors jeu), avec des « hooks » simulés.
-// Paramètres : ?stage=f1|f2 &autopilot=1 &ts=1..8 &shield=0..2 &boost=0..2 (modules de la Comète du hangar)
+// Paramètres : ?stage=f1|f2 &autopilot=1 &ts=1..8 &gun=0..3 &shield=0..2 &boost=0..2 (modules de la Comète du
+// hangar) &manual=1 (tir manuel : la Comète ne tire que sur J / X / F)
 
 interface Dev3d {
   autopilot(on?: boolean): void;
@@ -25,6 +26,9 @@ interface Dev3d {
   fail(): void;
   timeScale(s: number): void;
   info(): Record<string, unknown>;
+  /** Place un ennemi devant la Comète (essaim : formation entière) ; nombre placé. */
+  spawn?(type: string, distance?: number): number;
+  fire?(on?: boolean): void;
 }
 
 const params = new URLSearchParams(location.search);
@@ -34,7 +38,11 @@ const auto = params.get('autopilot') === '1';
 const timeScale = Number(params.get('ts')) || 1;
 // Équipement de départ (rien d'acheté), sauf les modules de la Comète demandés (niveaux bornés par shipLoadout).
 const loadout = defaultPlayLoadout();
-loadout.ship = shipLoadout({ gun: 0, shield: Number(params.get('shield')) || 0, boost: Number(params.get('boost')) || 0 });
+loadout.ship = shipLoadout({
+  gun: Number(params.get('gun')) || 0,
+  shield: Number(params.get('shield')) || 0,
+  boost: Number(params.get('boost')) || 0,
+});
 
 const root = document.getElementById('root') as HTMLElement;
 const hudEl = document.getElementById('hud') as HTMLElement;
@@ -42,7 +50,19 @@ const toastEl = document.getElementById('toast') as HTMLElement;
 const endEl = document.getElementById('end') as HTMLElement;
 
 // ------------------------------------------------------------------ HUD simulé
-const hudState: FlightHud = { timeLeft: 0, gates: 0, gatesTotal: 0, shield: 0, maxShield: 3, boost: 1, progress: 0 };
+const hudState: FlightHud = {
+  timeLeft: 0,
+  gates: 0,
+  gatesTotal: 0,
+  shield: 0,
+  maxShield: 3,
+  boost: 1,
+  progress: 0,
+  gunLevel: 0,
+  heat: 0,
+  overheated: false,
+  crystals: 0,
+};
 let hudUpdates = 0;
 function renderHud(): void {
   const s = hudState;
@@ -53,7 +73,10 @@ function renderHud(): void {
     `Portails ${s.gates}/${s.gatesTotal}\n` +
     `Bouclier ${'◆'.repeat(s.shield)}${'◇'.repeat(Math.max(0, s.maxShield - s.shield))}\n` +
     `Turbo    ${bar(s.boost)}\n` +
+    `Canon    ${bar(s.heat)} ${s.gunLevel >= 1 ? `mitrailleuse ${s.gunLevel}` : 'léger'}${s.overheated ? ' SURCHAUFFE' : ''}\n` +
+    `Cristaux ${s.crystals}\n` +
     `Parcours ${bar(s.progress, 20)}\n` +
+    `Tir      ${settings.manualFire ? 'manuel (J / X / F)' : 'automatique'}\n` +
     `(maj HUD : ${hudUpdates})`;
 }
 let toastTimer = 0;
@@ -92,6 +115,8 @@ const state: InputState = {
   stickY: 0,
 };
 const pauseCbs = new Set<() => void>();
+/** Appui sur Tir pas encore lu (consumePress('fire')). */
+let firePress = false;
 function syncStick(): void {
   state.stickX = (state.right ? 1 : 0) - (state.left ? 1 : 0);
   state.stickY = (state.up ? 1 : 0) - (state.down ? 1 : 0);
@@ -106,8 +131,9 @@ function setKey(code: string, down: boolean): boolean {
     case 'KeyD':
       state.right = down;
       break;
+    // Codes physiques comme le jeu : W en QWERTY = Z en AZERTY
     case 'ArrowUp':
-    case 'KeyZ':
+    case 'KeyW':
       state.up = down;
       break;
     case 'ArrowDown':
@@ -117,6 +143,12 @@ function setKey(code: string, down: boolean): boolean {
     case 'Space':
       state.boost = down;
       break;
+    // Tir (comme le jeu) : J, X, F
+    case 'KeyJ':
+    case 'KeyX':
+    case 'KeyF':
+      state.fire = down;
+      break;
     default:
       return false;
   }
@@ -124,6 +156,7 @@ function setKey(code: string, down: boolean): boolean {
   return true;
 }
 window.addEventListener('keydown', (e) => {
+  if ((e.code === 'KeyJ' || e.code === 'KeyX' || e.code === 'KeyF') && !e.repeat && !state.fire) firePress = true;
   if (setKey(e.code, true)) {
     e.preventDefault();
     return;
@@ -131,8 +164,11 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (e.code === 'KeyP' || e.code === 'Escape') togglePause();
   else if (e.code === 'KeyR') restart();
-  else if (e.code === 'KeyW') dev()?.win();
-  else if (e.code === 'KeyF') dev()?.fail();
+  else if (e.code === 'KeyG') dev()?.win();
+  else if (e.code === 'KeyL') dev()?.fail();
+  else if (e.code === 'Digit1') dev()?.spawn?.('fighter', 70);
+  else if (e.code === 'Digit2') dev()?.spawn?.('mine', 60);
+  else if (e.code === 'Digit3') dev()?.spawn?.('swarm', 70);
 });
 window.addEventListener('keyup', (e) => {
   if (setKey(e.code, false)) e.preventDefault();
@@ -140,10 +176,13 @@ window.addEventListener('keyup', (e) => {
 const input: InputApi = {
   state,
   consumePress: (a: InputAction) => {
-    void a;
-    return false;
+    if (a !== 'fire' || !firePress) return false;
+    firePress = false;
+    return true;
   },
-  clearPresses: () => undefined,
+  clearPresses: () => {
+    firePress = false;
+  },
   setLayout: () => undefined,
   setTouchOptions: () => undefined,
   setTiltEnabled: () => undefined,
@@ -178,6 +217,7 @@ const settings: Settings = {
   touchSize: 1,
   touchOpacity: 1,
   leftHanded: false,
+  manualFire: params.get('manual') === '1',
 };
 
 // ------------------------------------------------------------------ Partie
@@ -203,7 +243,8 @@ const hooks: ModeHooks = {
     console.log('[complete]', JSON.stringify(r));
     showEnd(
       `Étape réussie ! ${'★'.repeat(r.stars)}${'☆'.repeat(3 - r.stars)}\n` +
-        `Score ${r.score} · Portails ${r.gates}/${r.gatesTotal} · ${(r.timeMs / 1000).toFixed(1)} s`,
+        `Score ${r.score} · Portails ${r.gates}/${r.gatesTotal} · ${(r.timeMs / 1000).toFixed(1)} s\n` +
+        `Cristaux ${r.crystals ?? 0}/${r.crystalsTotal ?? 0} · Ennemis abattus ${r.enemies ?? 0}`,
     );
   },
   onFail(reason: string) {

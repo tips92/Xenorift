@@ -11,7 +11,7 @@ import { button, screenHeader, screenRoot, type Screen } from './common';
 // confirmation intégrée.
 
 type Group = 'general' | 'controls';
-type ToggleKey = 'music' | 'sfx' | 'haptics' | 'tilt' | 'unlockAll' | 'leftHanded';
+type ToggleKey = 'music' | 'sfx' | 'haptics' | 'tilt' | 'unlockAll' | 'leftHanded' | 'manualFire';
 
 interface ToggleDef {
   key: ToggleKey;
@@ -29,6 +29,7 @@ const TOGGLES: readonly ToggleDef[] = [
   { key: 'unlockAll', group: 'general', label: 'Tout débloquer', desc: 'Mode test : toutes les étapes jouables', icon: ICONS.unlock },
   { key: 'leftHanded', group: 'controls', label: 'Mode gaucher', desc: 'Stick à droite, boutons à gauche', icon: ICONS.swap },
   { key: 'tilt', group: 'controls', label: 'Pilotage par inclinaison', desc: 'Remplace le joystick en vol spatial', icon: ICONS.tilt },
+  { key: 'manualFire', group: 'controls', label: 'Tir manuel', desc: 'Bouton TIR en vol (sinon tir automatique)', icon: ICONS.aim },
 ];
 
 type StepKey = 'touchSize' | 'touchOpacity';

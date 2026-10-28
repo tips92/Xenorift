@@ -2,7 +2,8 @@
 // → RECOMMENCER : la partie repart du début, compte de cristaux remis à zéro ; 3 cristaux) → Blob-roi vaincu dans son
 // arène, puis Kaï court jusqu'à la balise de LUMA (« Boss vaincu +2 000 », « +3 cristaux ») → SUIVANT → hangar
 // (réserve 3, DÉCOLLER vers le Vol 1 ; Échap ramène aux résultats,
-// figés) → Vol 1 (ni gain ni changement de la réserve ; récompense « Plan : mitrailleur ») → SUIVANT → hangar
+// figés) → Vol 1 gagné aussitôt (réserve + cristaux ramassés avant la victoire, 0 en général ; récompense « Plan :
+// mitrailleur ») → SUIVANT → hangar
 // (ATTERRIR vers la Lune) → Lune : 5 cristaux ramassés, 3 vies perdues → « MISSION ÉCHOUÉE » (Plus de vies ! ;
 // réserve inchangée, les cristaux de la tentative sont perdus) → RÉESSAYER (3 vies, 2 cristaux) → victoire par la
 // Comète (réserve + cristaux de la nouvelle tentative seulement) → SUIVANT → hangar (DÉCOLLER vers le Vol 2) → Vol 2
@@ -126,13 +127,24 @@ async function bossWin(t, label) {
 }
 
 /** Vol jusqu'à la phase 'fly' puis victoire (__xr3d.win) → écran « VOL RÉUSSI ». */
+/**
+ * Vol gagné dès le départ (__xr3d.win) → « VOL RÉUSSI ». Renvoie les cristaux ramassés avant la victoire (le tir
+ * automatique a pu faire éclater un rocher qui en lâche un ; plus aucun ramassage hors de la phase de vol).
+ */
 async function fly(t, label) {
   await waitFor3dPhase(t, 'fly', { timeout: 60000 });
-  await t.ev(() => window.__xr3d.win());
+  const got = await t.ev(() => {
+    window.__xr3d.win();
+    return window.__xr3d.info().crystals;
+  });
   await waitForScreen(t, 'results', { timeout: 25000 });
   const text = await screenText(t, 'results');
   assert(/VOL RÉUSSI/i.test(text), `${label} : écran « VOL RÉUSSI » attendu (texte : ${text.slice(0, 160)})`);
+  return got;
 }
+
+/** Gain affiché aux résultats pour n cristaux (rien sous 1). */
+const gainText = (n) => (n > 0 ? `+${n} ${n >= 2 ? 'cristaux' : 'cristal'}` : null);
 
 export default async function (t) {
   await t.goto('?touch=1');
@@ -196,9 +208,11 @@ export default async function (t) {
 
   // ---------------------------------------------------------------- Vol 1 (f1)
   await waitIntro(t, "Nébuleuse d'Azur");
-  await fly(t, 'f1');
-  assertEq(await resultsBank(t), { gain: null, bank: 3 }, 'f1 : pas de cristaux en vol, réserve inchangée');
-  assertEq(await bankNow(t), 3, 'f1 : réserve enregistrée inchangée');
+  // Vol gagné aussitôt : 0 cristal en général, sinon ceux que le tir automatique a fait tomber avant win()
+  const f1Got = await fly(t, 'f1');
+  t.log(`f1 : ${f1Got} cristal(aux) ramassé(s) avant la victoire`);
+  assertEq(await resultsBank(t), { gain: gainText(f1Got), bank: 3 + f1Got }, 'f1 : réserve = 3 + cristaux du vol');
+  assertEq(await bankNow(t), 3 + f1Got, 'f1 : réserve enregistrée');
   assertEq((await resultDetails(t)).Plan, 'mitrailleur', 'f1 réussi la première fois : « Plan : mitrailleur »');
   await assertProgress(t, [['j1', true, true], ['f1', true, true], ['m1', false, true], ['f2', false, false]], 'après f1');
   await t.shot('f1-results');
@@ -210,7 +224,7 @@ export default async function (t) {
   assertEq((await hudPlatform(t)).lives, 3, 'm1 : vies au départ (HUD)');
   // Cristaux de la tentative ratée : perdus (la réserve ne bouge pas).
   const bank0 = await bankNow(t);
-  assertEq(bank0, 3, 'm1 : réserve avant la tentative');
+  assertEq(bank0, 3 + f1Got, 'm1 : réserve avant la tentative');
   await collect(t, 5);
   for (let lost = 1; lost <= 3; lost++) {
     await waitFor(t, () => window.__xr2d && window.__xr2d.scene.state === 'play', { timeout: 10000, label: `Kaï en jeu avant la mort n°${lost}` });

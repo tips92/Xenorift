@@ -53,6 +53,10 @@ export const ICONS = {
   cooling: `<svg ${V24}><path d="M12 2.5v19M3.8 7.25l16.4 9.5M3.8 16.75l16.4-9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.4 4.2L12 6.5l2.6-2.3M9.4 19.8l2.6-2.3 2.6 2.3M4.4 10.8l3.3-1-.7-3.4M19.6 13.2l-3.3 1 .7 3.4M7 17.6l.7-3.4-3.3-1M17 6.4l-.7 3.4 3.3 1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   /** Modules : mitrailleuse de la Comète (deux canons), drone compagnon. */
   shipGun: `<svg ${V24}><path d="M2 6.5h10l1.6 1.6H20v2.3h-6.4L12 12H2zM2 13.5h10l1.6 1.6H20v2.3h-6.4L12 19H2z" fill="currentColor"/><circle cx="22" cy="9.25" r="1.3" fill="currentColor" opacity=".55"/><circle cx="22" cy="16.25" r="1.3" fill="currentColor" opacity=".55"/><path d="M4 9.2h6M4 16.2h6" stroke="#05010f" stroke-width="1" stroke-linecap="round" opacity=".55"/></svg>`,
+  /** Canon léger de la Comète (de série, un seul canon sous le nez) : jauge de chauffe du vol. */
+  shipLightGun: `<svg ${V24}><path d="M2.5 8.2c0-.9.7-1.6 1.6-1.6h6.4l2.2 3.1H20v3.6h-7.3l-2.2 3.1H4.1c-.9 0-1.6-.7-1.6-1.6z" fill="currentColor"/><circle cx="22" cy="11.5" r="1.5" fill="currentColor" opacity=".55"/><path d="M4.6 11.5h5.6" stroke="#05010f" stroke-width="1.1" stroke-linecap="round" opacity=".55"/></svg>`,
+  /** Option du tir manuel en vol : viseur. */
+  aim: `<svg ${V24}><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v5.2M12 16.8V22M2 12h5.2M16.8 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/></svg>`,
   drone: `<svg ${V24}><path d="M3.5 6h6M14.5 6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6.5 6v3.4M17.5 6v3.4" stroke="currentColor" stroke-width="1.8"/><path d="M5 11.6c0-1.4 1.1-2.3 2.5-2.3h9c1.4 0 2.5.9 2.5 2.3v1.2c0 3.5-3.1 6.4-7 6.4s-7-2.9-7-6.4z" fill="currentColor"/><circle cx="12" cy="13.3" r="2.4" fill="#05010f"/><circle cx="12" cy="13.3" r="1" fill="currentColor"/></svg>`,
   /** La Comète vue de dessus, nez vers la droite (64 x 32). */
   ship: `<svg viewBox="0 0 64 32" xmlns="http://www.w3.org/2000/svg"><path d="M14 13.2L1.5 16 14 18.8z" fill="#ff9a3f"/><path d="M14 14.4L6 16l8 1.6z" fill="#fff1c9"/><path d="M60 16L30 11.2 18.5 2.5l2.2 9.2L13.5 13v6l7.2 1.3-2.2 9.2L30 20.8z" fill="#f4f7ff"/><path d="M30 11.2L18.5 2.5l2.2 9.2zM30 20.8l-11.5 8.7 2.2-9.2z" fill="#c9d2ee"/><path d="M42 14.3c3.6.4 6 1 7.4 1.7-1.4.7-3.8 1.3-7.4 1.7-1.2-.9-1.2-2.5 0-3.4z" fill="#3ff7ff"/><path d="M22 16h16" stroke="#3ff7ff" stroke-width="1.4" stroke-linecap="round"/></svg>`,
@@ -89,6 +93,11 @@ const WEAPON_ICONS: Record<WeaponId, string> = {
 /** Icône d'une arme (jauge de chauffe du HUD, hangar). */
 export function weaponIcon(id: WeaponId): string {
   return WEAPON_ICONS[id] ?? WEAPON_ICONS.laser;
+}
+
+/** Icône du canon de la Comète (jauge de chauffe du vol) : 0 canon léger, 1 à 3 mitrailleuse (deux canons). */
+export function shipGunIcon(level: number): string {
+  return level >= 1 ? ICONS.shipGun : ICONS.shipLightGun;
 }
 
 const UPGRADE_ICONS: Record<UpgradeStat, string> = {

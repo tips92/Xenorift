@@ -69,12 +69,13 @@ ennemi en « règle pure + rendu ». La rigueur s'applique là où elle paie :
 src/
   main.ts          point d'entrée → startApp()
   core/            contrats (types.ts), étapes (stages.ts), sauvegarde (save.ts), fiches des armes (weapons.ts),
-                   catalogue et calculs du hangar (hangar.ts)
+                   canons de la Comète (shipGuns.ts), catalogue et calculs du hangar (hangar.ts)
   ui/              coquille : App.ts, HUD, écrans (screens/), fondu, icônes, utilitaires DOM
   input/           clavier, commandes tactiles, inclinaison → un état d'entrée unique
   audio/           moteur Web Audio, effets (sfx), musiques procédurales
   game2d/          mode plateforme : engine/ (scène, Kaï, ennemis, tirs…), art/ (dessins), levels/
-  game3d/          mode vol : flight.ts (partie), parcours, portails, astéroïdes, créatures, ciel
+  game3d/          mode vol : flight.ts (partie), parcours et vagues, portails, astéroïdes, tir (shots.ts),
+                   ennemis (enemies.ts), cristaux (pickups.ts), créatures, ciel
 preview/           pages d'outil du serveur de dev (aperçu des graphismes 2D, vol simulé)
 scripts/           check-levels.ts (validation des niveaux 2D)
 tests/e2e/         tests navigateur (lanceur run.mjs, lib/, scenarios/)
@@ -166,7 +167,7 @@ Le détail fichier par fichier est dans la section « Architecture » de [CLAUDE
 ## 6. Où ranger le code à venir
 
 Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de-travail). Ceux des étapes 1,
-2 et 3a sont les emplacements réels (étapes codées).
+2, 3a et 3b sont les emplacements réels (étapes codées).
 
 | Besoin | Emplacement | Étape |
 |---|---|---|
@@ -182,8 +183,10 @@ Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de
 | Sauvegarde v2 (réserve, migration) | `core/save.ts` (`load`, `readBase`, `readV2`, `recordResult`, `purchase`), `core/types.ts` | 3a |
 | Prix, conditions et effets du hangar | `core/hangar.ts` (catalogue `HANGAR_ITEMS`, `itemState`, `applyPurchase`, `departLabel` ; pur) | 3a |
 | Écran du hangar, aperçu | `ui/screens/hangar.ts`, `ui/hangarPreview.ts` (chargé à la demande) ; enchaînement dans `ui/App.ts` (`goHangar`, `makeResults`) | 3a |
-| Effets des achats en jeu | `game2d/engine/weapons.ts` (`Gun` : `mods`), `PlatformScene.ts` (`maxHearts`), `game3d/flight.ts` (`maxShield`, `boostDrain`, `boostFill`) ; `ui/hud.ts` (4-5 cœurs / boucliers) | 3a |
-| Tir et ennemis en vol | `game3d/shots.ts`, `game3d/enemies.ts` | 3 |
+| Effets des achats en jeu | `game2d/engine/weapons.ts` (`Gun` : `mods`), `PlatformScene.ts` (`maxHearts`), `game3d/flight.ts` (`maxShield`, `boostDrain`, `boostFill`, `gunLevel`) ; `ui/hud.ts` (4-5 cœurs / boucliers) | 3a et 3b |
+| Canons de la Comète (fiches) | `core/shipGuns.ts` (`SHIP_GUNS`, `SHIP_GUN_MULS`, `SHIP_AIM`, `resolveShipGun` ; pur) ; canons du modèle dans `game3d/ship.ts` | 3b |
+| Tir, ennemis et cristaux en vol | `game3d/shots.ts` (canon, visée, projectiles), `game3d/enemies.ts` (chasseur, mine, essaim, orbes), `game3d/pickups.ts` (cristaux), `game3d/courses.ts` (`genWaves`), `game3d/asteroids.ts` (PV, cristal) ; branchés dans `game3d/flight.ts` (`updateGun`, `shotHit`) | 3b |
+| Tir manuel en vol | `Settings.manualFire`, `ui/screens/options.ts` (`TOGGLES`), `input/touch.ts` (`.xr-shoot`) ; HUD du vol `ui/hud.ts` (`.fl-heat`, `.fl-crystals`) | 3b |
 | Table des mondes, liste des 20 étapes | `core/worlds.ts` (données) → `STAGES` construit à partir d'elle | 4 |
 | Niveaux par monde | `game2d/levels/<monde>/` | 4 |
 | Mini-boss et boss 2D | `game2d/bosses/` : un fichier par boss, un contrat `Boss` commun | 4 |
@@ -201,10 +204,11 @@ Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de
   en insérant des niveaux au milieu impose une migration (retrouver l'étape par son `id`). Ne jamais
   renommer les `id` existants (`j1`, `f1`, `m1`, `f2`) : ce sont les clés des meilleurs scores.
 - **Tests qui supposent 4 étapes et 16 / 22 portails** : les faire lire `STAGES` et `COURSES`.
-- **Gros fichiers** : `game3d/flight.ts` (~1080 lignes), `ui/App.ts` (~870), `game2d/engine/PlatformScene.ts`
-  (~840), `ui/screens/hangar.ts` (~840), `game2d/engine/Player.ts` (~640). Y sortir les nouveautés dans leurs
-  propres fichiers (tir et ennemis du vol, boss ; les portes l'ont été dans `engine/doors.ts`, les règles du
-  hangar dans `core/hangar.ts`, son aperçu dans `ui/hangarPreview.ts`) plutôt que de les allonger. Les
+- **Gros fichiers** : `game3d/enemies.ts` (~1510 lignes), `game3d/flight.ts` (~1410), `ui/App.ts` (~870),
+  `game2d/engine/PlatformScene.ts` (~840), `ui/screens/hangar.ts` (~840), `game2d/engine/Player.ts` (~640). Y
+  sortir les nouveautés dans leurs propres fichiers (boss ; les portes l'ont été dans `engine/doors.ts`, les
+  règles du hangar dans `core/hangar.ts`, son aperçu dans `ui/hangarPreview.ts`, le tir, les ennemis et les
+  cristaux du vol dans `shots.ts`, `enemies.ts` et `pickups.ts`) plutôt que de les allonger. Les
   décisions pures de l'enchaînement (étape suivante, libellé du départ) iront hors d'`App.ts` (`departLabel`
   est déjà dans `core/hangar.ts`).
 - **Un seul contexte WebGL par moteur** : pas de second rendu 3D pour un aperçu ou une cinématique.

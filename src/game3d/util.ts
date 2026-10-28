@@ -36,6 +36,34 @@ export function smoothstep(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/**
+ * Le segment (x0, y0, z0) → (x1, y1, z1) passe-t-il à moins de `rr` du point (cx, cy, cz) ? Impacts des tirs
+ * (segment parcouru pendant un sous-pas, `rr` = rayon de la cible + rayon du tir). Sans allocation.
+ */
+export function segmentHitsSphere(
+  x0: number,
+  y0: number,
+  z0: number,
+  x1: number,
+  y1: number,
+  z1: number,
+  cx: number,
+  cy: number,
+  cz: number,
+  rr: number,
+): boolean {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const dz = z1 - z0;
+  const len2 = dx * dx + dy * dy + dz * dz;
+  let t = len2 > 0 ? ((cx - x0) * dx + (cy - y0) * dy + (cz - z0) * dz) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const ex = x0 + dx * t - cx;
+  const ey = y0 + dy * t - cy;
+  const ez = z0 + dz * t - cz;
+  return ex * ex + ey * ey + ez * ez <= rr * rr;
+}
+
 /** Amortissement exponentiel indépendant du nombre d'images par seconde. */
 export function damp(current: number, target: number, lambda: number, dt: number): number {
   return target + (current - target) * Math.exp(-lambda * dt);
