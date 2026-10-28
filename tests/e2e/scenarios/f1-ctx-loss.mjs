@@ -1,9 +1,10 @@
 // Vol 1 (f1) : perte du contexte WebGL pendant la partie (WEBGL_lose_context).
-//  1. perte pendant le compte à rebours, sans restauration -> « Liaison graphique perdue » après le délai
-//     de grâce (~2 s), canevas jeté -> RÉESSAYER -> nouvelle partie qui vole sur un contexte neuf ;
+//  1. perte pendant le compte à rebours, sans restauration -> canevas masqué (pas de rectangle blanc),
+//     « Liaison graphique perdue » après le délai de grâce (~2 s), canevas jeté -> RÉESSAYER -> nouvelle
+//     partie qui vole sur un contexte neuf ;
 //  2. même chose en plein vol ;
-//  3. perte puis restauration 0,5 s plus tard (x2) -> la partie continue sur place (« Liaison rétablie »,
-//     image de nouveau éclairée, aucun échec) ; la 3e restauration de la même partie -> abandon net
+//  3. perte puis restauration 0,5 s plus tard (x2) -> canevas masqué puis réaffiché, la partie continue sur
+//     place (« Liaison rétablie », image de nouveau éclairée, aucun échec) ; la 3e restauration de la même partie -> abandon net
 //     (un seul écran d'échec) -> RÉESSAYER -> partie normale.
 import { assert, fmt } from '../lib/helpers.mjs';
 import {
@@ -34,6 +35,15 @@ export const meta = {
   timeoutMs: 180000,
 };
 
+/** Canevas 3D toujours là mais masqué pendant la perte (Chrome peint un canevas perdu en blanc). */
+async function assertCanvasHidden(t, label) {
+  const cs = await threeCanvases(t);
+  assert(
+    cs.length === 1 && cs[0].lost === true && cs[0].visibility === 'hidden',
+    `${label} : canevas au contexte perdu masqué attendu, obtenu ${fmt(cs)}`,
+  );
+}
+
 /** Perte sans restauration : écran d'échec après le délai de grâce, canevas jeté. */
 async function expectLostFail(t, loss, label) {
   const reason = await waitFail(t, { timeout: 15000 });
@@ -59,6 +69,7 @@ export default async function (t) {
   const run1 = await waitNewRun(t, null);
   const l1 = await loseFlightOk(t, 'intro');
   await t.wait(300);
+  await assertCanvasHidden(t, 'perte en intro');
   await t.shot('intro-lost');
   await expectLostFail(t, l1, 'perte en intro');
   await t.shot('intro-lost-fail');
@@ -82,6 +93,7 @@ export default async function (t) {
     const lumaBefore = await frameLuma(t);
     const l = await loseFlightOk(t, 'fly');
     await t.wait(500);
+    await assertCanvasHidden(t, `perte ${k}`);
     assert(await restoreContext(t, 'three'), `restauration ${k} : extension absente`);
     // Au-delà du délai de grâce : aucun échec ne doit arriver.
     await t.wait(RESTORE_WAIT_MS + 800);

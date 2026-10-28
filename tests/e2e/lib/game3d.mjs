@@ -158,8 +158,8 @@ export async function loseFlightOk(t, phase) {
 }
 
 /**
- * Canevas 3D présents dans la page : { tag, inGameRoot, display, lost }. `tag` = étiquette posée par
- * tagCanvas (null si le canevas n'en a pas : canevas neuf).
+ * Canevas 3D présents dans la page : { tag, inGameRoot, display, visibility, lost }. `tag` = étiquette posée
+ * par tagCanvas (null si le canevas n'en a pas : canevas neuf). visibility 'hidden' = masqué pendant une perte.
  */
 export function threeCanvases(t) {
   return t.ev(() =>
@@ -175,6 +175,7 @@ export function threeCanvases(t) {
         tag: c.__xrTag || null,
         inGameRoot: !!c.closest('#game-root'),
         display: getComputedStyle(c).display,
+        visibility: getComputedStyle(c).visibility,
         lost,
       };
     }),
@@ -192,12 +193,15 @@ export async function tagCanvas(t, tag) {
   if (!ok) throw new AssertionError(`tagCanvas : aucun canevas 3D dans #game-root`);
 }
 
-/** Exactement un canevas 3D, affiché, contexte vivant ; renvoie son étiquette. */
+/** Exactement un canevas 3D, affiché (ni display:none ni masqué), contexte vivant ; renvoie son étiquette. */
 export async function assertOneLiveCanvas(t, label) {
   const cs = await threeCanvases(t);
   assert(cs.length === 1, `${label} : un seul canevas 3D attendu, obtenu ${fmt(cs)}`);
   const c = cs[0];
-  assert(c.inGameRoot && c.display !== 'none', `${label} : canevas 3D affiché dans #game-root attendu, obtenu ${fmt(c)}`);
+  assert(
+    c.inGameRoot && c.display !== 'none' && c.visibility !== 'hidden',
+    `${label} : canevas 3D affiché dans #game-root attendu, obtenu ${fmt(c)}`,
+  );
   assert(c.lost === false, `${label} : contexte WebGL vivant attendu, obtenu ${fmt(c)}`);
   return c.tag;
 }

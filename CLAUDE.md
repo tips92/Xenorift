@@ -116,8 +116,11 @@ diffère en plus via `endSession`). `destroy()` libère tout : le conteneur doit
   Contexte toujours perdu au lancement suivant → jeu neuf (`dropGame`), en Canvas si WebGL est refusé (retenté ensuite).
 - **3D** (`renderer.ts`) : `acquireRenderer` / `releaseRenderer` (canevas masqué, gardé pour la partie suivante) /
   `discardRenderer` (contexte perdu, ou restauré en cours de partie : jamais réutilisé). `FlightRun` attend 2 s une
-  restauration (délai suspendu en pause), accepte 2 restaurations sur place par partie puis abandonne ; une issue
-  déjà décidée (warp, explosion, chrono) est conservée.
+  restauration (délai suspendu en pause), accepte 2 restaurations sur place par partie puis abandonne (en pause :
+  abandon à la reprise, après ces 2 s) ; une issue déjà décidée (warp, explosion, chrono) est conservée.
+- Pendant une perte, les deux canevas sont masqués (`visibility: hidden`, écouteurs DOM posés à leur création) :
+  Chrome peint un canevas au contexte perdu en blanc avec une icône d'image cassée. `display` reste réservé à
+  l'affichage entre deux parties.
 
 ## Recettes
 

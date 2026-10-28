@@ -3,7 +3,9 @@
 //     -> Reprendre -> la même partie continue ;
 //  b. pause -> perte -> 3 s sans échec -> Reprendre sans restauration -> échec ~2 s après la reprise ;
 //  c. pause -> perte -> Recommencer -> nouvelle partie qui vole, aucun échec périmé de l'ancienne ;
-//  d. perte en vol -> pause aussitôt -> Quitter -> accueil, aucun échec périmé.
+//  d. perte en vol -> pause aussitôt -> Quitter -> accueil, aucun échec périmé ;
+//  e. deux restaurations en vol, puis une 3e pendant la pause (GPU jugé instable) -> menu toujours ouvert,
+//     aucun échec ; Reprendre -> échec après le délai de grâce, canevas jeté.
 import { activeScreen, assert, fmt, waitFor, waitForScreen } from '../lib/helpers.mjs';
 import {
   LOST_REASON,
@@ -142,4 +144,50 @@ export default async function (t) {
   const lost = await toastsSince(t, 'Liaison graphique perdue', ld.at);
   assert(lost.length >= 1, 'd. message « Liaison graphique perdue… » attendu au moment de la perte');
   await t.shot('d-title-after-quit');
+
+  // ---------- e. 3e restauration pendant la pause : l'abandon attend Reprendre (pas d'échec derrière le menu)
+  await t.goto('?unlock=1&stage=f1');
+  run = await waitFlying(t, null);
+  for (let k = 1; k <= 2; k++) {
+    const l = await loseFlightOk(t, 'fly');
+    await t.wait(500);
+    assert(await restoreContext(t, 'three'), `e. restauration ${k} : extension absente`);
+    await waitFor(
+      t,
+      (since) => (window.__uiLog || []).some((e) => e.kind === 'toast' && e.at >= since && e.text.includes('Liaison rétablie')),
+      { timeout: 10000, label: `e. restauration ${k} : message « Liaison rétablie »`, arg: l.at },
+    );
+    await assertFlying(t, `e. après la restauration ${k}`);
+  }
+  assert((await runId(t)) === run, 'e. même partie attendue après deux restaurations');
+  await pauseByKey(t);
+  const le = await loseFlightOk(t, 'fly');
+  await t.wait(500);
+  assert(await restoreContext(t, 'three'), 'e. restauration 3 : extension absente');
+  await t.wait(RESTORE_WAIT_MS + 1000);
+  fails = await screensSince(t, 'fail', le.at);
+  assert(fails.length === 0, `e. 3e restauration pendant la pause : aucun échec attendu avant Reprendre, obtenu ${fmt(fails)}`);
+  assert(await stillPaused(t), 'e. le menu Pause doit rester ouvert après la 3e restauration');
+  // Preuve que la 3e restauration a eu lieu (sinon ce cas ne serait qu'une copie du cas b)
+  const csR = await threeCanvases(t);
+  assert(
+    csR.length === 1 && csR[0].lost === false && csR[0].visibility !== 'hidden',
+    `e. 3e restauration attendue pendant la pause (canevas vivant et réaffiché), obtenu ${fmt(csR)}`,
+  );
+  await t.shot('e-third-restore-paused');
+  const te = await pageNow(t);
+  await pressPause(t, 'Reprendre');
+  const reasonE = await waitFail(t, { timeout: 15000 });
+  assert(reasonE === LOST_REASON, `e. motif ${fmt(LOST_REASON)} attendu, obtenu ${fmt(reasonE)}`);
+  fails = await screensSince(t, 'fail', le.at);
+  assert(fails.length === 1, `e. un seul écran d'échec attendu, obtenu ${fmt(fails)}`);
+  const delayE = fails[0].at - te;
+  t.log(`e. échec affiché ${delayE} ms après Reprendre`);
+  assert(
+    delayE >= RESTORE_WAIT_MS - 200 && delayE <= 9000,
+    `e. échec attendu entre 1,8 et 9 s après Reprendre (délai de grâce), obtenu ${delayE} ms`,
+  );
+  const csE = await threeCanvases(t);
+  assert(csE.length === 0, `e. le canevas abandonné doit être retiré, obtenu ${fmt(csE)}`);
+  await t.shot('e-resumed-fail');
 }

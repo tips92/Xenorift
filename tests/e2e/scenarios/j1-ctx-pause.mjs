@@ -2,7 +2,8 @@
 //  A. Échap (pause) -> perte -> restauration : la partie reste en pause (menu ouvert, Kaï figé) ;
 //     Échap -> reprise, Kaï répond.
 //  B. perte -> Échap (pause) -> REPRENDRE alors que le contexte est toujours perdu : menu fermé mais Kaï
-//     reste figé ; restauration -> la partie repart d'elle-même.
+//     reste figé, canevas masqué (pas de rectangle blanc) ; restauration -> canevas réaffiché, la partie
+//     repart d'elle-même.
 //  Aucun abandon (restaurations avant 5 s), puis victoire normale : un seul onComplete, « NIVEAU TERMINÉ ».
 import { assert, fmt, screenText, waitFor, waitForScreen } from '../lib/helpers.mjs';
 import {
@@ -15,6 +16,7 @@ import {
   loseGameOk,
   pageNow,
   pauseOverlay,
+  phaserCanvases,
   pressPause,
   recordUi,
   restoreGame,
@@ -36,6 +38,15 @@ function waitGfxLost(t, label) {
     timeout: 5000,
     label,
   });
+}
+
+/** Un seul canevas Phaser, affiché (display) et masqué ou non (visibility) comme attendu. */
+async function assertCanvasLook(t, hidden, label) {
+  const pc = await phaserCanvases(t);
+  assert(
+    pc.length === 1 && pc[0].display === 'block' && (pc[0].visibility === 'hidden') === hidden,
+    `${label} : canevas Phaser ${hidden ? 'masqué' : 'visible'} attendu, obtenu ${fmt(pc)}`,
+  );
 }
 
 /** Contexte rendu et pris en compte (gfxLost retombé, contexte vivant). */
@@ -62,6 +73,7 @@ export default async function (t) {
   await waitPauseMenu(t, true);
   const la = await loseGameOk(t, 0, 'A : perte pendant la pause');
   await waitGfxLost(t, 'A : perte prise en compte');
+  await assertCanvasLook(t, true, 'A : pendant la perte');
   await t.wait(300);
   await restoreGame(t);
   await waitGfxBack(t, 'A : contexte restauré');
@@ -70,6 +82,7 @@ export default async function (t) {
   assert(ea.paused && ea.scenePaused && !ea.gfxLost, `A : après restauration, la partie doit rester en pause (${fmt(ea)})`);
   assert((await pauseOverlay(t)) === 'open', `A : le menu Pause doit rester ouvert (état ${await pauseOverlay(t)})`);
   await assertFrozen(t, 'A : restauré, toujours en pause');
+  await assertCanvasLook(t, false, 'A : après restauration');
   await t.shot('A-restored-still-paused');
   await t.key('Escape', 60);
   await waitPauseMenu(t, false);
@@ -88,6 +101,7 @@ export default async function (t) {
   const eb = await engine2d(t);
   assert(!eb.paused && eb.gfxLost && eb.scenePaused, `B : REPRENDRE sans contexte -> partie reprise mais scène figée attendue (${fmt(eb)})`);
   await assertFrozen(t, 'B : reprise demandée, contexte toujours perdu', 600);
+  await assertCanvasLook(t, true, 'B : reprise demandée, contexte toujours perdu');
   await t.shot('B-resumed-still-lost');
   const elapsed = (await pageNow(t)) - lb.at;
   assert(elapsed < RESTORE_WAIT_MS - 500, `B : étapes trop lentes (${elapsed} ms depuis la perte) : la restauration doit arriver avant ${RESTORE_WAIT_MS} ms`);
@@ -102,6 +116,7 @@ export default async function (t) {
   );
   assert((await pauseOverlay(t)) === 'none', 'B : aucun menu Pause attendu après la restauration');
   await assertPlays(t, 'B : après restauration');
+  await assertCanvasLook(t, false, 'B : après restauration');
   await t.shot('B-restored');
 
   // Au-delà des 5 s depuis chaque perte : aucun abandon.

@@ -169,6 +169,10 @@ function contextGone(g: Phaser.Game): boolean {
 function watchContext(g: Phaser.Game): void {
   const r = webglRenderer(g);
   if (!r) return;
+  // Contexte perdu : Chrome peint le canevas en blanc (icône d'image cassée) ; masqué, le fond sombre reste.
+  const c = g.canvas;
+  c.addEventListener('webglcontextlost', () => (c.style.visibility = 'hidden'));
+  c.addEventListener('webglcontextrestored', () => (c.style.visibility = ''));
   r.on(Phaser.Renderer.Events.LOSE_WEBGL, () => onContextLost(g));
   r.on(Phaser.Renderer.Events.RESTORE_WEBGL, () => onContextRestored(g));
 }

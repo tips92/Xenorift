@@ -388,6 +388,8 @@ export class FlightRun implements ModeHandle {
 
   private giveUpSoon(): void {
     this.clearLossTimer();
+    // En pause (appli en arrière-plan) : ctxLost reste vrai, resume() arme le délai de grâce puis abandonne
+    if (this.paused) return;
     this.lossTimer = window.setTimeout(() => {
       this.lossTimer = 0;
       this.giveUpContext();

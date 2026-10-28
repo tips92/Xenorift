@@ -175,12 +175,17 @@ export function gameInfo(t, n) {
   }, n);
 }
 
-/** Canvas de #game-root qui ne sont pas ceux du vol 3D (canvas Phaser). */
+/** Canvas de #game-root qui ne sont pas ceux du vol 3D (canvas Phaser) ; visibility 'hidden' pendant une perte. */
 export function phaserCanvases(t) {
   return t.ev(() =>
     [...document.querySelectorAll('#game-root canvas')]
       .filter((c) => !c.dataset.engine)
-      .map((c) => ({ display: c.style.display || getComputedStyle(c).display, width: c.width, height: c.height })),
+      .map((c) => ({
+        display: c.style.display || getComputedStyle(c).display,
+        visibility: getComputedStyle(c).visibility,
+        width: c.width,
+        height: c.height,
+      })),
   );
 }
 

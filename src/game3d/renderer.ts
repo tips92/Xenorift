@@ -65,6 +65,9 @@ export function acquireRenderer(container: HTMLElement): THREE.WebGLRenderer {
     c.style.height = '100%';
     c.style.touchAction = 'none';
     c.style.outline = 'none';
+    // Contexte perdu : Chrome peint le canevas en blanc (icône d'image cassée) ; masqué, le fond sombre reste.
+    c.addEventListener('webglcontextlost', () => (c.style.visibility = 'hidden'));
+    c.addEventListener('webglcontextrestored', () => (c.style.visibility = ''));
   }
   shared.setPixelRatio(pixelRatio());
   const canvas = shared.domElement;
