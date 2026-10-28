@@ -10,6 +10,7 @@ import type {
   WeaponId,
   WeaponUpgrades,
 } from './types';
+import { SHIP_GUN_MULS, SHIP_GUNS } from './shipGuns.ts';
 import { isWeaponId, WEAPON_IDS, WEAPONS } from './weapons.ts';
 import type { WeaponMods } from './weapons';
 
@@ -115,7 +116,7 @@ export interface HangarItem {
   readonly weapon: WeaponId | null;
   /** Caractéristique améliorée. */
   readonly stat: UpgradeStat | null;
-  /** Effet en jeu pas encore branché (canon de la Comète : étape 3b) : « Effet en vol : bientôt ». */
+  /** Effet en jeu pas encore branché : note « Effet en vol : bientôt » (plus aucun achat depuis 3b). */
   readonly soon: boolean;
 }
 
@@ -135,6 +136,19 @@ const WEAPON_DESC: Readonly<Record<BuyableWeaponId, string>> = {
 /** Multiplicateur affiché à la française : 1.25 → « ×1,25 ». */
 export function formatMul(m: number): string {
   return `×${String(Math.round(m * 100) / 100).replace('.', ',')}`;
+}
+
+/**
+ * Effets du canon de la Comète, niveaux 1 à 3, tirés des fiches (core/shipGuns.ts) : « Canon léger →
+ * Mitrailleuse : cadence ×2,5 », « Dégâts ×1,25, cadence ×1,15 », « Dégâts ×1,5, cadence ×1,3 ».
+ */
+function shipGunEffects(): string[] {
+  const { light, machinegun: mg } = SHIP_GUNS;
+  const out = [`${light.name} → ${mg.name} : cadence ${formatMul(light.cooldownMs / mg.cooldownMs)}`];
+  for (let lv = 2; lv <= MAX_SHIP_GUN_LEVEL; lv++) {
+    out.push(`Dégâts ${formatMul(SHIP_GUN_MULS.damage[lv])}, cadence ${formatMul(SHIP_GUN_MULS.fireRate[lv])}`);
+  }
+  return out;
 }
 
 function buildItems(): HangarItem[] {
@@ -188,9 +202,8 @@ function buildItems(): HangarItem[] {
       desc: 'Deux canons sous les ailes, à la place du canon léger.',
       maxLevel: MAX_SHIP_GUN_LEVEL,
       prices: PRICES.shipGun,
-      effects: ['Mitrailleuse', 'Cadence et dégâts +', 'Cadence et dégâts ++'],
+      effects: shipGunEffects(),
       crew: [null, null, null],
-      soon: true,
     },
     {
       ...base,
@@ -521,7 +534,7 @@ export function applyPurchase(
 
 // ---------------------------------------------------------------- Divers
 
-/** Cristaux gagnés par une étape réussie (StageResult.crystals : entier ≥ 0 ; absent, en vol : 0). */
+/** Cristaux gagnés par une étape réussie (StageResult.crystals, 2D et vol : entier ≥ 0 ; absent : 0). */
 export function stageCrystals(result: Readonly<StageResult>): number {
   const n = result.crystals;
   return typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;

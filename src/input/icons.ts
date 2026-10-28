@@ -29,6 +29,14 @@ export const ICON_JUMP =
   '<path d="M7 28h18" stroke-width="2" opacity=".45"/>' +
   '</svg>';
 
+/** Viseur à point central lumineux (TIR de la Comète, en vol). */
+export const ICON_SHOT =
+  '<svg viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round">' +
+  '<circle cx="16" cy="16" r="8.4" stroke-width="2.6"/>' +
+  '<path d="M16 3.4v5M16 23.6v5M3.4 16h5M23.6 16h5" stroke-width="2.4"/>' +
+  '<circle cx="16" cy="16" r="2.7" fill="#fff" stroke="none"/>' +
+  '</svg>';
+
 /** Double chevron de vitesse avec traînées. */
 export const ICON_TURBO =
   '<svg viewBox="0 0 32 32" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">' +

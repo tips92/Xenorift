@@ -3410,19 +3410,17 @@ svg {
   text-shadow: 0 0 8px rgba(255, 200, 60, 0.85);
 }
 
-/* ---- Plateforme : jauge de chauffe de l'arme équipée */
+/* ---- Jauge de chauffe : arme équipée (plateforme, .hud-heat) et canon de la Comète (vol, .fl-heat, placée
+   avec le HUD du vol). Mêmes classes internes (hud.ts, createHeatGauge). */
 
-.hud-heat {
+.hud-heat,
+.fl-heat {
   position: absolute;
   top: var(--hud-top);
-  left: 0;
-  right: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: clamp(150px, 24vw, 240px);
   height: 44px;
-  margin: 0 auto;
   padding: 0 12px;
   border: 1px solid rgba(63, 247, 255, 0.22);
   border-radius: 14px;
@@ -3430,19 +3428,30 @@ svg {
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
+.hud-heat {
+  left: 0;
+  right: 0;
+  width: clamp(150px, 24vw, 240px);
+  margin: 0 auto;
+}
+
 /* Icône de l'arme : couleur selon la chauffe (froide, tiède, brûlante). */
-.hud-heat .ico-weapon {
+.hud-heat .ico-weapon,
+.fl-heat .ico-weapon {
+  flex: none;
   width: 22px;
   height: 22px;
   color: var(--cyan);
   filter: drop-shadow(0 0 3px currentColor);
 }
 
-.hud-heat[data-level='warm'] .ico-weapon {
+.hud-heat[data-level='warm'] .ico-weapon,
+.fl-heat[data-level='warm'] .ico-weapon {
   color: var(--orange);
 }
 
-.hud-heat[data-level='hot'] .ico-weapon {
+.hud-heat[data-level='hot'] .ico-weapon,
+.fl-heat[data-level='hot'] .ico-weapon {
   color: var(--red);
 }
 
@@ -3493,15 +3502,18 @@ svg {
   opacity: 0;
 }
 
-.hud-heat.is-over {
+.hud-heat.is-over,
+.fl-heat.is-over {
   border-color: rgba(255, 63, 94, 0.65);
 }
 
-.hud-heat.is-over .heat-label {
+.hud-heat.is-over .heat-label,
+.fl-heat.is-over .heat-label {
   animation: blink 0.55s linear infinite;
 }
 
-.hud-heat.is-over .heat-track {
+.hud-heat.is-over .heat-track,
+.fl-heat.is-over .heat-track {
   animation: crit-pulse 0.28s ease-in-out infinite alternate;
 }
 
@@ -3834,6 +3846,39 @@ svg {
   font-size: 15px;
 }
 
+/* ---- Vol : chauffe du canon (entre le chrono et le bouton pause, comme la jauge 2D des petits écrans) et
+   cristaux du vol (sous le bouclier et le turbo). De 844 à 568 px de large, la jauge ne touche ni la ligne
+   des portails (la plus large du bloc central) ni le bouton pause, 5 boucliers compris. */
+
+.fl-heat {
+  right: calc(var(--hud-right) + 62px);
+  width: clamp(116px, 22vw, 220px);
+}
+
+.fl-crystals {
+  position: absolute;
+  top: calc(var(--hud-top) + 56px);
+  left: var(--hud-left);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px 0 8px;
+  border: 1px solid rgba(63, 247, 255, 0.22);
+  border-radius: 11px;
+  background: var(--chip);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.fl-crystals .ico {
+  width: 18px;
+  height: 18px;
+}
+
+.fl-crystals .hud-num {
+  font-size: 15px;
+}
+
 /* ---- Messages (toasts) */
 
 /* Sous la pause (30) : les messages du jeu (« Vitesse ! »…) ne cachent pas le panneau. */
@@ -3888,8 +3933,14 @@ svg {
 
 @media (max-height: 380px) {
   .hud-chip,
-  .hud-heat {
+  .hud-heat,
+  .fl-heat {
     height: 40px;
+  }
+
+  /* Pastille du bouclier ramenée à 40 px : les cristaux remontent d'autant. */
+  .fl-crystals {
+    top: calc(var(--hud-top) + 48px);
   }
 
   .hud-heart {
@@ -3960,6 +4011,13 @@ svg {
 
   .fl-timer {
     font-size: 22px;
+  }
+
+  /* Jauge du canon resserrée (568 px : 384 à 492 px, la ligne des portails finit vers 362 px). */
+  .fl-heat {
+    gap: 6px;
+    width: 108px;
+    padding: 0 9px;
   }
 }
 

@@ -1,9 +1,11 @@
 import * as THREE from 'three';
-import { BASE_SHIELDS, BOOST_MULS, MAX_SHIELDS_CAP } from '../core/hangar';
-import type { CourseId, FlightHud, ModeHandle, ModeHooks, StageDef, StageResult } from '../core/types';
+import { BASE_SHIELDS, BOOST_MULS, MAX_SHIELDS_CAP, MAX_SHIP_GUN_LEVEL } from '../core/hangar';
+import { SHIP_AIM } from '../core/shipGuns';
+import type { CourseId, FlightHud, ModeHandle, ModeHooks, SfxId, StageDef, StageResult } from '../core/types';
 import { AsteroidField, chunkGeometry } from './asteroids';
 import {
   CORRIDOR_R,
+  ENEMY_KINDS,
   GATE_PASS_R,
   GATE_R,
   LAT_ACCEL,
@@ -13,18 +15,35 @@ import {
   pathAt,
   type Course,
   type CourseTheme,
+  type EnemyKind,
 } from './courses';
 import { Debris, Particles, ScreenFx, Streaks, makeGlowPointsMaterial, setGlowScale } from './effects';
+import { ENEMY_DEFS, EnemyField, createEnemyCounts, type EnemyCounts, type EnemyEvents, type ShipState } from './enemies';
 import { Environment } from './environment';
 import { GateField, WARP_R, WarpPortal } from './gates';
+import { CrystalPickups, PICKUP_CAP, PICKUP_COLOR } from './pickups';
 import { ContextLostError, acquireRenderer, discardRenderer, isContextLost, pixelRatio, releaseRenderer } from './renderer';
 import { mulberry32 } from './rng';
 import { ShipModel } from './ship';
+import {
+  SHOT_CAP,
+  SHOT_R,
+  ShipGun,
+  ShotPool,
+  aimDirection,
+  clearAim,
+  copyAim,
+  createAimTarget,
+  shotMiss,
+  type AimTarget,
+  type ShotHitFn,
+} from './shots';
 import { bakeSky, type SkyBake } from './sky';
 import { Bin, clamp, damp, smoothstep } from './util';
 
 // Partie de vol spatial : machine à états (compte à rebours → vol → distorsion / explosion),
-// pilotage, portails, collisions, caméra de poursuite, HUD et nettoyage complet.
+// pilotage, portails, collisions, combat (tir de la Comète, ennemis, cristaux), caméra de poursuite,
+// HUD et nettoyage complet.
 
 type Phase = 'intro' | 'fly' | 'warp' | 'dead' | 'timeout' | 'done';
 
@@ -55,12 +74,22 @@ const RESTORE_WAIT_MS = 2000;
 /** Restaurations sur place acceptées par partie (au-delà, GPU jugé instable). */
 const MAX_RESTORES = 2;
 export const CONTEXT_LOST_REASON = 'Liaison graphique perdue';
+/** Points d'un astéroïde détruit par les tirs, d'un cristal ramassé (ennemis : fiches de enemies.ts). */
+const ROCK_POINTS = 10;
+const CRYSTAL_POINTS = 50;
+/** Appui bref sur TIR mémorisé (plus rapide que la cadence), comme au sol (s). */
+const FIRE_QUEUE = 0.15;
+/** Visée : cône prioritaire = guidage max + cette marge (°), les gros rochers au bord restent atteignables. */
+const AIM_SURE_MARGIN = 1;
 
 const _look = new THREE.Vector3();
-const _v = new THREE.Vector3();
 const _c = new THREE.Color();
-const _c2 = new THREE.Color();
 const _path = { x: 0, y: 0 };
+const _avoid = { x: 0, y: 0 };
+/** Centre du dernier rocher éclaté (burstRock). */
+const _rc = new THREE.Vector3();
+const _mz = new THREE.Vector3();
+const _aimDir = new THREE.Vector3();
 
 /** Valeur d'un module de la Comète bornée à [min, max] ; absente ou invalide (aperçu ancien) : `def`. */
 function shipValue(v: unknown, min: number, max: number, def: number): number {
@@ -72,11 +101,19 @@ interface DevApi {
   win(): void;
   fail(): void;
   timeScale(s: number): void;
-  info(): Record<string, number | string | boolean>;
+  info(): Record<string, unknown>;
   /** Avance la simulation de `seconds` d'un coup (tests rapides), puis dessine une image. */
-  advance(seconds: number): Record<string, number | string | boolean>;
+  advance(seconds: number): Record<string, unknown>;
   /** Temps moyen (ms) de rendu d'une image, synchronisé avec le GPU. */
   bench(frames?: number): number;
+  /**
+   * Place un ennemi (essaim : formation entière) à `distance` devant la Comète ; renvoie le nombre placé.
+   * `variant` (0..1, facultatif ; au hasard sans lui) : orientation et phase de l'essaim, côté du virage du
+   * chasseur, clignotement de la mine (tests reproductibles).
+   */
+  spawn(type: string, distance?: number, variant?: number): number;
+  /** Force le tir (tests), en tir automatique comme en tir manuel. */
+  fire(on?: boolean): void;
 }
 
 export class FlightRun implements ModeHandle {
@@ -108,10 +145,44 @@ export class FlightRun implements ModeHandle {
   private readonly hotColor = new THREE.Color('#ffe08a');
   private readonly hullColor = new THREE.Color('#e8ecff');
   private readonly cyanColor = new THREE.Color('#3ff0ff');
+  private readonly crystalColor: THREE.Color;
+  /** Cristaux du vol (scintillement du ramassage). */
+  private readonly pickupColor: THREE.Color;
   /** Modules de la Comète (hooks.loadout.ship), lus au départ : boucliers max, vidange et recharge du turbo (/s). */
   private readonly maxShield: number;
   private readonly boostDrain: number;
   private readonly boostFill: number;
+
+  // --- Combat (3b) : canon (hooks.loadout.ship.gunLevel), projectiles, cristaux, ennemis
+  private readonly gun: ShipGun;
+  private readonly shots: ShotPool;
+  private readonly pickups: CrystalPickups;
+  private readonly enemies: EnemyField;
+  private readonly shotColor: THREE.Color;
+  /** Cible de la visée, recalculée à chaque sous-pas de vol ; rocher candidat (aucun ennemi atteignable). */
+  private readonly aim = createAimTarget();
+  private readonly rockAim = createAimTarget();
+  private readonly cosCone = Math.cos(THREE.MathUtils.degToRad(SHIP_AIM.coneDeg));
+  /** Cône prioritaire : cibles que le guidage atteint (homingDeg + AIM_SURE_MARGIN). */
+  private readonly cosSure = Math.cos(
+    THREE.MathUtils.degToRad(Math.min(SHIP_AIM.coneDeg, SHIP_AIM.homingDeg + AIM_SURE_MARGIN)),
+  );
+  private readonly homingRad = THREE.MathUtils.degToRad(SHIP_AIM.homingDeg);
+  /** La cible visée peut être touchée par le prochain tir (tir automatique). */
+  private targetHit = false;
+  /** La Comète vue par les ennemis (tenue à jour avant chaque EnemyField.update). */
+  private readonly shipState: ShipState = { x: 0, y: 0, z: 0, vx: 0, vy: 0, speed: 0, r: SHIP_HIT_R };
+  private readonly enemyCounts: EnemyCounts = createEnemyCounts();
+  /** Options des sons fréquents (tirs, impacts), réutilisées. */
+  private readonly sfxOpts = { volume: 1, pitch: 1 };
+  /** Impact d'un projectile (fonction liée une fois). */
+  private readonly onShotHit: ShotHitFn = (kind, index, damage, x, y, z) => this.shotHit(kind, index, damage, x, y, z);
+  /** Rappels du champ d'ennemis (objet créé une fois). */
+  private readonly enemyEvents: EnemyEvents = {
+    orbFired: () => this.hooks.audio.sfx('enemyOrb'),
+    enemyKilled: (kind, x, y, z, points, crystals) => this.enemyKilled(kind, x, y, z, points, crystals),
+    shipHit: (_cause, x, y) => this.damageShip(x, y),
+  };
 
   // --- État de la partie
   private phase: Phase = 'intro';
@@ -140,6 +211,19 @@ export class FlightRun implements ModeHandle {
   private combo = 0;
   private result: StageResult | null = null;
   private endT = 0;
+  /** Points des rochers, ennemis et cristaux (ajoutés au score du vol). */
+  private points = 0;
+  /** Cristaux ramassés pendant ce vol (StageResult.crystals). */
+  private crystals = 0;
+  private rocksDestroyed = 0;
+  /** Cristaux lâchés depuis le départ (aide DEV : cristaux de chaque destruction). */
+  private crystalsDropped = 0;
+  /** Tirs partis et bouche du dernier (aide DEV : cadence, alternance des canons). */
+  private shotsFired = 0;
+  private lastMuzzle = -1;
+  private fireQueue = 0;
+  /** Ennemis déjà simulés pendant ce sous-pas (par simFly, Comète vulnérable). */
+  private enemyStepped = false;
 
   // --- Rendu / caméra
   private shake = 0;
@@ -166,6 +250,8 @@ export class FlightRun implements ModeHandle {
   private timeScale = 1;
   private devApi: DevApi | null = null;
   private devFirstFrame = true;
+  /** Tir forcé (__xr3d.fire). */
+  private devFire = false;
 
   // --- Perte du contexte WebGL
   private ctxLost = false;
@@ -194,6 +280,12 @@ export class FlightRun implements ModeHandle {
     this.theme = this.course.def.theme;
     this.timeLeft = this.course.def.startTime;
     const theme = this.theme;
+    // Canon : 0 canon léger, 1 mitrailleuse, 2-3 ses améliorations ; portée selon la vitesse du parcours
+    const gunLevel = Math.floor(shipValue(ship && ship.gunLevel, 0, MAX_SHIP_GUN_LEVEL, 0));
+    this.gun = new ShipGun(gunLevel, this.course.def.speed);
+    this.shotColor = new THREE.Color(this.gun.stats.color);
+    this.crystalColor = new THREE.Color(theme.crystal);
+    this.pickupColor = new THREE.Color(PICKUP_COLOR);
 
     try {
       this.renderer = acquireRenderer(container);
@@ -234,7 +326,7 @@ export class FlightRun implements ModeHandle {
       this.rocks = new AsteroidField(this.course, theme, sky.background, this.bin);
       this.scene.add(this.rocks.group);
 
-      this.ship = new ShipModel(this.bin, sky.env);
+      this.ship = new ShipModel(this.bin, sky.env, gunLevel);
       this.scene.add(this.ship.root);
 
       this.particles = new Particles(900, this.glowMat, this.bin);
@@ -243,6 +335,14 @@ export class FlightRun implements ModeHandle {
       this.scene.add(this.debris.mesh);
       this.streaks = new Streaks(150, theme.streak, this.bin);
       this.scene.add(this.streaks.mesh);
+
+      // --- Combat : projectiles, cristaux, ennemis (après les particules, qu'ils partagent)
+      this.shots = new ShotPool(SHOT_CAP, this.bin);
+      this.scene.add(this.shots.mesh);
+      this.pickups = new CrystalPickups(PICKUP_CAP, this.bin);
+      this.scene.add(this.pickups.group);
+      this.enemies = new EnemyField(this.course, theme, this.particles, this.enemyEvents, this.bin);
+      this.scene.add(this.enemies.group);
       this.screen = new ScreenFx(container);
 
       this.gateNextColor = new THREE.Color(theme.gateNext);
@@ -267,6 +367,7 @@ export class FlightRun implements ModeHandle {
       this.resizeObs?.disconnect();
       window.removeEventListener('resize', this.onWinResize);
       (this as unknown as { screen?: ScreenFx }).screen?.dispose();
+      (this as unknown as { enemies?: EnemyField }).enemies?.dispose();
       this.scene.clear();
       this.bin.disposeAll();
       // Contexte perdu en route : renderer jeté, la prochaine tentative repartira d'un contexte neuf
@@ -333,6 +434,13 @@ export class FlightRun implements ModeHandle {
     // contexte) : le renderer partagé ne resservira pas. Jeté avant la libération, qui reste muette.
     const drop = this.ctxLost || this.restores > 0 || isContextLost(this.renderer);
     if (drop) this.dropRenderer();
+    this.enemies.dispose();
+    this.shots.clear();
+    this.pickups.clear();
+    // Tampons d'instances (rochers, éclats, tirs, cristaux…) : hors du Bin, libérés par l'InstancedMesh
+    this.scene.traverse((o) => {
+      if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose();
+    });
     this.scene.clear();
     this.bin.disposeAll();
     if (!drop) releaseRenderer(this.renderer);
@@ -524,6 +632,8 @@ export class FlightRun implements ModeHandle {
   private simulate(h: number): void {
     this.time += h;
     this.phaseT += h;
+    const startPhase = this.phase;
+    this.enemyStepped = false;
     switch (this.phase) {
       case 'intro':
         this.simIntro();
@@ -552,6 +662,27 @@ export class FlightRun implements ModeHandle {
         break;
     }
     if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - h);
+
+    // Combat, toutes phases : hors vol, les ennemis finissent leur mouvement sans toucher la Comète ;
+    // les projectiles en vol vont au bout ; les cristaux ne se ramassent qu'en vol.
+    if (!this.enemyStepped && startPhase !== 'intro' && this.phase !== 'intro') {
+      this.syncShipState();
+      this.enemies.update(h, this.time, this.shipState, false);
+    }
+    this.shots.update(h, this.time, this.rocks, this.enemies, this.onShotHit);
+    const got = this.pickups.update(h, this.time, this.x, this.y, this.z, this.phase === 'fly');
+    if (got > 0) this.collectCrystals(got);
+  }
+
+  /** La Comète vue par les ennemis. */
+  private syncShipState(): void {
+    const s = this.shipState;
+    s.x = this.x;
+    s.y = this.y;
+    s.z = this.z;
+    s.vx = this.vx;
+    s.vy = this.vy;
+    s.speed = this.speed;
   }
 
   private setPhase(p: Phase): void {
@@ -606,6 +737,11 @@ export class FlightRun implements ModeHandle {
       // Pilote automatique (outil de dev) : vise la trajectoire idéale un peu en avant
       const look = Math.max(8, this.speed * 0.3);
       pathAt(this.course.path, this.z - look, _path);
+      // Mine ou orbe sur la route : écart latéral conseillé par le champ d'ennemis
+      if (this.enemies.avoid(this.x, this.y, this.z, this.speed, _avoid)) {
+        _path.x += _avoid.x;
+        _path.y += _avoid.y;
+      }
       let tvx = (_path.x - this.x) * 3.2;
       let tvy = (_path.y - this.y) * 3.2;
       const tl = Math.hypot(tvx, tvy);
@@ -683,6 +819,14 @@ export class FlightRun implements ModeHandle {
     if (hit >= 0) this.onRockHit(hit);
     if (this.phase !== 'fly') return;
 
+    // Ennemis : vagues, IA, orbes, chocs avec la Comète
+    this.syncShipState();
+    this.enemies.update(h, this.time, this.shipState, true);
+    this.enemyStepped = true;
+    if (this.phase !== 'fly') return;
+
+    this.updateGun(h);
+
     if (this.z <= this.course.warpZ) {
       this.startWarp();
       return;
@@ -730,11 +874,17 @@ export class FlightRun implements ModeHandle {
     this.pushHud();
   }
 
+  /** Choc de la Comète contre un rocher : il éclate, un bouclier est perdu (sauf invulnérable). */
   private onRockHit(k: number): void {
+    this.burstRock(k);
+    this.damageShip(_rc.x, _rc.y);
+  }
+
+  /** Éclatement d'un rocher (choc ou tirs) : retiré du champ, éclats, poussière, étincelles ; centre dans _rc. */
+  private burstRock(k: number): void {
     const rk = this.rocks.rocks[k];
-    this.rocks.center(k, this.time, _v);
+    this.rocks.center(k, this.time, _rc);
     this.rocks.destroyed[k] = 1;
-    // Éclatement : éclats de roche + poussière + étincelles
     this.rocks.tint(k, _c);
     const n = Math.min(14, 5 + Math.round(rk.r * 2));
     for (let i = 0; i < n; i++) {
@@ -743,9 +893,9 @@ export class FlightRun implements ModeHandle {
       const q = Math.sqrt(1 - u * u);
       const sp = 4 + Math.random() * 10;
       this.debris.spawn(
-        _v.x + Math.cos(a) * q * rk.r * 0.5,
-        _v.y + Math.sin(a) * q * rk.r * 0.5,
-        _v.z + u * rk.r * 0.5,
+        _rc.x + Math.cos(a) * q * rk.r * 0.5,
+        _rc.y + Math.sin(a) * q * rk.r * 0.5,
+        _rc.z + u * rk.r * 0.5,
         Math.cos(a) * q * sp,
         Math.sin(a) * q * sp,
         u * sp,
@@ -754,10 +904,16 @@ export class FlightRun implements ModeHandle {
         1.4 + Math.random() * 1.2,
       );
     }
-    _c2.set(this.theme.crystal);
-    this.particles.burst(_v.x, _v.y, _v.z, 24, 4, 14, _c.multiplyScalar(1.5), 0.9 + rk.r * 0.18, 0.9);
-    this.particles.burst(_v.x, _v.y, _v.z, 16, 8, 22, _c2, 0.45, 0.7);
+    this.particles.burst(_rc.x, _rc.y, _rc.z, 24, 4, 14, _c.multiplyScalar(1.5), 0.9 + rk.r * 0.18, 0.9);
+    this.particles.burst(_rc.x, _rc.y, _rc.z, 16, 8, 22, this.crystalColor, 0.45, 0.7);
+  }
 
+  /**
+   * Choc contre la Comète (rocher, ennemi percuté, mine, orbe) venu de (fromX, fromY) : un bouclier perdu,
+   * ralentissement, rebond ; pendant l'invulnérabilité, juste un petit bruit.
+   */
+  private damageShip(fromX: number, fromY: number): void {
+    if (this.phase !== 'fly') return;
     if (this.invuln > 0) {
       this.hooks.audio.sfx('crash', { volume: 0.35, pitch: 1.3 });
       return;
@@ -771,14 +927,132 @@ export class FlightRun implements ModeHandle {
     this.hooks.audio.sfx('crash');
     this.hooks.audio.haptic(120);
     this.screen.flashHit(0.85);
-    // Petit rebond latéral loin du rocher
-    const dx = this.x - _v.x;
-    const dy = this.y - _v.y;
+    // Petit rebond latéral loin du choc
+    const dx = this.x - fromX;
+    const dy = this.y - fromY;
     const d = Math.hypot(dx, dy) || 1;
     this.vx += (dx / d) * 7;
     this.vy += (dy / d) * 7;
     this.pushHud();
     if (this.shield <= 0) this.explode();
+  }
+
+  /** Visée, tir automatique ou manuel, canon (cadence, surchauffe) et projectiles ; un sous-pas de vol. */
+  private updateGun(h: number): void {
+    const aim = this.aim;
+    const gun = this.gun;
+    const st = gun.stats;
+    // Cible : les ennemis d'abord (un rocher du couloir, presque toujours là, cacherait le chasseur qui vire),
+    // le plus proche à portée du guidage (homingDeg + 1°), sinon du cône de visée. Aucun, ou hors d'atteinte du
+    // tir guidé : le rocher du couloir choisi de même (s'il peut être touché, ou faute d'ennemi). Une cible que
+    // les tirs déjà en route suffisent à détruire est ignorée (ShotPool.claim).
+    clearAim(aim);
+    this.enemies.aim(this.x, this.y, this.z, this.cosSure, st.range, aim);
+    if (aim.kind === 'none') this.enemies.aim(this.x, this.y, this.z, this.cosCone, st.range, aim);
+    this.targetHit = aim.kind !== 'none' && this.canHit(aim);
+    if (!this.targetHit) {
+      const rock = this.rockAim;
+      clearAim(rock);
+      this.rocks.aim(this.x, this.y, this.z, this.cosSure, st.range, this.time, rock);
+      if (rock.kind === 'none') this.rocks.aim(this.x, this.y, this.z, this.cosCone, st.range, this.time, rock);
+      if (rock.kind !== 'none') {
+        const rockHit = this.canHit(rock);
+        if (rockHit || aim.kind === 'none') {
+          copyAim(aim, rock);
+          this.targetHit = rockHit;
+        }
+      }
+    }
+
+    const input = this.hooks.input;
+    if (input.consumePress('fire')) this.fireQueue = FIRE_QUEUE;
+    else if (this.fireQueue > 0) this.fireQueue -= h;
+    const held = input.state.fire || this.fireQueue > 0 || this.devFire;
+    // Tir automatique (réglage par défaut ; toujours avec le pilote automatique) : tant qu'une cible visée
+    // peut être touchée (pas de chauffe perdue sur une cible au bord du cône ni sur une cible condamnée)
+    const auto = !this.hooks.settings.manualFire || this.autopilot;
+    const m = gun.step(h, held || (auto && this.targetHit));
+    if (m >= 0) {
+      this.fireQueue = 0;
+      this.ship.muzzleWorld(m, this.x, this.y, this.z, _mz);
+      const speed = this.speed + st.speed;
+      aimDirection(_mz.x, _mz.y, _mz.z, aim, speed, this.homingRad, _aimDir);
+      const d = _aimDir;
+      // Tir qui doit toucher : ses dégâts sont réservés sur la cible (la visée passe à la suivante quand ils
+      // suffisent à la détruire ; sans cela, la mitrailleuse perdait la moitié de ses tirs)
+      if (this.shots.fire(_mz.x, _mz.y, _mz.z, d.x, d.y, d.z, speed, st.life, st.damage, st.color, st.length, st.width) && this.targetHit) {
+        this.shots.claim(aim, this.rocks, this.enemies);
+      }
+      this.ship.fireFlash(m);
+      this.shotsFired++;
+      this.lastMuzzle = m;
+      this.sfx(st.sfx, st.muzzles > 1 ? 0.6 : 0.85, 0.96 + Math.random() * 0.08);
+    }
+    // Surchauffe : un son, pas de message (la jauge du HUD l'affiche)
+    if (gun.justOverheated) {
+      this.hooks.audio.sfx('overheat');
+      this.pushHudLight();
+    }
+  }
+
+  /** Le prochain tir, guidé d'au plus homingDeg, toucherait-il la cible `aim` (rayon de la cible + SHOT_R) ? */
+  private canHit(aim: Readonly<AimTarget>): boolean {
+    const st = this.gun.stats;
+    const r = aim.kind === 'rock' ? this.rocks.rocks[aim.index].r * 0.82 : ENEMY_DEFS[this.enemies.kindOf(aim.index)].radius;
+    this.ship.muzzleWorld(this.gun.nextMuzzle, this.x, this.y, this.z, _mz);
+    const speed = this.speed + st.speed;
+    aimDirection(_mz.x, _mz.y, _mz.z, aim, speed, this.homingRad, _aimDir);
+    return shotMiss(_mz.x, _mz.y, _mz.z, _aimDir, speed, aim, st.life) <= r + SHOT_R;
+  }
+
+  /** Impact d'un projectile sur un rocher (PV, éclatement, cristal) ou un ennemi (enemies.ts décide de sa mort). */
+  private shotHit(kind: 'rock' | 'enemy', index: number, damage: number, x: number, y: number, z: number): void {
+    if (kind === 'enemy') {
+      if (!this.enemies.damage(index, damage)) this.sfx('enemyHit', 0.8, 0.95 + Math.random() * 0.1);
+      return;
+    }
+    if (this.rocks.damage(index, damage)) {
+      // Détruit par les tirs : même éclatement qu'au choc, sans perte de bouclier ni ralentissement
+      this.burstRock(index);
+      this.rocksDestroyed++;
+      this.points += ROCK_POINTS;
+      if (this.rocks.dropsCrystal[index]) this.crystalsDropped += this.pickups.spawn(_rc.x, _rc.y, _rc.z, 1);
+      this.sfx('enemyBlast', 0.5, 0.72 + Math.random() * 0.1);
+    } else {
+      // Touché sans être détruit : étincelles à la surface
+      this.particles.burst(x, y, z, 7, 3, 11, this.shotColor, 0.32, 0.28);
+      this.sfx('enemyHit', 0.35, 0.78 + Math.random() * 0.1);
+    }
+  }
+
+  /** Ennemi détruit (tirs, choc, mine déclenchée) : points et cristaux décidés par enemies.ts. */
+  private enemyKilled(kind: EnemyKind, x: number, y: number, z: number, points: number, crystals: number): void {
+    this.points += points;
+    if (crystals > 0) this.crystalsDropped += this.pickups.spawn(x, y, z, crystals);
+    const small = kind === 'swarm';
+    this.sfx('enemyBlast', small ? 0.6 : 1, small ? 1.25 : 1);
+    // Explosion toute proche (ennemi percuté, mine) : petite secousse
+    const dx = x - this.x;
+    const dy = y - this.y;
+    const dz = z - this.z;
+    if (dx * dx + dy * dy + dz * dz < 144) this.shake = Math.min(1.5, this.shake + 0.35);
+  }
+
+  /** Cristaux du vol ramassés : réserve de l'étape, points, son, scintillement autour de la Comète. */
+  private collectCrystals(n: number): void {
+    this.crystals += n;
+    this.points += CRYSTAL_POINTS * n;
+    this.hooks.audio.sfx('crystal');
+    this.particles.burst(this.x, this.y, this.z - 1, 10, 3, 9, this.pickupColor, 0.35, 0.35, -this.speed);
+    this.pushHud();
+  }
+
+  /** Son fréquent (tirs, impacts) : options réutilisées, sans allocation. */
+  private sfx(id: SfxId, volume: number, pitch: number): void {
+    const o = this.sfxOpts;
+    o.volume = volume;
+    o.pitch = pitch;
+    this.hooks.audio.sfx(id, o);
   }
 
   private explode(): void {
@@ -813,13 +1087,18 @@ export class FlightRun implements ModeHandle {
     const total = this.course.gates.length;
     const ratio = total > 0 ? this.gatesPassed / total : 1;
     const timeLeft = Math.max(0, this.timeLeft);
+    this.enemies.counts(this.enemyCounts);
     this.result = {
       stageId: this.stage.id,
-      score: Math.round(timeLeft * 100) + this.gatesPassed * 200 + (this.noDamage ? 1000 : 0),
+      // Points du combat (rochers, ennemis, cristaux) en plus ; étoiles : portails seulement, comme avant
+      score: Math.round(timeLeft * 100) + this.gatesPassed * 200 + (this.noDamage ? 1000 : 0) + this.points,
       stars: ratio >= 0.95 ? 3 : ratio >= 0.7 ? 2 : 1,
       timeMs: Math.round(this.flightTime * 1000),
       gates: this.gatesPassed,
       gatesTotal: total,
+      crystals: this.crystals,
+      crystalsTotal: this.crystalsTotal(),
+      enemies: this.enemyCounts.killed,
     };
     this.particles.ring(0, 0, this.course.warpZ, WARP_R, 80, this.gateNextColor, 2.4, 26);
     this.pushHud();
@@ -886,6 +1165,9 @@ export class FlightRun implements ModeHandle {
     this.gates.update(dt, t, this.z, this.nextGate);
     this.portal.update(dt, t, this.z);
     this.rocks.update(t, cam.z);
+    this.enemies.render(t, cam.z);
+    this.shots.render(cam.z);
+    this.pickups.render(t, cam.z);
     this.env.update(dt, t, cam, phase !== 'intro');
 
     // --- Traînées de vitesse
@@ -972,6 +1254,11 @@ export class FlightRun implements ModeHandle {
     return clamp(-this.z / this.course.length, 0, 1);
   }
 
+  /** Cristaux possibles du parcours : rochers qui en lâchent et vagues d'ennemis. */
+  private crystalsTotal(): number {
+    return this.rocks.crystalCount + this.enemies.crystalsTotal;
+  }
+
   private pushHud(): void {
     const hud: FlightHud = {
       timeLeft: Math.max(0, Math.round(this.timeLeft * 10) / 10),
@@ -981,6 +1268,10 @@ export class FlightRun implements ModeHandle {
       maxShield: this.maxShield,
       boost: Math.round(this.boostGauge * 100) / 100,
       progress: Math.round(this.progress() * 1000) / 1000,
+      gunLevel: this.gun.stats.level,
+      heat: Math.round(this.gun.heat * 100) / 100,
+      overheated: this.gun.overheated,
+      crystals: this.crystals,
     };
     this.lastHudTime = hud.timeLeft;
     this.hooks.hud.updateFlight(hud);
@@ -993,6 +1284,8 @@ export class FlightRun implements ModeHandle {
       timeLeft,
       boost: Math.round(this.boostGauge * 100) / 100,
       progress: Math.round(this.progress() * 1000) / 1000,
+      heat: Math.round(this.gun.heat * 100) / 100,
+      overheated: this.gun.overheated,
     });
   }
 
@@ -1008,28 +1301,51 @@ export class FlightRun implements ModeHandle {
       timeScale: (s: number) => {
         this.timeScale = clamp(Number(s) || 1, 0.1, 8);
       },
-      info: () => ({
-        phase: this.phase,
-        timeLeft: Math.round(this.timeLeft * 10) / 10,
-        gates: this.gatesPassed,
-        nextGate: this.nextGate,
-        gatesTotal: this.course.gates.length,
-        shield: this.shield,
-        maxShields: this.maxShield,
-        boost: Math.round(this.boostGauge * 1000) / 1000,
-        boosting: this.boosting,
-        boostDrain: this.boostDrain,
-        boostFill: this.boostFill,
-        progress: Math.round(this.progress() * 1000) / 1000,
-        speed: Math.round(this.speed),
-        calls: this.renderer.info.render.calls,
-        triangles: this.renderer.info.render.triangles,
-        geometries: this.renderer.info.memory.geometries,
-        textures: this.renderer.info.memory.textures,
-        programs: this.renderer.info.programs?.length ?? 0,
-        autopilot: this.autopilot,
-        lastHud: this.lastHudTime,
-      }),
+      info: () => {
+        const ec = this.enemies.counts(this.enemyCounts);
+        return {
+          phase: this.phase,
+          timeLeft: Math.round(this.timeLeft * 10) / 10,
+          gates: this.gatesPassed,
+          nextGate: this.nextGate,
+          gatesTotal: this.course.gates.length,
+          shield: this.shield,
+          maxShields: this.maxShield,
+          boost: Math.round(this.boostGauge * 1000) / 1000,
+          boosting: this.boosting,
+          boostDrain: this.boostDrain,
+          boostFill: this.boostFill,
+          progress: Math.round(this.progress() * 1000) / 1000,
+          speed: Math.round(this.speed),
+          calls: this.renderer.info.render.calls,
+          drawCalls: this.renderer.info.render.calls,
+          triangles: this.renderer.info.render.triangles,
+          geometries: this.renderer.info.memory.geometries,
+          textures: this.renderer.info.memory.textures,
+          programs: this.renderer.info.programs?.length ?? 0,
+          autopilot: this.autopilot,
+          lastHud: this.lastHudTime,
+          // Combat (3b)
+          gunLevel: this.gun.stats.level,
+          heat: Math.round(this.gun.heat * 1000) / 1000,
+          overheated: this.gun.overheated,
+          manualFire: !!this.hooks.settings.manualFire,
+          range: Math.round(this.gun.stats.range * 10) / 10,
+          shotsActive: this.shots.active,
+          shotsFired: this.shotsFired,
+          lastMuzzle: this.lastMuzzle,
+          target: this.targetInfo(),
+          enemies: { fighter: ec.fighter, mine: ec.mine, swarm: ec.swarm, killed: ec.killed },
+          orbsActive: ec.orbs,
+          waves: this.course.waves.length,
+          crystals: this.crystals,
+          crystalsTotal: this.crystalsTotal(),
+          crystalsActive: this.pickups.active,
+          crystalsDropped: this.crystalsDropped,
+          rocksDestroyed: this.rocksDestroyed,
+          points: this.points,
+        };
+      },
       advance: (seconds: number) => {
         const steps = Math.max(0, Math.round((Number(seconds) || 0) * 60));
         for (let i = 0; i < steps && !this.destroyed; i++) {
@@ -1055,9 +1371,29 @@ export class FlightRun implements ModeHandle {
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
         return Math.round(((performance.now() - t0) / frames) * 100) / 100;
       },
+      spawn: (type: string, distance = 60, variant?: number) => {
+        if (this.destroyed || !(ENEMY_KINDS as readonly string[]).includes(type)) return 0;
+        const d = clamp(Number(distance) || 60, 4, 2000);
+        const v = typeof variant === 'number' && Number.isFinite(variant) ? variant - Math.floor(variant) : Math.random();
+        return this.enemies.spawn(type as EnemyKind, this.x, this.y, this.z - d, v);
+      },
+      fire: (on = true) => {
+        this.devFire = !!on;
+      },
     };
     this.devApi = api;
     (window as unknown as { __xr3d?: DevApi }).__xr3d = api;
+  }
+
+  /** Cible actuelle de la visée (aide DEV) : type et distance, ou null hors vol et sans cible. */
+  private targetInfo(): { type: string; dist: number; hit: boolean } | null {
+    const a = this.aim;
+    if (this.phase !== 'fly' || a.kind === 'none') return null;
+    return {
+      type: a.kind === 'rock' ? 'rock' : this.enemies.kindOf(a.index),
+      dist: Math.round(a.dist * 10) / 10,
+      hit: this.targetHit,
+    };
   }
 
   private devWin(): void {

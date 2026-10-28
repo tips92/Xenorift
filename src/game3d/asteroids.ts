@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { MAX_ROCK_R, type Course, type CourseTheme, type RockData } from './courses';
 import { fbm3, hash3, noise3 } from './rng';
-import type { Bin } from './util';
+import { inAimCone, offerAim, type AimTarget } from './shots';
+import { segmentHitsSphere, type Bin } from './util';
 
 // Champ d'astéroïdes : quelques modèles low-poly déformés par du bruit (ombrage plat, facettes de
 // cristal lumineuses), affichés en InstancedMesh. Seuls les rochers proches de la caméra sont écrits
@@ -10,6 +11,21 @@ import type { Bin } from './util';
 
 /** Distance d'affichage devant la caméra. */
 export const ROCK_VIEW = 1380;
+/** Part des rochers du couloir (collide) qui lâchent un cristal quand un tir les détruit (~1 sur 4). */
+export const CRYSTAL_DROP_RATE = 0.25;
+
+/** Points de vie d'un rocher selon son rayon : petits 1-2, gros 3-5 (dégâts du canon : 1, ×1,25, ×1,5). */
+export function rockHp(r: number): number {
+  return r < 1.6 ? 1 : r < 3.4 ? 2 : r < 5.5 ? 3 : r < 8.5 ? 4 : 5;
+}
+
+/**
+ * Le rocher `index` (dans Course.rocks, triés par z) lâche-t-il un cristal ? Déterministe : graine du
+ * parcours + index ; seuls les rochers du couloir (collide), les autres sont hors d'atteinte.
+ */
+export function rockDropsCrystal(seed: number, index: number, rock: Readonly<RockData>): boolean {
+  return rock.collide && hash3(index, 7, 13, seed + 0x3b) < CRYSTAL_DROP_RATE;
+}
 
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
@@ -142,7 +158,19 @@ export class AsteroidField {
   readonly group = new THREE.Group();
   readonly rocks: RockData[];
   readonly material: THREE.MeshStandardMaterial;
+  /** 1 = rocher détruit (choc de la Comète ou tirs) : plus affiché, plus de collision ni de cible. */
   readonly destroyed: Uint8Array;
+  /** Points de vie restants (rockHp au départ ; dégâts non arrondis). */
+  readonly hp: Float32Array;
+  /**
+   * Dégâts des tirs en route vers chaque rocher (ShotPool.claim / rendus à l'impact ou à l'extinction) : la
+   * visée ne retient plus un rocher que ces tirs suffisent à détruire.
+   */
+  readonly pending: Float32Array;
+  /** 1 = lâche un cristal quand un tir le détruit (rockDropsCrystal). */
+  readonly dropsCrystal: Uint8Array;
+  /** Cristaux possibles des rochers (StageResult.crystalsTotal, avec ceux des ennemis). */
+  readonly crystalCount: number;
   private readonly time = { value: 0 };
   private readonly meshes: THREE.InstancedMesh[] = [];
   private readonly lists: number[][] = [[], [], [], [], []];
@@ -153,9 +181,21 @@ export class AsteroidField {
   constructor(course: Course, theme: CourseTheme, sky: THREE.CubeTexture, bin: Bin) {
     this.rocks = course.rocks;
     this.destroyed = new Uint8Array(this.rocks.length);
+    const seed = course.def.seed;
+    this.hp = new Float32Array(this.rocks.length);
+    this.pending = new Float32Array(this.rocks.length);
+    this.dropsCrystal = new Uint8Array(this.rocks.length);
+    let drops = 0;
+    for (let i = 0; i < this.rocks.length; i++) {
+      this.hp[i] = rockHp(this.rocks[i].r);
+      if (rockDropsCrystal(seed, i, this.rocks[i])) {
+        this.dropsCrystal[i] = 1;
+        drops++;
+      }
+    }
+    this.crystalCount = drops;
     const crystal = new THREE.Color(theme.crystal);
     this.material = makeRockMaterial(bin, crystal, this.time, sky);
-    const seed = course.def.seed;
     const geos = [
       rockGeometry(0, seed + 11, 2, 0.05, crystal),
       rockGeometry(1, seed + 23, 2, 0.04, crystal),
@@ -259,5 +299,80 @@ export class AsteroidField {
   /** Couleur (linéaire) d'un rocher, pour ses éclats. */
   tint(i: number, out: THREE.Color): THREE.Color {
     return out.setRGB(this.tints[i * 3], this.tints[i * 3 + 1], this.tints[i * 3 + 2]);
+  }
+
+  /**
+   * Premier rocher non détruit touché par le segment (x0, y0, z0) → (x1, y1, z1) d'un tir de rayon `r`
+   * (segmentHitsSphere de util.ts, rayon rk.r × 0,82 + r comme hitTest, centre avec dérive à `time`), ou −1.
+   * Tous les rochers (même hors couloir) arrêtent un tir. Recherche par z (liste triée), sans allocation.
+   */
+  shotTest(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r: number, time: number): number {
+    const rocks = this.rocks;
+    const reach = MAX_ROCK_R + r;
+    const zMin = Math.min(z0, z1) - reach;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const dz = z1 - z0;
+    const len2 = dx * dx + dy * dy + dz * dz;
+    let best = -1;
+    let bestT = Infinity;
+    for (let k = this.firstAtOrBelow(Math.max(z0, z1) + reach); k < rocks.length; k++) {
+      const rk = rocks[k];
+      if (rk.z < zMin) break;
+      if (this.destroyed[k]) continue;
+      this.center(k, time, _p);
+      if (!segmentHitsSphere(x0, y0, z0, x1, y1, z1, _p.x, _p.y, _p.z, rk.r * 0.82 + r)) continue;
+      // Plusieurs rochers sur le même segment : le premier rencontré
+      const t = len2 > 0 ? ((_p.x - x0) * dx + (_p.y - y0) * dy + (_p.z - z0) * dz) / len2 : 0;
+      if (t < bestT) {
+        bestT = t;
+        best = k;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Propose à `best` (offerAim de shots.ts, type 'rock', vitesse 0) le rocher du couloir (collide) non détruit
+   * le plus proche dans le cône de visée (inAimCone, dx = centre − Comète), sauf s'il est déjà condamné par
+   * les tirs en route (pending).
+   */
+  aim(x: number, y: number, z: number, cosCone: number, range: number, time: number, best: AimTarget): void {
+    const rocks = this.rocks;
+    const zMin = z - range;
+    for (let k = this.firstAtOrBelow(z); k < rocks.length; k++) {
+      const rk = rocks[k];
+      if (rk.z < zMin) break;
+      if (!rk.collide || this.destroyed[k]) continue;
+      if (this.hp[k] - this.pending[k] <= 1e-6) continue;
+      this.center(k, time, _p);
+      const d = inAimCone(_p.x - x, _p.y - y, _p.z - z, cosCone, range);
+      if (d >= 0) offerAim(best, 'rock', k, d, _p.x, _p.y, _p.z, 0, 0, 0);
+    }
+  }
+
+  /** Premier index dont le z est ≤ `z` (liste triée par z décroissant ; recherche dichotomique). */
+  private firstAtOrBelow(z: number): number {
+    const rocks = this.rocks;
+    let lo = 0;
+    let hi = rocks.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (rocks[mid].z > z) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  /**
+   * Dégâts d'un tir sur le rocher `i` ; renvoie true s'il vient d'être détruit (destroyed[i] = 1). L'éclatement,
+   * le cristal et les points sont faits par FlightRun.
+   */
+  damage(i: number, amount: number): boolean {
+    if (this.destroyed[i]) return false;
+    this.hp[i] -= amount;
+    if (this.hp[i] > 1e-6) return false;
+    this.destroyed[i] = 1;
+    return true;
   }
 }

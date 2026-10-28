@@ -54,6 +54,8 @@ const DEFAULT_SETTINGS: Settings = {
   touchSize: 1,
   touchOpacity: 1,
   leftHanded: false,
+  // Vol : tir automatique par défaut (bouton TIR seulement en tir manuel).
+  manualFire: false,
 };
 
 function defaults(): SaveData {
@@ -196,7 +198,7 @@ export function isUnlocked(stageIndex: number): boolean {
 
 /** Ce que recordResult a changé dans la réserve. */
 export interface RecordInfo {
-  /** Cristaux de l'étape ajoutés à la réserve (0 en vol pour l'instant). */
+  /** Cristaux de l'étape ajoutés à la réserve (2D et vol). */
   crystalsGained: number;
   /** Réserve après l'ajout. */
   crystals: number;

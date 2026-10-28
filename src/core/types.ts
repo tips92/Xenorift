@@ -31,9 +31,13 @@ export interface StageResult {
   score: number;
   stars: 1 | 2 | 3;
   timeMs: number;
-  /** Niveaux 2D uniquement. */
+  /**
+   * Cristaux ramassés (ajoutés à la réserve par recordResult), en 2D comme en vol (astéroïdes et ennemis
+   * abattus) ; crystalsTotal : cristaux possibles de l'étape.
+   */
   crystals?: number;
   crystalsTotal?: number;
+  /** Ennemis éliminés (2D ; en vol : abattus par les tirs). */
   enemies?: number;
   /** Vols 3D uniquement. */
   gates?: number;
@@ -84,7 +88,7 @@ export interface ShipModules {
 
 /** Effets des modules de la Comète pour une partie (shipLoadout de core/hangar.ts). */
 export interface ShipLoadout {
-  /** Canon : 0 = canon léger, 1 = mitrailleuse, 2 et 3 = améliorée. Effet en vol : étape 3b. */
+  /** Canon : 0 = canon léger, 1 = mitrailleuse, 2 et 3 = améliorée (fiches : core/shipGuns.ts). */
   gunLevel: number;
   /** Boucliers au départ et au maximum : 3 + niveau du bouclier renforcé (3 à 5). */
   maxShields: number;
@@ -140,6 +144,13 @@ export interface FlightHud {
   boost: number;
   /** Avancement dans le parcours, 0..1. */
   progress: number;
+  /** Canon de la Comète (icône et graduations de la jauge) : 0 canon léger, 1 à 3 mitrailleuse. */
+  gunLevel: number;
+  /** Chauffe du canon, 0..1. */
+  heat: number;
+  overheated: boolean;
+  /** Cristaux ramassés pendant ce vol. */
+  crystals: number;
 }
 
 export type ToastKind = 'info' | 'good' | 'bad';
@@ -239,7 +250,14 @@ export type SfxId =
   | 'win'
   | 'lose'
   // Hangar : achat confirmé.
-  | 'buy';
+  | 'buy'
+  // Combat en vol (3b) : tir du canon léger, de la mitrailleuse (~10 par seconde : très court), orbe ennemie
+  // lancée, ennemi touché, ennemi détruit ou mine qui explose. Cristal ramassé en vol : 'crystal'.
+  | 'shipGun'
+  | 'shipMachinegun'
+  | 'enemyOrb'
+  | 'enemyHit'
+  | 'enemyBlast';
 
 export type MusicId = 'menu' | 'jungle' | 'moon' | 'nebula' | 'asteroids';
 
@@ -275,10 +293,18 @@ export interface Settings {
   touchOpacity: 0 | 1 | 2;
   /** Mode gaucher : stick à droite, boutons à gauche (en 2D comme en vol). */
   leftHanded: boolean;
+  /**
+   * Tir manuel en vol : bouton TIR à côté de TURBO, la Comète ne tire que sur appui. Sinon (par défaut), tir
+   * automatique sur la cible devant elle. Le clavier (J, X, F) tire dans les deux modes.
+   */
+  manualFire: boolean;
 }
 
-/** Réglages des commandes tactiles passés aux entrées (un Settings complet convient aussi). */
-export type TouchOptions = Pick<Settings, 'touchSize' | 'touchOpacity' | 'leftHanded'>;
+/**
+ * Réglages des commandes tactiles passés aux entrées (un Settings complet convient aussi). manualFire : bouton
+ * TIR affiché en vol.
+ */
+export type TouchOptions = Pick<Settings, 'touchSize' | 'touchOpacity' | 'leftHanded' | 'manualFire'>;
 
 export interface ModeHooks {
   hud: HudApi;

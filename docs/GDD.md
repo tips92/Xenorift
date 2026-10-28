@@ -38,10 +38,11 @@ planètes) et **créatures géantes qui bougent au loin**.
   Une silhouette et une couleur par arme : pistolet laser cyan-blanc, mitrailleur compact cyan, pompe au canon
   épais ambre, fusil d'assaut long blanc-violet à lunette.
 - **La Comète** (même design en 2D et en 3D) : coque blanche effilée, ailes en delta, cockpit et bandes
-  cyan, réacteurs à flamme orange.
+  cyan, réacteurs à flamme orange ; canon léger sous le nez, ou mitrailleuse (deux canons sous les ailes,
+  bagues cyan).
 - Tirs du joueur : lumineux, de la couleur de l'arme (trait laser cyan-blanc, traits courts cyan du
-  mitrailleur, plombs ambre de la pompe, long trait blanc-violet du fusil). Projectiles ennemis : magenta /
-  vert acide.
+  mitrailleur, plombs ambre de la pompe, long trait blanc-violet du fusil ; traits cyan du canon de la
+  Comète). Projectiles ennemis : magenta / vert acide (en vol : orbes magenta).
 
 ## Mode plateforme 2D
 
@@ -108,7 +109,8 @@ Vol en « couloir semi-libre » : la Comète avance seule vers l'avant ; le joue
 haut / bas / gauche / droite dans un couloir (rayon ~12 unités) pour traverser les portails.
 
 - Contrôles : joystick virtuel à gauche, bouton **Turbo** à droite (jauge qui se vide en 2,5 s et se
-  recharge en 5 s ; module Turbo du hangar : durée et recharge ×1,25 puis ×1,5) ;
+  recharge en 5 s ; module Turbo du hangar : durée et recharge ×1,25 puis ×1,5), et bouton **TIR** en tir
+  manuel seulement (voir plus bas) ;
   l'inverse en mode gaucher, avec la même taille et la même opacité qu'en 2D.
   Option « inclinaison du téléphone » (réglage) qui remplace le joystick.
 - Portails : anneaux lumineux animés, ~16 à 22 par parcours, positions variées mais toujours atteignables.
@@ -116,12 +118,36 @@ haut / bas / gauche / droite dans un couloir (rayon ~12 unités) pour traverser 
 - Obstacles : astéroïdes (et débris). Choc = -1 bouclier (3 au total, 4 ou 5 avec le bouclier renforcé du
   hangar), ralentissement, secousse.
   0 bouclier ou chrono à 0 = mission échouée.
+- Canon de la Comète (étape 3b ; valeurs de départ, à régler sur téléphone) : **canon léger** au départ (sous
+  le nez, 4 tirs/s, dégâts 1, trait cyan) ; **mitrailleuse** en première amélioration du hangar (deux canons
+  sous les ailes en alternance, 10 tirs/s, trait cyan clair), puis dégâts ×1,25 / ×1,5 et cadence ×1,15 / ×1,3.
+  Portée : la distance parcourue en 1,6 s. Surchauffe comme au sol : tir continu surchauffé au bout de 4 s
+  (canon léger) ou 3 s (mitrailleuse), reprise sous 30 %.
+- Tir **automatique** par défaut : la Comète tire seule sur l'astéroïde ou l'ennemi le plus proche dans un cône
+  de 10° devant elle (tir guidé de 6° au plus), seulement si le tir peut toucher et si les tirs déjà en route ne
+  suffisent pas à détruire la cible. Option **« Tir manuel »** (Commandes, aussi dans Pause) : bouton **TIR** à
+  côté de Turbo, en vol seulement (gaucher, taille et opacité respectés). Clavier : J / X / F dans les deux modes.
+- Astéroïdes destructibles : 1 à 5 PV selon la taille ; détruit par les tirs, il éclate sans dégât pour la
+  Comète (10 points) ; environ un rocher du couloir sur quatre lâche un cristal.
+- Ennemis « touchés par le Vide » (silhouettes violet-noir veinées de magenta), en vagues fixes par parcours
+  (6 dans la Nébuleuse d'Azur, 10 dans la Ceinture d'Orak ; jamais dans un portail ni sur sa ligne
+  d'approche) : **chasseur** (3 PV, 150 points, 2 cristaux : arrive de face, tire une orbe vers la position
+  anticipée de la Comète, puis s'écarte en virant), **mine** (2 PV, 50 points, 1 cristal : immobile, clignote,
+  explose si la Comète passe tout près), **essaim** (5 à 7 en formation ondulante, 1 PV et 30 points chacun,
+  1 cristal pour la vague entière abattue). Orbes lentes, grosses, magenta (le magenta est réservé aux orbes et
+  aux veines : œil du chasseur ambre, explosions blanches et violettes). Orbe, mine ou contact : -1 bouclier
+  (même invulnérabilité qu'après un rocher) ; l'ennemi percuté est détruit sans points.
+- Cristaux du vol : cyan et bleus comme l'icône et le cristal 2D (dans tous les parcours), halo qui pulse et
+  éclat bref ; aimantés quand la Comète passe près ; +1 réserve et 50 points chacun. Le HUD du vol
+  montre la jauge de chauffe du canon et les cristaux ramassés.
 - Fin : un grand portail de distorsion (warp) → effet de vitesse → résultats.
 - Décor : skybox nébuleuse colorée, champ d'étoiles, planètes, traînées de vitesse, et **une créature
   spatiale géante** qui nage au loin (vol 1 : léviathan de la nébuleuse ; vol 2 : planète à anneaux
   et ver cosmique).
 - Parcours « nebula » (vol 1, facile, ~75 s) et « asteroids » (vol 2, ceinture d'astéroïdes dense, ~90 s).
-- Score : temps restant x100 + portails x200 + bonus sans dégât. Étoiles selon le ratio de portails.
+- Score : temps restant x100 + portails x200 + bonus sans dégât (1 000) + rochers détruits x10 + ennemis
+  abattus (150, 50 ou 30) + cristaux ramassés x50. Étoiles selon le ratio de portails (1 = terminé, 2 = ≥ 70 %,
+  3 = ≥ 95 %), inchangées par le combat. Les cristaux du vol vont dans la réserve si le vol est réussi.
 
 ## Interface et enchaînement
 
@@ -133,12 +159,12 @@ démo ». JOUER reprend directement à l'étape en cours, sans passer par le han
   (option « Tout débloquer » pour tester). Meilleur score et étoiles affichés. Bouton « Hangar » (avec la
   réserve) : le hangar s'ouvre sans bouton de départ, le retour ramène au choix du niveau.
 - Résultats : score, étoiles, détails et la réserve de cristaux (« +N cristaux » gagnés, nouveau total). Les
-  cristaux sont la monnaie du hangar ; pour l'instant seuls les niveaux 2D en rapportent (ceux du vol viendront
-  avec le combat spatial).
+  cristaux sont la monnaie du hangar ; les niveaux 2D et les vols en rapportent (en vol : astéroïdes et
+  ennemis abattus).
 - **Hangar** (dans la Comète) : réserve en haut, aperçu 2D à gauche (Kaï avec l'arme, la Comète et ses
   modules), onglets **Établi** (armes : équiper, acheter ; 4 améliorations à 3 niveaux par arme : dégâts
   ×1,25 / ×1,5 / ×2, cadence et portée ×1,15 / ×1,3 / ×1,5, refroidissement ×1,25 / ×1,5 / ×1,8),
-  **Comète** (mitrailleuse, effet en vol à venir ; bouclier renforcé 4 puis 5 boucliers ; turbo) et
+  **Comète** (mitrailleuse puis ses deux améliorations, voir « Mode vol spatial 3D » ; bouclier renforcé 4 puis 5 boucliers ; turbo) et
   **Kaï** (cœur supplémentaire, jusqu'à 5 ; drone compagnon plus tard). Achat avec confirmation, définitif.
   Prix de départ : arme 80 à 120, amélioration 30 / 60 / 100, mitrailleuse 100 puis 80 / 140, bouclier et
   turbo 80 / 140, cœur 150 / 250. Conditions : une arme demande son plan, les niveaux 2 et 3 d'une
@@ -149,10 +175,11 @@ démo ». JOUER reprend directement à l'étape en cours, sans passer par le han
   équipage) sont levées, pas les prix ; une arme non possédée s'y équipe pour la session seulement.
   Raccourci `?weapon=` dans l'URL (arme de la session, jamais enregistrée).
 - HUD 2D : cœurs (3 à 5), vies, cristaux, jauge de chauffe avec l'icône de l'arme (une graduation par tir),
-  anneaux des bonus actifs (vitesse, cadence, bouclier). HUD du vol : 3 à 5 boucliers, jauge de turbo.
+  anneaux des bonus actifs (vitesse, cadence, bouclier). HUD du vol : 3 à 5 boucliers, jauge de turbo,
+  chrono, portails, jauge de chauffe du canon (icône du canon léger ou de la mitrailleuse), cristaux du vol.
 - Options (même panneau dans le menu Pause), en deux rubriques : **Général** (musique, effets sonores,
   vibrations, tout débloquer) et **Commandes** (aperçu des commandes ; taille des boutons et opacité, 3 crans
-  chacune ; mode gaucher ; pilotage par inclinaison) ; puis réinitialiser la progression (déblocages, scores,
+  chacune ; mode gaucher ; pilotage par inclinaison ; tir manuel en vol) ; puis réinitialiser la progression (déblocages, scores,
   armes, réserve et achats du hangar ; les réglages restent). Effet immédiat, même en partie.
 - Pause : bouton en haut à droite, touche Échap/P, bouton retour Android, mise en arrière-plan de l'app.
 - Bouton retour Android : en jeu → pause ; dans un sous-menu → retour ; sur l'accueil → quitter.

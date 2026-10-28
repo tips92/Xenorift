@@ -113,7 +113,7 @@ function effectLine(st: ItemState): string {
     case 'heart':
       return `${arrow(String(maxHeartsFor(l)), String(maxHeartsFor(l + 1)))} cœurs`;
     case 'shipGun':
-      if (l === 0) return 'Remplace le canon léger';
+      // « Canon léger → Mitrailleuse : cadence ×2,5 », puis « Dégâts ×1,25, cadence ×1,15 »… (core/shipGuns.ts)
       return st.maxed ? (st.effect ?? '') : (st.nextEffect ?? '');
     case 'weapon':
       return it.desc;

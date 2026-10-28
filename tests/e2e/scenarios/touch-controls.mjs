@@ -7,12 +7,13 @@
 // hors de SAUT et reste attaché à SAUT jusqu'au lever, doigt posé sur une zone vide (et qui glisse) sans effet
 // ni annulation des autres doigts, PAUSE du HUD touchée par un 2e doigt pendant que le 1er tient le stick,
 // REPRENDRE au 2e doigt (sans commande collée ensuite).
-// Vol (f1) : joystick (le vaisseau se déplace) + TURBO (vitesse), doigt vide sans effet, touchcancel et
-// passage en arrière-plan qui relâchent tout.
+// Vol (f1) : pas de bouton TIR en tir automatique (réglage par défaut ; le tir manuel est testé par flight-combat),
+// joystick (le vaisseau se déplace) + TURBO (vitesse), doigt vide sans effet, touchcancel et passage en
+// arrière-plan qui relâchent tout.
 import { assert, center, info3d, lasers2d, player2d, waitFor, waitFor2dPlay, waitFor3dPhase } from '../lib/helpers.mjs';
 import { touches } from '../lib/touch.mjs';
 import { instrument, setHidden, uiState } from '../lib/shell.mjs';
-import { input, shipPos, trackThreeScenes, waitInput, waitInputIdle, waitPause } from '../lib/core.mjs';
+import { input, rects, shipPos, trackThreeScenes, waitInput, waitInputIdle, waitPause } from '../lib/core.mjs';
 
 export const meta = {
   title: 'Tactile : stick 8 directions, SAUT + TIR, doigts multiples, pause au 2e doigt, joystick + TURBO',
@@ -347,6 +348,8 @@ async function flight(t, f) {
   await t.goto('?touch=1&unlock=1&stage=f1');
   await waitFor3dPhase(t, 'fly', { timeout: 60000 });
   assert((await uiState(t)).touch === '01', `couche tactile « vol » seule visible (${(await uiState(t)).touch})`);
+  const shoot = await rects(t, '.xr-shoot');
+  assert(shoot.length === 0, `tir automatique (par défaut) : pas de bouton TIR en vol (${JSON.stringify(shoot)})`);
   const W = await t.ev(() => window.innerWidth);
   const H = await t.ev(() => window.innerHeight);
   const S = [Math.round(W * 0.2), Math.round(H * 0.65)];

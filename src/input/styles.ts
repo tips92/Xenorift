@@ -200,6 +200,14 @@ const CSS = `
   bottom: calc(var(--xr-sb) + var(--xr-edge));
   font-size: calc(var(--xr-jump) * 0.115);
 }
+/* TIR du vol (tir manuel) : placé comme le TIR de la plateforme par rapport à SAUT, cyan comme les tirs. */
+.xr-shoot {
+  width: var(--xr-fire);
+  height: var(--xr-fire);
+  right: calc(var(--xr-sr) + var(--xr-edge) + var(--xr-jump) + var(--xr-gap));
+  bottom: calc(var(--xr-sb) + var(--xr-edge) + var(--xr-jump) * 0.4);
+  font-size: calc(var(--xr-fire) * 0.13);
+}
 
 /* ---------- Joystick flottant (moitié gauche de l'écran, droite en mode gaucher) */
 .xr-stick-zone {
@@ -257,7 +265,8 @@ const CSS = `
   right: auto;
   left: calc(var(--xr-sl) + var(--xr-edge));
 }
-.xr-touch--lefty .xr-fire {
+.xr-touch--lefty .xr-fire,
+.xr-touch--lefty .xr-shoot {
   right: auto;
   left: calc(var(--xr-sl) + var(--xr-edge) + var(--xr-jump) + var(--xr-gap));
 }

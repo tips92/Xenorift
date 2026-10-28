@@ -587,4 +587,89 @@ export const RECIPES: Record<SfxId, Recipe> = {
     chirp(v, 'square', 1100 * p, 320 * p, t, 0.06, 0.08);
     noiseHit(v, t + 0.028, 'highpass', 5000, 0.8, 0.18, 0.035, 1.3);
   },
+
+  // --- Combat en vol (3b)
+
+  // Canon léger de la Comète : « piou » électrique bref (4 par seconde, tir auto continu : ≤ 110 ms, sans écho)
+  shipGun(v, t, p) {
+    const lp = v.filter('lowpass', 5200, 1.6);
+    lp.frequency.setValueAtTime(5200 * p, t);
+    lp.frequency.exponentialRampToValueAtTime(1100 * p, t + 0.09);
+    lp.connect(v.env(t, 0.16, 0.002, 0.09));
+    const o = v.osc('square', 1250 * p, t, t + 0.11);
+    o.frequency.exponentialRampToValueAtTime(330 * p, t + 0.09);
+    o.connect(lp);
+    const o2 = v.osc('triangle', 2500 * p, t, t + 0.06);
+    o2.frequency.exponentialRampToValueAtTime(900 * p, t + 0.045);
+    const g2 = v.gain(0.4);
+    o2.connect(g2);
+    g2.connect(lp);
+    noiseHit(v, t, 'highpass', 4200, 0.8, 0.07, 0.016);
+  },
+
+  // Mitrailleuse de la Comète : tic aigu et feutré (10 par seconde : ≤ 50 ms, discret, un seul oscillateur)
+  shipMachinegun(v, t, p) {
+    const lp = v.filter('lowpass', 4200, 0.8);
+    lp.frequency.setValueAtTime(4200 * p, t);
+    lp.frequency.exponentialRampToValueAtTime(1300 * p, t + 0.035);
+    lp.connect(v.env(t, 0.1, 0.001, 0.035));
+    const o = v.osc('square', 1500 * p, t, t + 0.045);
+    o.frequency.exponentialRampToValueAtTime(520 * p, t + 0.035);
+    o.connect(lp);
+    noiseHit(v, t, 'bandpass', 3800 * p, 1.2, 0.07, 0.014);
+  },
+
+  // Orbe ennemie lancée : « bloup » grave qui gonfle et vibre (lisible, ~0,35 s)
+  enemyOrb(v, t, p) {
+    const lp = v.filter('lowpass', 900, 3);
+    lp.frequency.setValueAtTime(500 * p, t);
+    lp.frequency.exponentialRampToValueAtTime(1600 * p, t + 0.16);
+    lp.frequency.exponentialRampToValueAtTime(600 * p, t + 0.34);
+    const g = v.gain(0);
+    swell(g.gain, t, 0.2, 0.05, 0.12, 0.18);
+    lp.connect(g);
+    g.connect(v.out);
+    const o = v.osc('sawtooth', 150 * p, t, t + 0.37);
+    o.frequency.exponentialRampToValueAtTime(300 * p, t + 0.2);
+    const o2 = v.osc('sine', 300 * p, t, t + 0.37);
+    o2.frequency.exponentialRampToValueAtTime(610 * p, t + 0.2);
+    // Vibrato des deux voix
+    const lfo = v.osc('sine', 17, t, t + 0.37);
+    const depth = v.gain(60);
+    lfo.connect(depth);
+    depth.connect(o.detune);
+    depth.connect(o2.detune);
+    o.connect(lp);
+    o2.connect(lp);
+    const s = chirp(v, 'sine', 900 * p, 1400 * p, t + 0.05, 0.18, 0.05);
+    v.echo(s, 0.3);
+  },
+
+  // Ennemi touché (ou rocher entamé) : clic métallique sec (≤ 70 ms, fréquent)
+  enemyHit(v, t, p) {
+    noiseHit(v, t, 'bandpass', 2600 * p, 2.5, 0.26, 0.045);
+    chirp(v, 'square', 980 * p, 460 * p, t, 0.05, 0.07);
+    const o = v.osc('triangle', 2900 * p, t, t + 0.04);
+    o.connect(v.env(t, 0.05, 0.001, 0.03));
+  },
+
+  // Ennemi détruit, mine qui explose (ou rocher pulvérisé, plus grave) : souffle saturé, coup sourd, éclats
+  enemyBlast(v, t, p) {
+    const n = v.noise(t, t + 0.5, 0.85);
+    const lp = v.filter('lowpass', 3800, 0.9);
+    lp.frequency.setValueAtTime(3800 * p, t);
+    lp.frequency.exponentialRampToValueAtTime(260 * p, t + 0.42);
+    const d = v.drive();
+    n.connect(lp);
+    lp.connect(d);
+    d.connect(v.env(t, 0.34, 0.002, 0.44));
+    chirp(v, 'sine', 140 * p, 38 * p, t, 0.36, 0.5);
+    noiseHit(v, t, 'highpass', 3600, 0.7, 0.16, 0.05);
+    for (let i = 0; i < 3; i++) {
+      const at = t + 0.03 + i * 0.045;
+      const o = v.osc('triangle', (1900 + i * 650) * p, at, at + 0.1);
+      o.frequency.exponentialRampToValueAtTime((1200 + i * 400) * p, at + 0.08);
+      o.connect(v.env(at, 0.05, 0.001, 0.08));
+    }
+  },
 };

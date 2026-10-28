@@ -3,7 +3,8 @@
 ## Le projet
 
 Démo de jeu mobile (Android via Capacitor 8, iOS plus tard avec le même code) : plateforme 2D « à la Mario »
-avec 4 armes à surchauffe (Phaser 3.90), entrecoupée de vols spatiaux 3D à travers des portails (Three.js 0.186).
+avec 4 armes à surchauffe (Phaser 3.90), entrecoupée de vols spatiaux 3D à travers des portails, avec tir
+automatique et ennemis (Three.js 0.186) ; hangar entre deux étapes (cristaux-monnaie).
 Héros : Kaï ; vaisseau : la Comète. Campagne de 4 étapes : Jungle de Xéna `j1` (2D) → Nébuleuse d'Azur `f1`
 (vol, 16 portails) → Lune Krator `m1` (2D) → Ceinture d'Orak `f2` (vol, 22 portails) → « Fin de la démo ».
 Paysage uniquement, tout se joue au tactile (le clavier sert aux tests sur PC). Aucun fichier image ni son :
@@ -59,8 +60,10 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
 - `src/core` — contrats et données partagées (liste ci-dessous), dont `weapons.ts` : fiches des 4 armes
   (`WEAPONS`, ordre `WEAPON_IDS`), `resolveWeapon` (fiche × améliorations `WeaponMods` × bonus de cadence →
   `WeaponStats`, sans allocation), `isWeaponId` ; `hangar.ts` : catalogue des achats, prix, conditions, effets
-  et calculs purs du hangar (`itemState`, `applyPurchase`, `buildPlayLoadout`, `departLabel`). Lisibles par
-  Node (chargés par check-levels via `constants.ts`).
+  et calculs purs du hangar (`itemState`, `applyPurchase`, `buildPlayLoadout`, `departLabel`) ; `shipGuns.ts` :
+  canons de la Comète (`SHIP_GUNS` canon léger / mitrailleuse, `SHIP_GUN_MULS` par niveau, `SHIP_AIM` cône et
+  guidage, `resolveShipGun(niveau, vitesse de croisière, out)` sans allocation). Lisibles par Node (chargés par
+  check-levels via `constants.ts`).
 - `src/ui` — la coquille. `App.ts` : phases `menu | intro | playing`, enchaînements `navigate()` (le dernier annule
   les précédents via `flowId` ; `navLock` ignore les clics entre-temps), étapes, pause, bouton retour,
   arrière-plan, orientation, son débloqué au premier geste, paramètres d'URL, `__xrShell`. `overlays.ts` : fondu
@@ -68,7 +71,9 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   avalent les erreurs de l'audio et des entrées. `hud.ts` : HUD DOM commun 2D/3D (en 2D : jauge de chauffe
   avec l'icône de l'arme et une graduation par tir, anneaux des bonus vitesse, cadence et bouclier ; 4 ou 5
   cœurs : classe `has-extra-hearts`, la jauge passe à droite sous 960 px ; en vol, 4 ou 5 boucliers :
-  `has-extra-shields`, pastilles resserrées).
+  `has-extra-shields`, pastilles resserrées ; jauge du canon `.fl-heat` (mêmes classes internes que la jauge 2D,
+  `createHeatGauge`, `data-gun`, graduation = 1 s de tir continu) entre le chrono et la pause, cristaux du vol
+  `.fl-crystals` sous le bouclier).
   `screens/` : `title`, `select` (bouton « Hangar » avec la réserve), `options` (rubriques Général et Commandes
   avec aperçu des commandes ; panneau repris par `pause`), `intro`, `results` (réserve : « +N cristaux » et
   total, gain seulement s'il y en a), `hangar` (onglets Établi / Comète / Kaï, achat avec confirmation intégrée,
@@ -81,7 +86,8 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   (`powerIcon`, `weaponIcon`, `upgradeIcon`, `stageIcon`).
 - `src/input` — `InputApi`. `keyboard.ts` (par `event.code` : AZERTY = QWERTY), `touch.ts` (pointer events, un doigt
   = un pointerId capturé ; `?touch=` ; en 2D stick rond fixe à 8 directions `.xr-dpad`, en vol joystick flottant ;
-  `setOptions` : taille, opacité, mode gaucher), `stick.ts` (lecture pure du stick 2D par secteurs d'angle,
+  `setOptions` : taille, opacité, mode gaucher, bouton TIR du vol `.xr-shoot` affiché en tir manuel seulement ;
+  `fire` = TIR 2D ou TIR du vol), `stick.ts` (lecture pure du stick 2D par secteurs d'angle,
   `STICK_SECTORS` à régler sur téléphone), `tilt.ts` (inclinaison, en vol seulement), `styles.ts` (CSS injecté des
   commandes, variables `--xr-scale` / `--xr-tc-opacity`), `index.ts` (fusion dans un état unique modifié sur place ;
   tout relâché sur `blur` et page cachée ; appui `interact` = front montant de « haut sans ← → », jamais avec Tir).
@@ -111,31 +117,45 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   `levels/` : `jungle.ts`, `moon.ts`, `build.ts` (`joinSegments`), registre `index.ts`.
 - `src/game3d` — `index.ts` : `startFlight` (construction impossible → `onFail` différé). `flight.ts` : `FlightRun`,
   machine à états `intro → fly → warp | dead | timeout → done`, pilotage, portails (+2 s / −5 s), collisions,
-  caméra, perte de contexte, `__xr3d` ; boucliers max et taux du turbo lus une fois dans `hooks.loadout.ship`. `renderer.ts` : renderer partagé. `courses.ts` : `COURSES` (générés depuis
-  une graine fixe). `sky.ts` (nébuleuse cuite en cubemap + PMREM), `glsl.ts` (bruit), `environment.ts` (planètes
-  et créature selon le parcours), `creatures`, `planets`, `gates`, `asteroids`, `ship`, `effects`, `util.ts` (`Bin`),
-  `rng.ts` (aléatoire à graine).
+  caméra, perte de contexte, `__xr3d` ; boucliers max, taux du turbo et niveau du canon lus une fois dans
+  `hooks.loadout.ship` ; combat : `simFly` = commandes → turbo → portails → rochers → ennemis (`live`) → visée
+  et tir (`updateGun` : ennemis d'abord, puis rocher du couloir ; tir automatique seulement si le tir guidé peut
+  toucher ; un tir qui doit toucher réserve ses dégâts sur sa cible, `ShotPool.claim` / `pending`, et la visée
+  ignore une cible déjà condamnée), puis, dans toutes les phases, projectiles et cristaux. `renderer.ts` :
+  renderer partagé.
+  `courses.ts` : `COURSES` (générés depuis une graine fixe ; vagues d'ennemis `Course.waves` par `genWaves`, générateur
+  à part). `shots.ts` (canon `ShipGun` : cadence, chauffe, surchauffe ; visée `AimTarget`, `aimDirection`,
+  `shotMiss` ; projectiles `ShotPool`), `pickups.ts` (cristaux du vol `CrystalPickups` : couleurs fixes de l'icône, halo, aimant), `enemies.ts`
+  (`EnemyField` : chasseur, mine, essaim, orbes ; IA, `avoid` du pilote automatique ; prévient `FlightRun` par
+  `EnemyEvents`). `sky.ts` (nébuleuse cuite en cubemap + PMREM), `glsl.ts` (bruit), `environment.ts` (planètes
+  et créature selon le parcours), `creatures`, `planets`, `gates`, `asteroids` (PV `rockHp`, cristal
+  `rockDropsCrystal`, `shotTest`, `aim`), `ship` (canons fusionnés selon le niveau, `muzzleWorld`, `fireFlash`),
+  `effects`, `util.ts` (`Bin`, `segmentHitsSphere`), `rng.ts` (aléatoire à graine).
 - `preview/` — pages d'outil du serveur de dev (hors build et hors typecheck) : `/preview/art.html?theme=jungle|moon&view=world|sheet|weapons`
   (graphismes 2D ; la planche montre aussi Kaï assemblé avec son bras et les portes ; `weapons` : les 4 bras
   à 2x avec bouche du canon et pivot, Kaï dans 6 visées, stand de tir à la vraie cadence et vitesse, icônes
   de bonus et projectiles, `&bg=0` sans le décor ; loupe `&z=2.5&cx=…&cy=…`),
-  `/preview/flight.html?stage=f1|f2&autopilot=1&shield=0..2&boost=0..2` (vol avec des hooks simulés et
-  `defaultPlayLoadout()` ; `shield` / `boost` : modules de la Comète).
+  `/preview/flight.html?stage=f1|f2&autopilot=1&gun=0..3&shield=0..2&boost=0..2&manual=1` (vol avec des hooks
+  simulés et `defaultPlayLoadout()` ; `gun` / `shield` / `boost` : modules de la Comète ; `manual` : tir manuel ;
+  J / X / F tir, G gagner, L échouer, 1 / 2 / 3 : chasseur, mine, essaim devant la Comète).
   Ailleurs : `scripts/check-levels.ts` (validateur), `tests/e2e/`, `tools/` (scripts Android).
 
 ### Contrats — à ne pas changer à la légère (toute modification se répercute dans chaque module)
 
-- `src/core/types.ts` : `StageDef`, `StageResult`, `ModeHooks` (dont `loadout`) / `ModeHandle` / `StartMode`,
-  `HudApi` (`PlatformHud` : `weapon`, `heat`, `speedLeft`, `rapidLeft`, `shield`… ; `FlightHud`), `InputApi` /
-  `InputState` / `InputAction` (dont `interact`), `TouchOptions`, `AudioApi`, `Settings`, `SaveData` (version 2,
-  recette Sauvegarde), `Loadout`
+- `src/core/types.ts` : `StageDef`, `StageResult` (`crystals` / `crystalsTotal` / `enemies` en 2D comme en vol),
+  `ModeHooks` (dont `loadout`) / `ModeHandle` / `StartMode`,
+  `HudApi` (`PlatformHud` : `weapon`, `heat`, `speedLeft`, `rapidLeft`, `shield`… ; `FlightHud` : dont `gunLevel`,
+  `heat`, `overheated`, `crystals`), `InputApi` /
+  `InputState` / `InputAction` (dont `interact`), `TouchOptions` (dont `manualFire`), `AudioApi`, `Settings`
+  (dont `manualFire` : tir manuel en vol), `SaveData` (version 2, recette Sauvegarde), `Loadout`
   (`equipped` ∈ `owned`, `owned` dans l'ordre de `WEAPON_IDS` et toujours avec `'laser'`, `skills.doubleJump`),
   `PlayLoadout` (`ModeHooks.loadout` = `Loadout` + `mods` de chaque arme + `maxHearts` + `ship` : `ShipLoadout`),
   `WeaponUpgrades`, `ShipModules`, et les unions `ThemeId`, `CourseId`, `MusicId`, `SfxId`, `PowerUpKind`
   (`'speed' | 'rapid' | 'shield'`), `WeaponId` (`'laser' | 'machinegun' | 'shotgun' | 'rifle'`), `UpgradeStat`,
   `CrewId` (`'tess' | 'mira'`).
 - `src/core/stages.ts` (`STAGES`, `getStage`, `nextStage`) ; `src/core/save.ts` (format de sauvegarde) ;
-  `src/core/weapons.ts` (fiches et calcul des valeurs effectives) ; `src/core/hangar.ts` (catalogue des achats,
+  `src/core/weapons.ts` (fiches et calcul des valeurs effectives) ; `src/core/shipGuns.ts` (canons de la Comète) ;
+  `src/core/hangar.ts` (catalogue des achats,
   identifiants `HangarItemId` stables, prix, conditions, effets ; fonctions pures, lisible par Node).
 - `src/game2d/constants.ts` : tuile 64 px, vue de 720 px de haut, 14 lignes, physique de Kaï (corps debout et
   accroupi, `DROP_THROUGH_MS`), `DESIGN_RULES` (sauts garantis au level design), combat (`AIM_ANGLE`,
@@ -205,8 +225,8 @@ et `playLoadout(settings, override?)` (`PlayLoadout` : équipement EFFECTIF d'un
 
 **Achat du hangar** (`core/hangar.ts`, pur, lisible par Node ; valeurs de départ dans le plan 03) : identifiant
 stable dans `HangarItemId` (jamais renommé : interface et tests) + entrée de `buildItems` (onglet, `maxLevel`,
-`prices` par niveau, `effects`, `crew` par niveau, `blueprint`, `soon` tant que l'effet n'est pas branché) + prix
-dans `PRICES`. Niveau enregistré : champ de `SaveData` (recette Sauvegarde), lu par `itemLevel`, écrit par
+`prices` par niveau, `effects`, `crew` par niveau, `blueprint`, `soon` tant que l'effet n'est pas branché : note
+« Effet en vol : bientôt », plus aucun achat depuis 3b) + prix dans `PRICES`. Niveau enregistré : champ de `SaveData` (recette Sauvegarde), lu par `itemLevel`, écrit par
 `applyPurchase`. Effet : champ de `PlayLoadout` calculé par `buildPlayLoadout` (et `defaultPlayLoadout`), lu
 une fois par le mode au départ dans `hooks.loadout` et borné (repli sur la valeur de base). Écran
 (`ui/screens/hangar.ts`) : rangée ajoutée dans `renderTab` (les onglets Comète et Kaï listent leurs achats un
@@ -234,9 +254,18 @@ une descente restent hors du chemin principal.
 
 **Parcours de vol** : ajouter l'identifiant à `CourseId` et à `MusicId` (un vol joue la musique de même nom),
 une entrée `COURSES` dans `game3d/courses.ts` (graine, vitesse, chrono, portails, densité de rochers,
-`CourseTheme`), puis remplacer les choix binaires codés en dur : `flight.ts` (`stage.levelId === 'asteroids' ? … :
-'nebula'`), `environment.ts` (planètes, créature), `ui/icons.ts` (`stageIcon`), `preview/flight.ts`.
-`maxOffset` / `maxJump` / `REACH_FACTOR` gardent les portails atteignables.
+`CourseTheme`, vagues d'ennemis `waves` : `WavePlan` — `count`, `kinds`, `fighterFrom`, `fighterWaves`,
+`fighterMax`, `mineMin`/`mineMax`, `swarmMin`/`swarmMax`, `startGate`), puis remplacer les choix binaires codés
+en dur : `flight.ts` (`stage.levelId === 'asteroids' ? … : 'nebula'`), `environment.ts` (planètes, créature), `ui/icons.ts` (`stageIcon`), `preview/flight.ts`.
+`maxOffset` / `maxJump` / `REACH_FACTOR` gardent les portails atteignables. Les vagues sortent d'un générateur
+À PART (`mulberry32(seed ^ WAVE_SEED_XOR)`, `genWaves` appelé après `genRocks`) : ne jamais consommer celui des
+portails et des rochers (identiques au bit près : tests, records). `genWaves` garde les ennemis hors des portails
+et de leur ligne d'approche (`GATE_APPROACH`, croisement de l'orbe d'un chasseur compris), dans le couloir, loin
+des rochers ; le pilote automatique (`EnemyField.avoid`) doit finir le parcours avec au moins 1 bouclier.
+Le scénario `flight-combat` recopie les vagues obtenues (`WAVES`, `CRYSTALS_TOTAL`), les fenêtres de `genWaves`
+(`GATE_ZONE`, `WAVE_WINDOW`) et un hachage des portails, rochers, trajectoire et distorsion relevé dans Chrome
+(`COURSE_FP`) : un parcours modifié volontairement s'y met à jour (ses variantes d'essaim `VARIANT` / `SWARM_AT`,
+mesurées, aussi si le pilote automatique, la visée ou l'essaim changent).
 
 **Étape de campagne** : `STAGES` dans `core/stages.ts` (`index` = ordre, `levelId` = niveau 2D ou `CourseId`,
 `theme` pour la carte et l'intro). Déblocage : `isUnlocked(i)` = `unlockAll || i <= save.unlocked` ; réussir
@@ -249,7 +278,8 @@ niveau a 4 colonnes (2 sous 560 px de large ; `.cards` dans `styles.css`) ; l'é
 interrupteur dans `TOGGLES` (champ `group` : rubrique `'general'` ou `'controls'`) ou sélecteur à 3 crans dans
 `CHOICES` (`ui/screens/options.ts`, aussi affiché dans Pause, zone défilante `.pause-opt-body`) + effet immédiat
 dans `setSettings()` et application au démarrage dans `App.ts` ; les modes lisent `hooks.settings`. Les réglages
-des commandes tactiles passent par `input.setTouchOptions` (crans `TOUCH_SIZE_STEPS` / `TOUCH_OPACITY_STEPS` de
+des commandes tactiles passent par `input.setTouchOptions` (`TouchOptions`, dont `manualFire` : bouton TIR du
+vol ; crans `TOUCH_SIZE_STEPS` / `TOUCH_OPACITY_STEPS` de
 `input/touch.ts`, repris par l'aperçu du panneau) ; `load()` ne valide pas les valeurs : `touchStep` les borne.
 
 **Son / musique** : effet = `SfxId` + recette dans `RECIPES` (`audio/sfx.ts`) ; musique = `MusicId` + morceau dans
@@ -259,7 +289,9 @@ des commandes tactiles passent par `input.setTouchOptions` (crans `TOUCH_SIZE_ST
 de tir (`WeaponDef.sfx` : `'laser'`, `'machinegun'`, `'shotgun'`, `'rifle'`), joué une fois par salve (un coup de
 pompe = 1 son, une rafale de fusil = 3) : sa durée doit tenir dans la cadence (mitrailleur ≤ 70 ms, fusil
 ≤ 100 ms, pompe ≈ 370 ms réarmement compris). Les impacts de toutes les armes jouent `'laserHit'` (au plus un
-par tranche de 45 ms, `IMPACT_SFX_GAP_MS`).
+par tranche de 45 ms, `IMPACT_SFX_GAP_MS`). En vol : `SHIP_GUNS[…].sfx` (`'shipGun'` ≤ 110 ms, `'shipMachinegun'`
+≤ 50 ms, joué ~10 fois par seconde), `'enemyOrb'`, `'enemyHit'` (aussi rocher entamé, plus faible), `'enemyBlast'`
+(aussi rocher détruit par un tir, plus grave), cristal ramassé : `'crystal'`.
 
 **Arme** : `WeaponId` (`core/types.ts`) + fiche dans `WEAPONS` et place dans `WEAPON_IDS` (`core/weapons.ts`)
 + son (`SfxId` et recette) + `ARM_TEX`, `BULLET_TEX`, `BULLET_SIZE`, `BULLET_ADDITIVE`, `ARM_MUZZLE`
@@ -313,8 +345,17 @@ géante au loin, 4 ennemis par monde).
   (`heat`, `overheated`, `stats`, `weapon`) ; `scene.lasers.bolts` (`ShotPool`, toutes armes) ;
   `scene.speedLeftMs` / `rapidLeftMs` ; `scene.enemies.list[i].hp` ; `scene.doors.nearIndex`,
   `scene.parsed.doors`), `window.__xr3d` (`info()` → `phase`, `gates`, `nextGate`…, `shield`, `maxShields`,
-  `boost` (jauge 0..1), `boosting`, `boostDrain` / `boostFill` (par seconde), `autopilot(on)`,
-  `win()`, `fail()`, `advance(s)`, `timeScale(s)`, `bench(n)` ; disparaît avec la partie : tester sa présence),
+  `boost` (jauge 0..1), `boosting`, `boostDrain` / `boostFill` (par seconde) ; combat : `gunLevel`, `heat`,
+  `overheated`, `manualFire`, `range`, `shotsActive`, `shotsFired` / `lastMuzzle` (tirs partis, bouche du dernier),
+  `target` ({ `type` : `'rock'` ou type d'ennemi, `dist`, `hit` :
+  le tir guidé peut toucher } ou null), `enemies` ({ `fighter`, `mine`, `swarm` vivants, `killed` abattus par les
+  tirs }), `orbsActive`, `waves`, `crystals` / `crystalsTotal` / `crystalsActive`, `rocksDestroyed`, `points`,
+  `crystalsDropped` (lâchés), `drawCalls`, `geometries` / `textures` / `programs`), `autopilot(on)` (tir
+  automatique toujours), `spawn(type, distance = 60, variant)` (ennemi devant la Comète, essaim = formation entière ;
+  renvoie le nombre placé ; chasseur tenu à max(30, distance), tire après 42 u ; `variant` 0..1 fixe orientation,
+  ondulation, virage : tests reproductibles),
+  `fire(on = true)` (tir forcé), `win()`, `fail()`, `advance(s)`, `timeScale(s)`, `bench(n)` ; disparaît avec la
+  partie : tester sa présence),
   `window.__xrShell` (`info()` : dont `loadout` = { `equipped`, `owned`, `skills` } de la partie en cours,
   sinon du prochain lancement, `play` = `PlayLoadout` complet (`mods`, `maxHearts`, `ship`), `crystals` =
   réserve, `weapon` = arme de la session (`getSessionWeapon()`) ou null, `screen` = nom de l'écran affiché ;
@@ -325,7 +366,8 @@ géante au loin, 4 ennemis par monde).
   l'accueil, ou en début de partie avec `?stage=`).
 - Clavier : flèches / WASD (ZQSD en AZERTY) ; Espace = saut en 2D et turbo en vol ; K = saut ; Haut/W = haut
   (visée, portes, monter en vol), ne fait PAS sauter ; Bas/S = accroupi (puis ← → : reptation ; + saut :
-  descente d'étage) ; J/X/F = tir ; Maj = turbo ; Échap/P = pause et reprise ; Entrée/Espace passent l'intro ;
+  descente d'étage) ; J/X/F = tir (en vol aussi, en tir automatique comme manuel) ; Maj = turbo ; Échap/P =
+  pause et reprise ; Entrée/Espace passent l'intro ;
   hors partie, Échap et Retour arrière = retour (comme le bouton retour Android, sans quitter l'appli ; au
   hangar, ferme d'abord la confirmation d'achat).
 - Simulations dans `tests/e2e/lib/` : multi-touch CDP à identifiants explicites (`touch.mjs`), arrière-plan,
@@ -349,6 +391,13 @@ géante au loin, 4 ennemis par monde).
   recopiées listées dans `tests/e2e/README.md`, « Scénario du hangar »). Entre deux
   étapes, « Suivant » ouvre le hangar : `nextViaHangar` (`core.mjs`) clique « Suivant » puis « Décoller »
   (`.hg-depart`). Un bouton `aria-disabled` (prix verrouillé) ne se clique avec Playwright qu'avec `force: true`.
+- Combat en vol (étape 3b) : `flight-combat` (parcours inchangés, tir automatique et manuel, cadence et
+  surchauffe de chaque canon, rochers, cristaux, chasseur, mine, essaim, orbes, score, appels de dessin ; mesures
+  par sous-pas `__xr3d.advance(1 / 60)` dans la même tâche, ennemis posés par `spawn` à variante fixée) ; aussi
+  `flight-autopilot` (au moins 1 bouclier, < 150 appels de dessin), `small-screens` (HUD du vol, TIR),
+  `touch-options` et `touch-controls` (TIR), `f1-ctx-loss` (combat après une restauration). Valeurs recopiées
+  (canons, points, vagues, hachage des parcours) : `tests/e2e/README.md`, « Scénario du combat en vol » ; toute
+  retouche du vol, des canons ou des vagues doit les garder verts.
 - Sorties console attendues : avertissement D3D `X4122 … double precision` (compilation d'un shader, une fois
   par navigateur à froid) ; lors des pertes de contexte provoquées, `[flight3d] contexte WebGL perdu` et les
   journaux THREE / Phaser. Chrome met 15 à 60 s à se fermer sur cette machine : le lanceur le tue, c'est normal.
@@ -380,6 +429,14 @@ géante au loin, 4 ennemis par monde).
   `setLayout()` ≠ `'none'`).
 - Performances (GDD) : pas d'allocation dans les boucles de jeu (vecteurs et objets réutilisés), 3D sous
   ~150 draw calls, pixelRatio ≤ 1,5, pas de post-traitement plein écran ; viser 60 i/s sur mobile milieu de gamme.
+- **Parcours de vol déterministes** : portails, rochers, cristaux des rochers et vagues sortent de la graine
+  (records, tests). Un tirage de plus dans le générateur des portails et des rochers change tout le parcours :
+  les vagues ont le leur (recette Parcours de vol). Le hachage `COURSE_FP` de `flight-combat` se relève dans
+  Chrome : sous Node, les fonctions `Math.*` d'une autre version de V8 donnent d'autres valeurs.
+- Combat en vol : le pilote automatique (`__xr3d.autopilot`) tire toujours en automatique et s'écarte des
+  mines, de l'essaim et des orbes ; sans `variant`, `__xr3d.spawn` tire au hasard l'orientation de l'essaim et
+  le virage du chasseur (un test le fixe). Hors de la phase `fly`, ni chocs, ni visée, ni ramassage des
+  cristaux (`damageShip`, `live`, `updateGun`, `pickups.update`).
 
 ## Façon de travailler
 

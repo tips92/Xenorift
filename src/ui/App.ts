@@ -154,8 +154,14 @@ export function startApp(): void {
     // Sortie du mode test : l'arme de session posée au hangar est oubliée (reste celle de ?weapon=, sauf si
     // une arme possédée a été équipée depuis).
     if (patch.unlockAll === false && getSessionWeapon() !== null) setSessionWeapon(urlWeapon);
-    // Commandes tactiles : effet immédiat (masquées en pause, elles reparaissent ainsi à la reprise).
-    if (patch.touchSize !== undefined || patch.touchOpacity !== undefined || patch.leftHanded !== undefined) {
+    // Commandes tactiles : effet immédiat (masquées en pause, elles reparaissent ainsi à la reprise ; bouton TIR
+    // du vol en tir manuel, le mode de vol lit hooks.settings.manualFire).
+    if (
+      patch.touchSize !== undefined ||
+      patch.touchOpacity !== undefined ||
+      patch.leftHanded !== undefined ||
+      patch.manualFire !== undefined
+    ) {
       input.setTouchOptions(next);
     }
   }

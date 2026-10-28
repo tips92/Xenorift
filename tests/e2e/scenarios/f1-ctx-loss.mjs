@@ -4,8 +4,9 @@
 //     partie qui vole sur un contexte neuf ;
 //  2. même chose en plein vol ;
 //  3. perte puis restauration 0,5 s plus tard (x2) -> canevas masqué puis réaffiché, la partie continue sur
-//     place (« Liaison rétablie », image de nouveau éclairée, aucun échec) ; la 3e restauration de la même partie -> abandon net
-//     (un seul écran d'échec) -> RÉESSAYER -> partie normale.
+//     place (« Liaison rétablie », image de nouveau éclairée, aucun échec ; combat intact : mine posée à 60 u abattue
+//     par le tir automatique en moins de 1 s de jeu, appels de dessin revenus à ceux d'avant la perte) ; la 3e
+//     restauration de la même partie -> abandon net (un seul écran d'échec) -> RÉESSAYER -> partie normale.
 import { assert, fmt } from '../lib/helpers.mjs';
 import {
   LOST_REASON,
@@ -91,6 +92,7 @@ export default async function (t) {
   // ---------- 3. Perte + restauration 0,5 s plus tard, deux fois : reprise sur place
   for (let k = 1; k <= 2; k++) {
     const lumaBefore = await frameLuma(t);
+    const callsBefore = await t.ev(() => window.__xr3d.info().drawCalls);
     const l = await loseFlightOk(t, 'fly');
     await t.wait(500);
     await assertCanvasHidden(t, `perte ${k}`);
@@ -113,6 +115,23 @@ export default async function (t) {
       lumaBefore > 3 && lumaAfter >= lumaBefore * 0.4,
       `restauration ${k} : image éclairée attendue (luminance ${lumaBefore} avant, ${lumaAfter} après)`,
     );
+    // Combat après la restauration (pools et InstancedMesh gardés) : mine posée sur la route, abattue par le tir
+    // automatique (sous-pas simulés, image dessinée à la fin), appels de dessin de nouveau ceux d'avant la perte
+    const fight = await t.ev(() => {
+      const a = window.__xr3d;
+      const i0 = a.info();
+      a.spawn('mine', 60, 0.5);
+      let i = i0;
+      let n = 0;
+      while (n < 60 && i.enemies.killed === i0.enemies.killed) {
+        i = a.advance(1 / 60);
+        n++;
+      }
+      return { steps: n, killed: i.enemies.killed - i0.enemies.killed, fired: i.shotsFired - i0.shotsFired, calls: i.drawCalls, phase: i.phase };
+    });
+    t.log(`restauration ${k} : mine abattue en ${fight.steps} sous-pas (${fight.fired} tirs), appels de dessin ${callsBefore} -> ${fight.calls}`);
+    assert(fight.killed === 1 && fight.steps < 60, `restauration ${k} : mine abattue par le tir automatique en moins de 1 s de jeu (${fmt(fight)})`);
+    assert(Math.abs(fight.calls - callsBefore) <= 6, `restauration ${k} : appels de dessin revenus à ceux d'avant la perte (${callsBefore} -> ${fight.calls})`);
     if (k === 1) await t.shot('restored-in-place');
   }
 

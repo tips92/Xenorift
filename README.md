@@ -1,7 +1,8 @@
 # Xeno Rift
 
 Démo d'un jeu mobile : plateforme 2D (style Mario, avec armes à tir) entrecoupée de vols spatiaux en 3D
-à travers des portails intergalactiques. Univers extraterrestre, tout se joue à l'écran tactile.
+à travers des portails intergalactiques, où la Comète tire sur les astéroïdes et les ennemis. Univers
+extraterrestre, tout se joue à l'écran tactile.
 Conception détaillée : [docs/GDD.md](docs/GDD.md).
 
 ## Contenu de la démo
@@ -15,8 +16,8 @@ Conception détaillée : [docs/GDD.md](docs/GDD.md).
 
 Chaque étape se choisit dans le menu « Niveaux » (déblocage progressif, ou « Tout débloquer » dans les options).
 Entre deux étapes (« Suivant » sur les résultats) et depuis le menu « Niveaux », le **hangar** de la Comète
-dépense les cristaux ramassés : armes de Kaï et leurs améliorations, cœurs supplémentaires, bouclier et turbo
-de la Comète (son canon s'achète déjà ; son effet en vol viendra avec le combat spatial).
+dépense les cristaux ramassés (niveaux 2D et vols) : armes de Kaï et leurs améliorations, cœurs
+supplémentaires, mitrailleuse, bouclier et turbo de la Comète.
 
 ## Technique
 
@@ -25,12 +26,12 @@ de la Comète (son canon s'achète déjà ; son effet en vol viendra avec le com
 - Tous les outils et caches sont sur `D:\DevTools` (le disque C: est plein).
 
 ```
-src/core      contrats partagés, étapes, sauvegarde, fiches des armes, catalogue du hangar
+src/core      contrats partagés, étapes, sauvegarde, fiches des armes et des canons, catalogue du hangar
 src/ui        écrans (dont le hangar), HUD, enchaînement des étapes
 src/input     clavier, contrôles tactiles, inclinaison
 src/audio     sons et musiques synthétisés
 src/game2d    mode plateforme (moteur, graphismes, niveaux)
-src/game3d    mode vol spatial
+src/game3d    mode vol spatial (parcours, tir, ennemis, cristaux)
 android       projet Android natif (généré par Capacitor)
 tools         scripts d'installation et de build Android
 scripts       validation des niveaux 2D
@@ -44,10 +45,12 @@ npm run dev
 ```
 
 Puis ouvrir http://localhost:5173. Clavier : flèches ou ZQSD, Espace ou K = saut (Espace = turbo en vol),
-J ou X = tir, Échap = pause. En 2D, ↑ / Z vise vers le haut (avec ← → : en diagonale) et fait entrer dans
+J, X ou F = tir, Échap = pause. En 2D, ↑ / Z vise vers le haut (avec ← → : en diagonale) et fait entrer dans
 une porte ; il ne fait pas sauter. ↓ / S accroupit (puis ← → : ramper) ; ↓ + saut descend d'une plateforme
-traversable ou mobile. Sur téléphone : stick rond à 8 directions, boutons Saut et Tir ; taille, opacité et
-mode gaucher dans Options › Commandes.
+traversable ou mobile. En vol, la Comète tire seule sur la cible devant elle ; Options › Commandes › « Tir
+manuel » la fait tirer seulement sur appui (la touche de tir marche dans les deux cas). Sur téléphone : stick
+rond à 8 directions, boutons Saut et Tir ; en vol, joystick, Turbo et, en tir manuel, Tir ; taille, opacité
+et mode gaucher dans Options › Commandes.
 Raccourcis de test : `?stage=j1` (ou `f1`, `m1`, `f2`) lance directement une étape, `?unlock=1` débloque tout,
 `?touch=1` affiche les boutons tactiles sur PC, `?weapon=machinegun` (ou `laser`, `shotgun`, `rifle`) impose
 l'arme pour la session, même si elle n'est pas possédée (rien n'est enregistré ; une valeur inconnue est

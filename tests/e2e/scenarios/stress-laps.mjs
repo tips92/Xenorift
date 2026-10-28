@@ -2,7 +2,10 @@
 // le hangar entre deux étapes), victoires par les aides DEV. À chaque étape : images/s mesurées, au plus 2 canevas
 // dans #game-root (Phaser + three.js, réutilisés) dont un seul affiché. À la fin de chaque tour, sur l'accueil : tas
 // JS après ramasse-miettes et nombre de nœuds DOM ; ni l'un ni l'autre ne doit grimper d'un tour à l'autre (fuite).
-import { assert, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
+// Ressources GPU du renderer three.js partagé (géométries, textures, programmes de renderer.info) relevées à l'entrée
+// en vol de f1 et f2 : identiques au 1er et au dernier tour (un InstancedMesh, une géométrie ou une texture d'ennemi,
+// de tir ou de cristal non libérés s'y verraient ; le tas JS ne les voit pas).
+import { assert, assertEq, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
 import { domNodes, gameCanvases, heapMB, measureFps, nextViaHangar, press } from '../lib/core.mjs';
 
 export const meta = {
@@ -37,9 +40,16 @@ export default async function (t) {
     await waitForScreen(t, 'select');
     await t.page.locator('.screens [data-screen="select"].is-active .card').first().click();
     const fps = {};
+    const gpu = {};
     for (const [id, kind] of STAGES) {
       if (kind === '2d') await waitFor2dPlay(t, { timeout: 40000 });
-      else await waitFor3dPhase(t, 'fly', { timeout: 60000 });
+      else {
+        await waitFor3dPhase(t, 'fly', { timeout: 60000 });
+        gpu[id] = await t.ev(() => {
+          const i = window.__xr3d.info();
+          return { geometries: i.geometries, textures: i.textures, programs: i.programs };
+        });
+      }
       const stage = await t.ev(() => window.__xrShell.info().run.stage);
       assert(stage === id, `tour ${lap} : étape ${id} attendue, obtenu ${stage}`);
       fps[id] = await measureFps(t, 1500);
@@ -69,8 +79,8 @@ export default async function (t) {
     const heap = await heapMB(t);
     const nodes = await domNodes(t);
     const cv = await gameCanvases(t);
-    laps.push({ heap, nodes, fps });
-    t.log(`tour ${lap} : tas ${heap} Mo, ${nodes} nœuds DOM, canevas ${JSON.stringify(cv)}, images/s ${JSON.stringify(fps)}`);
+    laps.push({ heap, nodes, fps, gpu });
+    t.log(`tour ${lap} : tas ${heap} Mo, ${nodes} nœuds DOM, canevas ${JSON.stringify(cv)}, images/s ${JSON.stringify(fps)}, GPU à l'entrée en vol ${JSON.stringify(gpu)}`);
     assert(cv.length <= 2 && cv.every((c) => !c.shown), `tour ${lap} : canevas de jeu masqués sur l'accueil, au plus 2 (${JSON.stringify(cv)})`);
   }
   const first = laps[0];
@@ -83,6 +93,9 @@ export default async function (t) {
     last.nodes <= first.nodes + NODES_SLACK,
     `le nombre de nœuds DOM ne doit pas grimper : ${laps.map((l) => l.nodes).join(' -> ')} (tolérance +${NODES_SLACK})`,
   );
+  for (const id of ['f1', 'f2']) {
+    assertEq(last.gpu[id], first.gpu[id], `${id} : géométries, textures et programmes du renderer à l'entrée en vol, 1er et dernier tour (fuite GPU)`);
+  }
   await waitFor(t, () => document.querySelector('.screens [data-screen="title"].is-active'), { timeout: 2000, label: 'accueil final' });
   await t.shot('final-title');
 }
