@@ -1,6 +1,6 @@
 import type { ModeHandle, ModeHooks, StageDef } from '../core/types';
 import { pauseSession, releaseSession, resumeSession, runSession } from './engine/game';
-import { createSession, reportError } from './engine/session';
+import { createSession, music, reportError } from './engine/session';
 import { getLevel } from './levels';
 
 // Mode plateforme 2D (Phaser 3). La signature exportée ne doit pas changer.
@@ -14,11 +14,7 @@ export function startPlatformer(container: HTMLElement, stage: StageDef, hooks: 
   } catch (err) {
     reportError('input.clearPresses', err);
   }
-  try {
-    hooks.audio.music(level.music);
-  } catch (err) {
-    reportError('audio.music', err);
-  }
+  music(session, level.music);
 
   runSession(container, session);
 

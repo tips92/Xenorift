@@ -36,7 +36,7 @@ import {
   shotLog,
   waitGunIdle,
 } from '../lib/game2d.mjs';
-import { press, recordToasts, toasts, waitPause, pressPause } from '../lib/core.mjs';
+import { pickStage, press, recordToasts, toasts, waitPause, pressPause } from '../lib/core.mjs';
 import { waitIntroCard } from '../lib/shell.mjs';
 
 export const meta = {
@@ -204,8 +204,7 @@ async function sessionWeapon(t) {
   // --- Autre étape (Lune, m1) : l'arme est gardée d'un niveau à l'autre
   await quitToTitle(t);
   await press(t, 'title', 'Niveaux');
-  await waitForScreen(t, 'select');
-  await t.page.locator('.screens [data-screen="select"].is-active .card').nth(2).click({ timeout: 5000 });
+  await pickStage(t, 'm1');
   await waitIntroCard(t);
   await waitFor2dPlay(t);
   assertEq(await t.ev(() => window.__xrShell.info().run.stage), 'm1', 'partie de la Lune lancée');
@@ -238,8 +237,7 @@ async function sessionWeapon(t) {
 
   // --- Vol en mode test : pas de ligne Arme
   await press(t, 'title', 'Niveaux');
-  await waitForScreen(t, 'select');
-  await t.page.locator('.screens [data-screen="select"].is-active .card').nth(1).click({ timeout: 5000 });
+  await pickStage(t, 'f1');
   await waitIntroCard(t);
   await assertNoIntroWeapon(t, 'vol (f1) en mode test');
 

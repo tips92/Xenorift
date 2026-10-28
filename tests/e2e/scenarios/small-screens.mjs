@@ -1,6 +1,7 @@
-// Petits écrans de téléphone en paysage (740x360, 640x320) : accueil, choix du niveau (avec le bouton Hangar),
-// carte d'intro, commandes tactiles et HUD en jeu, menu Pause. Rien d'important ne sort de l'écran, n'est coupé ni
-// ne déborde, la page ne défile pas, les commandes ne se chevauchent pas. Puis portrait (390x844) en pleine
+// Petits écrans de téléphone en paysage (740x360, 640x320) : accueil, choix du niveau (bouton Hangar ; barre du
+// monde avec ◀ ▶ ; cartes de chaque page, ▶ jusqu'à la dernière), carte d'intro, commandes tactiles et HUD en jeu,
+// menu Pause. Rien d'important ne sort de l'écran, n'est coupé ni ne déborde, la page ne défile pas, les commandes
+// ne se chevauchent pas. Puis portrait (390x844) en pleine
 // partie : invite « Tourne ton téléphone » et partie mise en pause ; retour en paysage : invite masquée, menu
 // Pause, REPRENDRE relance.
 // Réglages des commandes posés dans la sauvegarde avant le chargement (640x320 puis 740x360) : mode gaucher, cran
@@ -9,6 +10,8 @@
 // droite, TURBO à gauche, sans chevauchement avec le HUD de vol ni le bouton pause.
 // Plan 02 : en jeu, avec les trois bonus actifs (vitesse, cadence, bouclier), jauge de chauffe, anneaux et bouton
 // pause ne se chevauchent pas (aides DEV : sautés avec --prod).
+// Plan 04 : barre de boss à 640x320 (?at=boss, Kaï posé dans l'arène de j1 ; commandes moyennes, grandes, grandes en
+// mode gaucher) sans chevauchement avec les commandes, le HUD ni la bulle de LUMA (aides DEV : sautée avec --prod).
 // Plan 03 (hangar) : sauvegarde version 2 avec 2 cœurs et 2 boucliers achetés (640x320, 740x360) : HUD à 5 cœurs
 // (avec les trois bonus en dev) et vol à 5 boucliers sans chevauchement ; résultats avec « +53 cristaux » et une
 // grosse réserve (ligne Réserve entière, dev). Hangar à 844x390, 740x360, 640x320 et 568x320 : ouvert depuis les
@@ -19,7 +22,7 @@
 // N'utilise pas les aides DEV (sauf les bonus, la victoire et les cristaux de j1) : passe aussi sur le build de
 // production (--prod).
 import { assert, assertEq, clickText, fmt, waitFor, waitFor2dPlay, waitForScreen } from '../lib/helpers.mjs';
-import { assertLayout, overlaps, press, pressPause, rects, waitHud, waitPause } from '../lib/core.mjs';
+import { assertLayout, overlaps, press, pressPause, rects, waitHud, waitPause, waitSelectPage } from '../lib/core.mjs';
 
 export const meta = {
   title: 'Petits écrans (740x360, 640x320, 568x320) et portrait : menus, hangar, commandes, HUD (5 cœurs, 5 boucliers), pause, rotation',
@@ -92,30 +95,45 @@ async function checkSize(t, w, h) {
   await assertLayout(t, [`${T} .logo`, `${T} .btn`, `${T} .btn-label`, `${T} .btn-sub`, `${T} .tagline`], `accueil ${tag}`);
   await t.shot(`title-${tag}`);
 
-  // --- Choix du niveau : 4 cartes côte à côte, entières, sans chevauchement ; en-tête avec le bouton Hangar
+  // --- Choix du niveau, page par page : cartes de la page côte à côte, entières, sans chevauchement ; en-tête avec
+  // le bouton Hangar ; barre du monde (◀, nom, étoiles, ▶) sans chevauchement, flèches touchables.
   await clickText(t, 'Niveaux');
   await waitForScreen(t, 'select');
-  await assertNoPageScroll(t, `choix du niveau ${tag}`);
   const S = '.screens [data-screen="select"].is-active';
-  await assertLayout(
-    t,
-    [`${S} .screen-header .btn-round`, `${S} .screen-title`, `${S} .select-total`, `${S} .select-hangar`, `${S} .select-hangar .btn-label`, `${S} .select-hangar .btn-sub`, `${S} .card`, `${S} .card-title`, `${S} .card-sub`],
-    `choix du niveau ${tag}`,
-  );
-  await assertParts(
-    t,
-    [
-      ['retour', `${S} .screen-header .btn-round`],
-      ['titre', `${S} .screen-title`],
-      ['Hangar', `${S} .select-hangar`],
-      ['étoiles', `${S} .select-total`],
-    ],
-    `en-tête du choix du niveau ${tag}`,
-  );
-  const cards = await rects(t, `${S} .card`);
-  assertEq(cards.length, 4, `choix du niveau ${tag} : cartes visibles`);
-  assertDisjoint(cards.map((c, i) => ({ name: `carte ${i + 1}`, r: c })), `choix du niveau ${tag}`);
-  await t.shot(`select-${tag}`);
+  const pages = await t.ev((s) => [...document.querySelectorAll(`${s} .select-page`)].map((p) => p.querySelectorAll('.card').length), S);
+  assert(pages.length >= 2, `choix du niveau ${tag} : une page par monde (${fmt(pages)})`);
+  for (let p = 0; p < pages.length; p++) {
+    if (p > 0) {
+      await t.page.locator(`${S} .select-next`).click();
+      await waitSelectPage(t, p + 1);
+    }
+    const where = `choix du niveau ${tag}, monde ${p + 1}`;
+    await assertNoPageScroll(t, where);
+    await assertLayout(
+      t,
+      [`${S} .screen-header .btn-round`, `${S} .screen-title`, `${S} .select-total`, `${S} .select-hangar`, `${S} .select-hangar .btn-label`, `${S} .select-hangar .btn-sub`, `${S} .select-arrow`, `${S} .select-world-name`, `${S} .select-world-stars`, `${S} .card`, `${S} .card-title`, `${S} .card-sub`],
+      where,
+    );
+    await assertParts(
+      t,
+      [
+        ['retour', `${S} .screen-header .btn-round`],
+        ['titre', `${S} .screen-title`],
+        ['Hangar', `${S} .select-hangar`],
+        ['étoiles', `${S} .select-total`],
+        ['◀', `${S} .select-prev`],
+        ['monde', `${S} .select-world-name`],
+        ['étoiles du monde', `${S} .select-world-stars`],
+        ['▶', `${S} .select-next`],
+      ],
+      `en-tête et barre du ${where}`,
+    );
+    for (const a of await rects(t, `${S} .select-arrow`)) assert(a.w >= 32 && a.h >= 32, `${where} : flèche de ${Math.round(a.w)}x${Math.round(a.h)} px`);
+    const cards = await rects(t, `${S} .select-page.is-current .card`);
+    assertEq(cards.length, pages[p], `${where} : cartes visibles`);
+    assertDisjoint(cards.map((c, i) => ({ name: `carte ${i + 1}`, r: c })), where);
+    await t.shot(`select-${tag}-w${p + 1}`);
+  }
   await t.key('Escape', 60);
   await waitForScreen(t, 'title');
 
@@ -200,6 +218,46 @@ async function checkPowers(t, label) {
     ],
     label,
   );
+}
+
+/**
+ * Plan 04 : barre de boss (aides DEV : ?at=boss, Kaï posé dans l'arène de j1) avec les réglages `settings` des
+ * commandes : barre entière, sans chevauchement avec le stick, SAUT, TIR, PAUSE, la pastille du HUD, la jauge, ni
+ * la bulle de LUMA (message du boss, s'il est affiché).
+ */
+async function checkBossBar(t, w, h, tag, settings) {
+  await t.page.setViewportSize({ width: w, height: h });
+  await patchSavedSettings(t, settings);
+  await t.goto('?touch=1&unlock=1&stage=j1&at=boss');
+  await waitHud(t, 'platform');
+  await waitFor2dPlay(t);
+  await t.ev(() => {
+    window.__xr2d.god(true);
+    window.__xr2d.boss.enter();
+  });
+  await waitFor(t, () => !!document.querySelector('.hud-boss.is-on'), { timeout: 5000, label: `${tag} : barre de boss affichée` });
+  await t.wait(400); // apparition de la barre (glissement)
+  const bubble = await t.page
+    .waitForFunction(() => !!document.querySelector('.hud .xr-bubble--radio:not(.is-hidden)'), null, { timeout: 3000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  await assertNoPageScroll(t, tag);
+  await assertLayout(t, ['.hud-boss', '.boss-name', '.boss-phase', '.boss-track'], tag);
+  const parts = [
+    ['stick', '.xr-dpad'],
+    ['SAUT', '.xr-jump'],
+    ['TIR', '.xr-fire'],
+    ['PAUSE', '.hud-pause'],
+    ['HUD', '.hud-platform .hud-stats'],
+    ['jauge', '.hud-heat'],
+    ['barre de boss', '.hud-boss'],
+  ];
+  if (bubble) parts.push(['bulle de LUMA', '.hud .xr-bubble--radio']);
+  await assertParts(t, parts, tag);
+  t.log(`${tag} : barre de boss sans chevauchement${bubble ? ' (bulle de LUMA comprise)' : ''}`);
+  await t.shot(`boss-bar-${tag.replace(/[^\w-]+/g, '-')}`);
 }
 
 /**
@@ -604,6 +662,16 @@ export default async function (t) {
 
   // --- Réglages des commandes : gaucher, grand, les deux
   for (const [w, h] of SIZES.slice().reverse()) await checkTouchVariants(t, w, h);
+
+  // --- Plan 04 : barre de boss à 640x320 (aides DEV), commandes moyennes, grandes, grandes en mode gaucher
+  if (t.dev) {
+    for (const v of [{ tag: 'normal', settings: { leftHanded: false, touchSize: 1 } }, ...TOUCH_VARIANTS.slice(1)]) {
+      await checkBossBar(t, 640, 320, `boss ${v.tag} 640x320`, v.settings);
+    }
+    await patchSavedSettings(t, { leftHanded: false, touchSize: 1 });
+  } else {
+    t.log('barre de boss non testée (aides DEV absentes du build de production)');
+  }
 
   // --- Plan 03 : HUD à 5 cœurs et 5 boucliers, ligne Réserve des résultats, hangar
   for (const [w, h] of SIZES.slice().reverse()) await checkRichHud(t, w, h);

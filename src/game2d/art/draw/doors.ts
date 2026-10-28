@@ -190,98 +190,113 @@ function openVeil(ctx: Ctx, pal: ThemePalette): void {
   softDot(ctx, CX, SILL_Y + 2, 26, pal.veinLight, 0.5);
 }
 
-/** Mousse et liane (jungle) ou garnitures de métal et voyants (lune). */
-function themeDressing(ctx: Ctx, theme: ThemeId, pal: ThemePalette, open: boolean): void {
-  if (theme === 'jungle') {
-    // Mousse sur le haut de l'arche, de part et d'autre de la clé de voûte
-    ctx.lineCap = 'round';
-    for (const [a0, a1] of [[1.06, 1.38], [1.63, 1.76]] as const) {
-      ctx.strokeStyle = pal.outline;
-      ctx.lineWidth = 8.5;
-      ctx.beginPath();
-      ctx.arc(CX, ARCH_Y, ARCH_R - 1.5, Math.PI * a0, Math.PI * a1);
-      ctx.stroke();
-      ctx.strokeStyle = linGrad(ctx, 0, 14, 0, 40, [[0, pal.surfaceLight], [0.5, pal.surface], [1, pal.surfaceDark]]);
-      ctx.lineWidth = 5.5;
-      ctx.stroke();
-      glow(ctx, pal.surfaceGlow, 5, () => {
-        ctx.strokeStyle = pal.surfaceLight;
-        ctx.lineWidth = 1.3;
-        ctx.beginPath();
-        ctx.arc(CX, ARCH_Y, ARCH_R + 0.5, Math.PI * (a0 + 0.03), Math.PI * (a1 - 0.03));
-        ctx.stroke();
-      });
-    }
-    // Touffe au pied du montant gauche
-    const tuft = new Path2D();
-    tuft.moveTo(2, SILL_Y + 1);
-    tuft.quadraticCurveTo(4, SILL_Y - 6, 8, SILL_Y - 3);
-    tuft.quadraticCurveTo(10, SILL_Y - 8, 14, SILL_Y - 2);
-    tuft.quadraticCurveTo(17, SILL_Y - 4, 18, SILL_Y + 1);
-    tuft.closePath();
-    fillOutlined(ctx, tuft, linGrad(ctx, 0, SILL_Y - 12, 0, SILL_Y, [[0, pal.surfaceLight], [1, pal.surfaceDark]]), pal.outline, 1.8);
-    // Liane pendue au côté droit de l'arche
-    const vine = new Path2D();
-    vine.moveTo(50, 24);
-    vine.bezierCurveTo(57, 36, 50, 50, 56, 64);
-    vine.quadraticCurveTo(59, 72, 55, 80);
+/** Mousse et liane (jungle). */
+function jungleDressing(ctx: Ctx, pal: ThemePalette): void {
+  // Mousse sur le haut de l'arche, de part et d'autre de la clé de voûte
+  ctx.lineCap = 'round';
+  for (const [a0, a1] of [[1.06, 1.38], [1.63, 1.76]] as const) {
     ctx.strokeStyle = pal.outline;
-    ctx.lineWidth = 3.6;
-    ctx.stroke(vine);
-    ctx.strokeStyle = '#1f8a6a';
-    ctx.lineWidth = 1.7;
-    ctx.stroke(vine);
-    for (const [x, y, a] of [[53, 34, 0.7], [54, 52, -0.6], [57, 68, 0.5]] as const) {
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(a);
-      fillOutlined(ctx, ellipse(4, 0, 4.2, 1.9), '#2ad8a0', pal.outline, 1.2);
-      ctx.restore();
-    }
-    glowDot(ctx, 55, 81.5, 2.1, pal.bioB);
-  } else {
-    // Bandeau de métal sur l'arc (interrompu par la clé de voûte), rivets, voyants au pied des montants
-    ctx.lineCap = 'butt';
-    for (const [a0, a1] of [[1.06, 1.38], [1.62, 1.94]] as const) {
-      ctx.strokeStyle = pal.outline;
-      ctx.lineWidth = 6;
-      ctx.beginPath();
-      ctx.arc(CX, ARCH_Y, ARCH_R - 3, Math.PI * a0, Math.PI * a1);
-      ctx.stroke();
-      ctx.strokeStyle = linGrad(ctx, 0, 14, 0, 50, [[0, '#ece6fa'], [0.5, '#a59cc6'], [1, '#5a5278']]);
-      ctx.lineWidth = 3.4;
-      ctx.stroke();
-    }
-    ctx.lineCap = 'round';
-    for (const a of [Math.PI * 1.15, Math.PI * 1.35, Math.PI * 1.65, Math.PI * 1.85]) {
-      const x = CX + Math.cos(a) * (ARCH_R - 3);
-      const y = ARCH_Y + Math.sin(a) * (ARCH_R - 3);
-      ctx.fillStyle = pal.outline;
-      ctx.beginPath();
-      ctx.arc(x, y, 1.2, 0, TAU);
-      ctx.fill();
-    }
-    for (const x of [CX - ARCH_R + 6.5, CX + ARCH_R - 6.5]) {
-      fillOutlined(ctx, roundRect(x - 4, 100, 8, 8, 2), '#2a2542', pal.outline, 1.6);
-      glow(ctx, pal.vein, open ? 9 : 5, () => {
-        ctx.fillStyle = open ? pal.veinLight : pal.vein;
-        ctx.fillRect(x - 2.4, 102.6, 4.8, 2.8);
-      });
-    }
-    // Poussière de régolithe sur le seuil
-    ctx.fillStyle = rgba(pal.surface, 0.55);
+    ctx.lineWidth = 8.5;
     ctx.beginPath();
-    ctx.ellipse(10, SILL_Y + 0.5, 8, 1.6, 0, 0, TAU);
-    ctx.moveTo(58, SILL_Y + 0.5);
-    ctx.ellipse(52, SILL_Y + 0.5, 6, 1.4, 0, 0, TAU);
+    ctx.arc(CX, ARCH_Y, ARCH_R - 1.5, Math.PI * a0, Math.PI * a1);
+    ctx.stroke();
+    ctx.strokeStyle = linGrad(ctx, 0, 14, 0, 40, [[0, pal.surfaceLight], [0.5, pal.surface], [1, pal.surfaceDark]]);
+    ctx.lineWidth = 5.5;
+    ctx.stroke();
+    glow(ctx, pal.surfaceGlow, 5, () => {
+      ctx.strokeStyle = pal.surfaceLight;
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.arc(CX, ARCH_Y, ARCH_R + 0.5, Math.PI * (a0 + 0.03), Math.PI * (a1 - 0.03));
+      ctx.stroke();
+    });
+  }
+  // Touffe au pied du montant gauche
+  const tuft = new Path2D();
+  tuft.moveTo(2, SILL_Y + 1);
+  tuft.quadraticCurveTo(4, SILL_Y - 6, 8, SILL_Y - 3);
+  tuft.quadraticCurveTo(10, SILL_Y - 8, 14, SILL_Y - 2);
+  tuft.quadraticCurveTo(17, SILL_Y - 4, 18, SILL_Y + 1);
+  tuft.closePath();
+  fillOutlined(ctx, tuft, linGrad(ctx, 0, SILL_Y - 12, 0, SILL_Y, [[0, pal.surfaceLight], [1, pal.surfaceDark]]), pal.outline, 1.8);
+  // Liane pendue au côté droit de l'arche
+  const vine = new Path2D();
+  vine.moveTo(50, 24);
+  vine.bezierCurveTo(57, 36, 50, 50, 56, 64);
+  vine.quadraticCurveTo(59, 72, 55, 80);
+  ctx.strokeStyle = pal.outline;
+  ctx.lineWidth = 3.6;
+  ctx.stroke(vine);
+  ctx.strokeStyle = '#1f8a6a';
+  ctx.lineWidth = 1.7;
+  ctx.stroke(vine);
+  for (const [x, y, a] of [[53, 34, 0.7], [54, 52, -0.6], [57, 68, 0.5]] as const) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(a);
+    fillOutlined(ctx, ellipse(4, 0, 4.2, 1.9), '#2ad8a0', pal.outline, 1.2);
+    ctx.restore();
+  }
+  glowDot(ctx, 55, 81.5, 2.1, pal.bioB);
+}
+
+/** Garnitures de métal et voyants (lune). */
+function moonDressing(ctx: Ctx, pal: ThemePalette, open: boolean): void {
+  // Bandeau de métal sur l'arc (interrompu par la clé de voûte), rivets, voyants au pied des montants
+  ctx.lineCap = 'butt';
+  for (const [a0, a1] of [[1.06, 1.38], [1.62, 1.94]] as const) {
+    ctx.strokeStyle = pal.outline;
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(CX, ARCH_Y, ARCH_R - 3, Math.PI * a0, Math.PI * a1);
+    ctx.stroke();
+    ctx.strokeStyle = linGrad(ctx, 0, 14, 0, 50, [[0, '#ece6fa'], [0.5, '#a59cc6'], [1, '#5a5278']]);
+    ctx.lineWidth = 3.4;
+    ctx.stroke();
+  }
+  ctx.lineCap = 'round';
+  for (const a of [Math.PI * 1.15, Math.PI * 1.35, Math.PI * 1.65, Math.PI * 1.85]) {
+    const x = CX + Math.cos(a) * (ARCH_R - 3);
+    const y = ARCH_Y + Math.sin(a) * (ARCH_R - 3);
+    ctx.fillStyle = pal.outline;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.2, 0, TAU);
     ctx.fill();
   }
+  for (const x of [CX - ARCH_R + 6.5, CX + ARCH_R - 6.5]) {
+    fillOutlined(ctx, roundRect(x - 4, 100, 8, 8, 2), '#2a2542', pal.outline, 1.6);
+    glow(ctx, pal.vein, open ? 9 : 5, () => {
+      ctx.fillStyle = open ? pal.veinLight : pal.vein;
+      ctx.fillRect(x - 2.4, 102.6, 4.8, 2.8);
+    });
+  }
+  // Poussière de régolithe sur le seuil
+  ctx.fillStyle = rgba(pal.surface, 0.55);
+  ctx.beginPath();
+  ctx.ellipse(10, SILL_Y + 0.5, 8, 1.6, 0, 0, TAU);
+  ctx.moveTo(58, SILL_Y + 0.5);
+  ctx.ellipse(52, SILL_Y + 0.5, 6, 1.4, 0, 0, TAU);
+  ctx.fill();
 }
+
+/** Ce qui distingue les portes de chaque thème. */
+interface DoorStyle {
+  /** Runes au bas des montants (la lune a des voyants à la place, posés par dressing). */
+  lowRunes: boolean;
+  /** Garnitures posées en dernier sur la porte. */
+  dressing(ctx: Ctx, pal: ThemePalette, open: boolean): void;
+}
+
+const DOOR_STYLES: Record<ThemeId, DoorStyle> = {
+  jungle: { lowRunes: true, dressing: jungleDressing },
+  moon: { lowRunes: false, dressing: moonDressing },
+};
 
 // ---------------------------------------------------------------- Porte (64x128, 2 frames)
 
 export function drawDoor(ctx: Ctx, theme: ThemeId, frame: number): void {
   const pal = PALETTES[theme];
+  const style = DOOR_STYLES[theme];
   const open = frame === 1;
   const outer = archPath(ARCH_Y, ARCH_R, BASE_Y);
   const hole = archPath(HOLE_Y, HOLE_R, BASE_Y + 2);
@@ -300,13 +315,13 @@ export function drawDoor(ctx: Ctx, theme: ThemeId, frame: number): void {
   ctx.save();
   ctx.clip(outer);
   masonry(ctx, pal);
-  // Runes gravées sur les montants (lune : voyants à la place de celles du bas, voir themeDressing)
+  // Runes gravées sur les montants (lune : voyants à la place de celles du bas, voir moonDressing)
   glow(ctx, pal.vein, open ? 8 : 4, () => {
     ctx.strokeStyle = rgba(pal.vein, open ? 1 : 0.6);
     ctx.lineWidth = 1.5;
     rune(ctx, CX - ARCH_R + 6.5, 81, 0);
     rune(ctx, CX + ARCH_R - 6.5, 81, 1);
-    if (theme === 'jungle') {
+    if (style.lowRunes) {
       rune(ctx, CX - ARCH_R + 6.5, 104, 1);
       rune(ctx, CX + ARCH_R - 6.5, 104, 0);
     }
@@ -347,7 +362,7 @@ export function drawDoor(ctx: Ctx, theme: ThemeId, frame: number): void {
     });
   }
 
-  themeDressing(ctx, theme, pal, open);
+  style.dressing(ctx, pal, open);
 }
 
 // ---------------------------------------------------------------- Mur du fond d'une salle close (64x64)

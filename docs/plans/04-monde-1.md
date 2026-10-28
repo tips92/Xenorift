@@ -1,13 +1,13 @@
 # Étape 4 — monde 1 complet au nouveau format : plan technique
 
-Quatrième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). Rien n'est codé. Elle s'appuie sur les
+Quatrième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). En cours de réalisation (branche `claude/world-1-completion-866505`, partie de `plans-etapes-1-3` après 3a). Elle s'appuie sur les
 étapes [1](01-controles.md) (visée, accroupi, portes), [2](02-armes.md) (arme générique, `loadout`, compétence
 `doubleJump`) et [3](03-hangar.md) (sauvegarde v2, hangar, balise, combat en vol) : 4a et 4b demandent 3a, 4c
 demande 3b. Le monde 1 sert de **modèle** : table des mondes, boss, radio et cinématiques resserviront tels quels.
 
 ## Objectif
 
-Si les choix ci-dessous sont retenus, un joueur qui commence une partie :
+Une fois l'étape finie, un joueur qui commence une partie :
 
 - voit le **prologue** (≈ 40 s, bouton Passer) : le signal, la Faille, l'arrivée sur Xéna ; LUMA annonce le but
   (libérer le gardien et rapporter son noyau, qui ouvrira le portail) ;
@@ -41,9 +41,11 @@ nouveau format (étape 5), carte galactique et mondes 3 à 5 (6), secrets et niv
 - [Points de vigilance](../ARCHITECTURE.md#points-de-vigilance-avant-de-grandir) : 63 tests `'jungle'` /
   `'moon'` dans 14 fichiers, des choix `'nebula'` / `'asteroids'` dans 6. Tests touchés : section Tests.
 
-## Choix proposés (à valider)
+## Décisions (28/10/2026)
 
-Chacun finit par sa question à l'utilisateur ; « sauf objection » marque un choix purement technique.
+Les 19 choix proposés ont été **validés tels quels** par l'utilisateur le 28/10/2026 ; 4a et 4b commencent avant
+la fin de 3b (4c, pour le léviathan, attend le tir en vol de 3b). Les questions restent pour mémoire ; la
+solution retenue est toujours la première proposée, pas l'« Autre ».
 
 1. **Trois parties jouables** : 4a fondations (tables, progression, écran Niveaux, radio, boss, j1), 4b la Jungle
    (j2, j3, nouvel essai), 4c histoire et vol. Chacune finit sur un jeu complet, des tests verts, CLAUDE.md à

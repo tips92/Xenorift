@@ -145,5 +145,7 @@ export default async function (t) {
   await t.shot('results');
   const save = await readSave(t);
   assert(save && save.best && save.best.f1 && save.best.f1.score > 0, `record de f1 sauvegardé (sauvegarde : ${JSON.stringify(save)})`);
-  assert(save.unlocked >= 2, `étape suivante (m1) débloquée : unlocked = ${save.unlocked}`);
+  // Mode test (?unlock=1) : tout est ouvert ; l'étape réussie se lit dans `cleared`.
+  const prog = await t.ev(() => window.__xrShell.info().stages.filter((s) => s.id === 'f1' || s.id === 'm1'));
+  assertEq(prog.map((s) => [s.id, s.cleared, s.unlocked]), [['f1', true, true], ['m1', false, true]], 'f1 réussie, m1 non réussie (ouverte par le mode test)');
 }

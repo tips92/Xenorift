@@ -124,7 +124,7 @@ export class ShotPool {
     }
   }
 
-  /** Pointe du tir en (tx, ty) contre le décor, les ennemis et les spores ; vrai si le tir est détruit. */
+  /** Pointe du tir en (tx, ty) contre le décor, le boss, les ennemis et les spores ; vrai si le tir est détruit. */
   private probe(b: Bolt, tx: number, ty: number): boolean {
     const scene = this.scene;
     const fx = scene.fx;
@@ -133,6 +133,16 @@ export class ShotPool {
       this.impactSfx();
       this.kill(b);
       return true;
+    }
+    // Boss : -1 raté, 0 partie blindée (arrêté, étincelle blanche), sinon touché (sons et clignotement : le boss).
+    const boss = scene.boss;
+    if (boss) {
+      const dmg = boss.hitBy(tx, ty, b.damage);
+      if (dmg >= 0) {
+        fx.spark(tx - b.ux * 4, ty - b.uy * 4, dmg > 0 ? b.color : 0xffffff, dmg > 0 ? 9 : 5);
+        this.kill(b);
+        return true;
+      }
     }
     const e = scene.enemies.hitTestPoint(tx, ty, 6);
     if (e) {

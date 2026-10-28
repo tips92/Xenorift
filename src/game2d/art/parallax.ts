@@ -34,6 +34,55 @@ interface Body {
   halfW: number;
 }
 
+/** Astre du décor : frame de l'atlas 'bodies', position (part de la largeur de vue), hauteur, défilement, demi-largeur. */
+interface BodyDef {
+  frame: string;
+  fx: number;
+  y: number;
+  factor: number;
+  halfW: number;
+}
+
+/** Décor animé de chaque thème (un thème oublié ici fait échouer tsc). */
+interface ParallaxStyle {
+  /** Teintes des étoiles scintillantes, en alternance. */
+  twinkleTints: readonly number[];
+  bodies: readonly BodyDef[];
+  /** Méduse-baleine géante qui dérive au loin, tentacules en bas. */
+  whale: boolean;
+  /** Nuées d'oiseaux en V. */
+  flocks: boolean;
+  /** Ver des sables qui jaillit du sol, avec sa poussière. */
+  worm: boolean;
+  /** Comètes filantes. */
+  comets: boolean;
+}
+
+const PARALLAX_STYLES: Record<ThemeId, ParallaxStyle> = {
+  jungle: {
+    twinkleTints: [0xffffff, 0xbff8ff, 0xffc8f4],
+    bodies: [
+      { frame: 'moonA', fx: 0.74, y: 170, factor: 0.03, halfW: 140 },
+      { frame: 'moonB', fx: 0.3, y: 105, factor: 0.036, halfW: 55 },
+    ],
+    whale: true,
+    flocks: true,
+    worm: false,
+    comets: false,
+  },
+  moon: {
+    twinkleTints: [0xffffff, 0xffe6c0, 0xd8c8ff],
+    bodies: [
+      { frame: 'ringed', fx: 0.62, y: 215, factor: 0.025, halfW: 320 },
+      { frame: 'sun', fx: 0.13, y: 92, factor: 0.03, halfW: 80 },
+    ],
+    whale: false,
+    flocks: false,
+    worm: true,
+    comets: true,
+  },
+};
+
 function posMod(a: number, m: number): number {
   const r = a % m;
   return r < 0 ? r + m : r;
@@ -41,6 +90,7 @@ function posMod(a: number, m: number): number {
 
 export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): ParallaxHandle {
   ensureBackgroundTextures(scene, theme);
+  const style = PARALLAX_STYLES[theme];
   const cam = scene.cameras.main;
   const fxKey = bgKey(theme, 'fx');
   const objects: Phaser.GameObjects.GameObject[] = [];
@@ -102,7 +152,7 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
   const twSpeed = new Float32Array(TW);
   const twPhase = new Float32Array(TW);
   const twScale = new Float32Array(TW);
-  const twTints = theme === 'jungle' ? [0xffffff, 0xbff8ff, 0xffc8f4] : [0xffffff, 0xffe6c0, 0xd8c8ff];
+  const twTints = style.twinkleTints;
   for (let i = 0; i < TW; i++) {
     twX[i] = Math.random() * 2048;
     twY[i] = 10 + Math.pow(Math.random(), 1.4) * 400;
@@ -121,15 +171,9 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
     const b = img(0, y, bgKey(theme, 'bodies'), frame, DEPTH.parallaxFar + 4);
     bodies.push({ img: b, fx, y, factor, halfW });
   };
-  if (theme === 'jungle') {
-    addBody('moonA', 0.74, 170, 0.03, 140);
-    addBody('moonB', 0.3, 105, 0.036, 55);
-  } else {
-    addBody('ringed', 0.62, 215, 0.025, 320);
-    addBody('sun', 0.13, 92, 0.03, 80);
-  }
+  for (const b of style.bodies) addBody(b.frame, b.fx, b.y, b.factor, b.halfW);
 
-  // ------------------------------------------------------------ Jungle : méduse-baleine + nuées
+  // ------------------------------------------------------------ Méduse-baleine + nuées
   const WHALE_F = 0.06;
   const TENT_SEG = 18;
   const WHALE_SCALE = 0.82;
@@ -160,7 +204,7 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
     flX[f] = sx + cam.scrollX * FLOCK_F;
   };
 
-  if (theme === 'jungle') {
+  if (style.whale) {
     for (let k = 0; k < WHALE.tentacles.length; k++) {
       for (let j = 0; j < TENT_SEG; j++) {
         const t = img(0, 0, fxKey, 'tent', DEPTH.parallaxFar + 8);
@@ -170,6 +214,8 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
     }
     whale = img(0, 0, fxKey, 'whale', DEPTH.parallaxFar + 9);
     whale.setAlpha(0.88);
+  }
+  if (style.flocks) {
     for (let f = 0; f < FLOCKS; f++) {
       spawnFlock(f, true);
       for (let b = 0; b < BIRDS; b++) {
@@ -185,7 +231,7 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
     }
   }
 
-  // ------------------------------------------------------------ Lune : ver des sables + comètes
+  // ------------------------------------------------------------ Ver des sables + comètes
   const WORM_SEG = 20;
   const WORM_F = 0.12;
   const WORM_R = 190;
@@ -216,7 +262,7 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
   const coMax = new Float32Array(COMETS);
   let cometTimer = 3;
 
-  if (theme === 'moon') {
+  if (style.worm) {
     for (let i = 0; i < WORM_SEG; i++) wormSegs.push(null as unknown as Img);
     // Créés de la queue vers la tête : la tête et les premiers anneaux passent devant
     for (let i = WORM_SEG - 1; i >= 0; i--) wormSegs[i] = img(0, 0, fxKey, 'wormSeg', DEPTH.parallaxFar + 14).setTint(0xcfc6ec);
@@ -228,6 +274,8 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
       d.setVisible(false);
       dust.push(d);
     }
+  }
+  if (style.comets) {
     for (let i = 0; i < COMETS; i++) {
       const c = img(0, 0, fxKey, 'comet', DEPTH.parallaxFar + 5);
       c.setOrigin(0.95, 0.5);
@@ -413,7 +461,9 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
         d.setAlpha(Math.min(1, life) * 0.75);
         d.setScale(0.7 + (1.8 - life) * 1.2);
       }
-      // Comètes
+    }
+
+    if (comets.length > 0) {
       cometTimer -= dt;
       if (cometTimer <= 0) {
         cometTimer = 5 + Math.random() * 8;

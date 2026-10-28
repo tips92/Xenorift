@@ -331,6 +331,13 @@ async function platform(t, f) {
   assert(!st.right && !st.left, `après REPRENDRE, le doigt resté posé ne doit pas compter (commandes ${JSON.stringify(st)})`);
   assert(Math.abs(xd - xc) < 15, `après REPRENDRE, Kaï ne doit pas avancer tout seul (${r1(xc)} -> ${r1(xd)})`);
   await f.end();
+  // Kaï ramené au départ, sur du plat : selon la durée réelle des appuis précédents, il pouvait finir contre le
+  // pilier de la colonne 41 (x 2607) et ne plus avancer.
+  await t.ev(() => {
+    const s = window.__xr2d.scene;
+    window.__xr2d.teleport(s.parsed.start.col, s.parsed.start.row);
+  });
+  await waitFor(t, () => window.__xr2d.scene.player.onGround, { timeout: 3000, label: 'Kaï posé au départ' });
 
   // --- Un nouveau doigt sur ▶ fonctionne de nouveau
   await f.start([[...R, 14]]);

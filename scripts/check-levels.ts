@@ -6,55 +6,38 @@
 //   node scripts/check-levels.ts --map      -> affiche aussi la carte annotée
 // Code de sortie 1 s'il y a au moins une erreur.
 //
-// Modèle d'accessibilité : un graphe de positions « debout » (case libre sur 2 lignes avec un appui plein,
-// traversable ou bloc bonus juste dessous, ou position sur une plateforme mobile). Arêtes : marcher, sauter
-// (montée ≤ maxRise avec les écarts max de DESIGN_RULES), se laisser tomber (écart ≤ maxGapDown), passer
-// une porte 'D' (vers l'autre porte de sa paire, dans les deux sens). Les plafonds et les murs bloquent
-// les sauts. Un second parcours, avec le double saut (compétence apprise : loadout.skills.doubleJump) depuis
-// toutes les positions déjà atteintes, repère les « secrets de compétence ». Les 3 étoiles doivent rester
-// possibles sans eux.
+// Accessibilité : graphe de scripts/lib/reach.ts (positions debout, sauts selon DESIGN_RULES, portes, faisceau
+// de la balise, bornes d'arène ouvertes). Les 3 étoiles doivent rester possibles sans les secrets de compétence
+// (double saut). Arène de boss : deux bornes '|', le 'M' entre elles, un 'K' juste avant, sol continu.
 
-import { DESIGN_RULES, LEVEL_ROWS, RUN_SPEED, STARS_RATIO, TILE } from '../src/game2d/constants.ts';
+import { BOSS_IDS, MUSIC_IDS, THEME_IDS } from '../src/core/ids.ts';
+import { RADIO } from '../src/core/story.ts';
+import { WORLDS } from '../src/core/worlds.ts';
+import { LEVEL_ROWS, RUN_SPEED, STARS_RATIO, TILE } from '../src/game2d/constants.ts';
 import { getLevel, LEVEL_IDS } from '../src/game2d/levels/index.ts';
-import { LEGEND } from '../src/game2d/levels/types.ts';
+import { LEGEND, RADIO_TRIGGERS } from '../src/game2d/levels/types.ts';
 import type { LevelData } from '../src/game2d/levels/types.ts';
+import { LevelGrid, REACH_DJ, REACH_NONE, REACH_NORMAL, ReachGraph, hittable, touchable } from './lib/reach.ts';
+import type { Pos } from './lib/reach.ts';
 
-const SOLID_CHARS = '#B?123';
 const BONUS_CHARS = '?123';
 /** Nom des blocs bonus dans les messages et la carte (sens complet : LEGEND de levels/types.ts). */
 const BONUS_NAMES: Readonly<Record<string, string>> = { '?': 'cristal', '1': 'vitesse', '2': 'bouclier', '3': 'cadence' };
 const ENEMY_CHARS = 'wfap';
-const VALID_THEMES = ['jungle', 'moon'];
-const VALID_MUSIC = ['menu', 'jungle', 'moon', 'nebula', 'asteroids'];
+const VALID_THEMES: readonly string[] = THEME_IDS;
+const VALID_MUSIC: readonly string[] = MUSIC_IDS;
 /** Part des cristaux qui donne 3 étoiles (seuil partagé avec PlatformScene.finishLevel). */
 const STARS3_RATIO = STARS_RATIO.three;
-
-/** Accessibilité : 0 = non atteinte, 1 = atteinte normalement, 2 = seulement avec le double saut (compétence). */
-const REACH_NONE = 0;
-const REACH_NORMAL = 1;
-const REACH_DJ = 2;
-
-/** Cristal le plus haut touché au sommet d'un saut (lignes au-dessus de la ligne où l'on se tient) :
- *  saut 4,2 tuiles + corps 70 px + marge de ramassage -> la tête atteint la ligne r-5 (r-8 avec le double saut). */
-const CRYSTAL_UP = 5;
-const CRYSTAL_UP_DJ = 8;
-/** Bloc le plus haut frappé par dessous (la tête atteint le bas de la ligne r-5). */
-const HIT_UP = 5;
-const HIT_UP_DJ = 8;
 const START_SAFE_COLS = 8;
-/** Positions par plateforme mobile dans le graphe : 3 cases x 4 décalages (0..3 tuiles). */
-const MOVER_NODES = 12;
-
-interface Mover {
-  col: number;
-  row: number;
-  vertical: boolean;
-}
-
-interface Pos {
-  col: number;
-  row: number;
-}
+const VALID_BOSSES: readonly string[] = BOSS_IDS;
+/** Arène : largeur bornes comprises, et place du point de contrôle (colonnes avant la première borne). */
+const ARENA_MIN_COLS = 16;
+const ARENA_MAX_COLS = 22;
+const ARENA_K_COLS = 6;
+/** Dans l'arène, au-dessus du sol : seulement du vide, le boss, du décor, des plateformes '=' et des cristaux. */
+const ARENA_FREE = '.M*=c';
+/** Durée estimée d'un combat de mini-boss (s), ajoutée à l'estimation de jeu. */
+const BOSS_FIGHT_S = 35;
 
 interface Report {
   errors: string[];
@@ -65,315 +48,6 @@ interface Report {
 const args = process.argv.slice(2);
 const showMap = args.includes('--map');
 const only = args.filter((a) => !a.startsWith('--'));
-
-// ---------------------------------------------------------------- Grille
-
-class LevelGrid {
-  readonly rows: number;
-  readonly cols: number;
-  readonly movers: Mover[] = [];
-  /** Portes 'D' dans l'ordre des paires (comme le moteur) : par colonne, puis par ligne. */
-  readonly doors: Pos[] = [];
-  /** Case d'une porte appairée -> case de l'autre porte de sa paire. */
-  readonly doorLink = new Map<number, number>();
-  readonly map: readonly string[];
-
-  constructor(map: readonly string[]) {
-    this.map = map;
-    this.rows = map.length;
-    this.cols = map.length > 0 ? map[0].length : 0;
-    this.parseMovers();
-    this.parseDoors();
-  }
-
-  key(c: number, r: number): number {
-    return r * this.cols + c;
-  }
-
-  /** Caractère d'une case ; hors carte : mur à gauche / droite, vide en haut / en bas. */
-  ch(c: number, r: number): string {
-    if (r < 0 || r >= this.rows) return '.';
-    if (c < 0 || c >= this.cols) return '#';
-    const line = this.map[r];
-    return c < line.length ? line[c] : '.';
-  }
-
-  solid(c: number, r: number): boolean {
-    return SOLID_CHARS.includes(this.ch(c, r));
-  }
-
-  oneWay(c: number, r: number): boolean {
-    return this.ch(c, r) === '=';
-  }
-
-  hazard(c: number, r: number): boolean {
-    return this.ch(c, r) === '^';
-  }
-
-  /** Appui fixe sous la case (sol, bloc, plateforme traversable). */
-  supported(c: number, r: number): boolean {
-    return this.solid(c, r + 1) || this.oneWay(c, r + 1);
-  }
-
-  /** Place pour Kaï (2 lignes de haut, sans danger), sans exiger d'appui. */
-  roomFor(c: number, r: number): boolean {
-    if (c < 0 || c >= this.cols || r < 0 || r >= this.rows) return false;
-    if (this.solid(c, r) || this.solid(c, r - 1)) return false;
-    return !this.hazard(c, r) && !this.hazard(c, r - 1);
-  }
-
-  /** Kaï peut-il se tenir debout dans cette case sur un appui fixe ? */
-  standable(c: number, r: number): boolean {
-    return this.roomFor(c, r) && this.supported(c, r);
-  }
-
-  /** Même découpage que le moteur : 'mmm' / 'vvv' consécutifs = une plateforme de 3 tuiles. */
-  private parseMovers(): void {
-    for (let r = 0; r < this.rows; r++) {
-      let run = 0;
-      let runChar = '';
-      for (let c = 0; c < this.cols; c++) {
-        const ch = this.ch(c, r);
-        if (ch !== runChar) run = 0;
-        if (ch === 'm' || ch === 'v') {
-          if (run % 3 === 0) this.movers.push({ col: c, row: r, vertical: ch === 'v' });
-          runChar = ch;
-          run++;
-        }
-      }
-    }
-  }
-
-  /** Même appairage que le moteur (parseLevel) : tri (colonne, ligne), puis 1re ↔ 2e, 3e ↔ 4e… */
-  private parseDoors(): void {
-    for (let r = 0; r < this.rows; r++) {
-      for (let c = 0; c < this.cols; c++) if (this.ch(c, r) === 'D') this.doors.push({ col: c, row: r });
-    }
-    this.doors.sort((a, b) => a.col - b.col || a.row - b.row);
-    for (let i = 0; i + 1 < this.doors.length; i += 2) {
-      const a = this.key(this.doors[i].col, this.doors[i].row);
-      const b = this.key(this.doors[i + 1].col, this.doors[i + 1].row);
-      this.doorLink.set(a, b);
-      this.doorLink.set(b, a);
-    }
-  }
-}
-
-// ---------------------------------------------------------------- Règles de saut
-
-/** Saut autorisé par DESIGN_RULES (montée en lignes, écart en colonnes vides) ? */
-function jumpAllowed(rise: number, gap: number, dj: boolean): boolean {
-  const R = DESIGN_RULES;
-  if (!dj) {
-    if (rise > R.maxRise) return false;
-    if (rise === 3) return gap <= R.maxGapUp3;
-    if (rise >= 1) return gap <= R.maxGapUp2;
-    if (rise >= -1) return gap <= R.maxGapFlat;
-    return gap <= R.maxGapDown;
-  }
-  // Double saut (~7,2 tuiles) : réservé aux secrets de compétence.
-  if (rise > 6) return false;
-  if (rise >= 5) return gap <= 2;
-  if (rise >= 3) return gap <= 3;
-  if (rise >= 1) return gap <= 4;
-  if (rise >= -1) return gap <= 5;
-  return gap <= 6;
-}
-
-/** Le couloir du saut est-il libre (plafonds, murs) ? Plateformes traversables = libres. */
-function corridorClear(g: LevelGrid, c0: number, r0: number, c1: number, r1: number, gap: number): boolean {
-  const rise = r0 - r1;
-  const hi = Math.min(r0, r1);
-  let top: number;
-  if (rise > 0) top = hi - 2;
-  else if (gap <= 1) top = hi - 1;
-  else if (rise === 0 && gap >= 3) top = hi - 3;
-  else top = hi - 2;
-  const dir = c1 > c0 ? 1 : -1;
-  for (let r = top; r <= r0; r++) if (g.solid(c0, r)) return false;
-  for (let c = c0 + dir; c !== c1; c += dir) {
-    for (let r = top; r <= hi; r++) if (g.solid(c, r)) return false;
-  }
-  for (let r = top; r <= r1; r++) if (g.solid(c1, r)) return false;
-  return true;
-}
-
-/** Marche / saut / chute permis entre deux positions debout ? */
-function edgeAllowed(g: LevelGrid, c0: number, r0: number, c1: number, r1: number, dj: boolean): boolean {
-  const dc = c1 - c0;
-  const rise = r0 - r1;
-  if (dc === 0) {
-    // Saut vertical à travers une plateforme traversable (on ne redescend jamais à travers).
-    if (rise < 1 || !jumpAllowed(rise, 0, dj)) return false;
-    for (let r = r1 - 1; r <= r0 - 1; r++) if (g.solid(c0, r)) return false;
-    return true;
-  }
-  const gap = Math.abs(dc) - 1;
-  if (!jumpAllowed(rise, gap, dj)) return false;
-  return corridorClear(g, c0, r0, c1, r1, gap);
-}
-
-// ---------------------------------------------------------------- Graphe d'accessibilité
-// Nœuds : cases debout fixes (row * cols + col), puis positions sur les plateformes mobiles
-// (3 cases x 4 décalages par plateforme). Le moteur fait bouger toutes les plateformes avec la même
-// horloge : d'une plateforme mobile à une autre, on ne saute qu'à décalage égal. Depuis (ou vers)
-// un appui fixe, on peut attendre le bon décalage.
-
-class ReachGraph {
-  readonly n: number;
-  readonly total: number;
-  readonly g: LevelGrid;
-  private readonly tmp: Pos = { col: 0, row: 0 };
-
-  constructor(g: LevelGrid) {
-    this.g = g;
-    this.n = g.rows * g.cols;
-    this.total = this.n + g.movers.length * MOVER_NODES;
-  }
-
-  moverOf(id: number): number {
-    return id < this.n ? -1 : Math.floor((id - this.n) / MOVER_NODES);
-  }
-
-  offsetOf(id: number): number {
-    return id < this.n ? 0 : Math.floor(((id - this.n) % MOVER_NODES) / 3);
-  }
-
-  node(mover: number, offset: number, k: number): number {
-    return this.n + mover * MOVER_NODES + offset * 3 + k;
-  }
-
-  pos(id: number, out: Pos): Pos {
-    const g = this.g;
-    if (id < this.n) {
-      out.col = id % g.cols;
-      out.row = (id - out.col) / g.cols;
-      return out;
-    }
-    const j = id - this.n;
-    const m = g.movers[Math.floor(j / MOVER_NODES)];
-    const o = Math.floor((j % MOVER_NODES) / 3);
-    const k = j % 3;
-    out.col = m.vertical ? m.col + k : m.col + o + k;
-    out.row = m.vertical ? m.row - 1 - o : m.row - 1;
-    return out;
-  }
-
-  valid(id: number): boolean {
-    const p = this.pos(id, this.tmp);
-    return id < this.n ? this.g.standable(p.col, p.row) : this.g.roomFor(p.col, p.row);
-  }
-
-  neighbors(id: number, dj: boolean, out: number[]): void {
-    out.length = 0;
-    const g = this.g;
-    const p = this.pos(id, { col: 0, row: 0 });
-    const c0 = p.col;
-    const r0 = p.row;
-    const mi = this.moverOf(id);
-    const oi = this.offsetOf(id);
-    const maxDx = (dj ? 6 : DESIGN_RULES.maxGapDown) + 1;
-    const maxUp = dj ? 6 : DESIGN_RULES.maxRise;
-    // Cibles fixes
-    for (let c1 = Math.max(0, c0 - maxDx); c1 <= Math.min(g.cols - 1, c0 + maxDx); c1++) {
-      for (let r1 = Math.max(0, r0 - maxUp); r1 < g.rows; r1++) {
-        if (c1 === c0 && r1 === r0) continue;
-        if (!g.standable(c1, r1)) continue;
-        if (edgeAllowed(g, c0, r0, c1, r1, dj)) out.push(g.key(c1, r1));
-      }
-    }
-    // Porte : on entre debout devant elle, on ressort devant l'autre porte de la paire.
-    const link = mi < 0 ? g.doorLink.get(id) : undefined;
-    if (link !== undefined && g.standable(c0, r0)) {
-      const c1 = link % g.cols;
-      if (g.standable(c1, (link - c1) / g.cols)) out.push(link);
-    }
-    // Cibles sur plateformes mobiles
-    const q: Pos = { col: 0, row: 0 };
-    for (let mj = 0; mj < g.movers.length; mj++) {
-      for (let oj = 0; oj < 4; oj++) {
-        for (let kj = 0; kj < 3; kj++) {
-          const id2 = this.node(mj, oj, kj);
-          if (id2 === id || !this.valid(id2)) continue;
-          if (mj === mi) {
-            out.push(id2); // à bord : toute la course est accessible
-            continue;
-          }
-          if (mi >= 0 && oj !== oi) continue; // plateformes synchronisées
-          this.pos(id2, q);
-          if (Math.abs(q.col - c0) > maxDx) continue;
-          if (edgeAllowed(g, c0, r0, q.col, q.row, dj)) out.push(id2);
-        }
-      }
-    }
-  }
-
-  /** Parcours en largeur ; marque `mark` les nœuds nouvellement atteints. */
-  flood(reach: Uint8Array, seeds: readonly number[], dj: boolean, mark: number): void {
-    const queue: number[] = [];
-    for (const s of seeds) {
-      if (reach[s] === REACH_NONE) reach[s] = mark;
-      queue.push(s);
-    }
-    const nb: number[] = [];
-    for (let qi = 0; qi < queue.length; qi++) {
-      this.neighbors(queue[qi], dj, nb);
-      for (const k of nb) {
-        if (reach[k] !== REACH_NONE) continue;
-        reach[k] = mark;
-        queue.push(k);
-      }
-    }
-  }
-
-  /** Projette l'accessibilité des nœuds sur les cases (niveau le plus facile). */
-  cellReach(reach: Uint8Array): Uint8Array {
-    const cells = new Uint8Array(this.n);
-    const p: Pos = { col: 0, row: 0 };
-    for (let id = 0; id < this.total; id++) {
-      const v = reach[id];
-      if (v === REACH_NONE) continue;
-      this.pos(id, p);
-      const k = this.g.key(p.col, p.row);
-      if (cells[k] === REACH_NONE || v < cells[k]) cells[k] = v;
-    }
-    return cells;
-  }
-}
-
-/** Un cristal est-il touché depuis une case debout atteinte (en marchant ou au sommet d'un saut) ? */
-function touchable(g: LevelGrid, reach: Uint8Array, c: number, r: number, level: number): boolean {
-  const up = level === REACH_DJ ? CRYSTAL_UP_DJ : CRYSTAL_UP;
-  const maxDx = level === REACH_DJ ? 3 : 2;
-  for (let dc = -maxDx; dc <= maxDx; dc++) {
-    const cs = c + dc;
-    if (cs < 0 || cs >= g.cols) continue;
-    for (let rs = r; rs <= Math.min(g.rows - 1, r + up); rs++) {
-      const v = reach[g.key(cs, rs)];
-      if (v === REACH_NONE || v > level) continue;
-      let clear = true;
-      for (let k = r; k <= rs && clear; k++) if (g.solid(cs, k)) clear = false;
-      const dir = dc > 0 ? -1 : 1;
-      for (let x = cs + dir; dc !== 0 && clear; x += dir) {
-        if (g.solid(x, r)) clear = false;
-        if (x === c) break;
-      }
-      if (clear) return true;
-    }
-  }
-  return false;
-}
-
-/** Un bloc bonus peut-il être frappé par dessous depuis une case debout atteinte ? */
-function hittable(g: LevelGrid, reach: Uint8Array, c: number, r: number, level: number): boolean {
-  const up = level === REACH_DJ ? HIT_UP_DJ : HIT_UP;
-  for (let rs = r + 2; rs <= Math.min(g.rows - 1, r + up); rs++) {
-    if (g.solid(c, rs - 1)) return false;
-    const v = reach[g.key(c, rs)];
-    if (v !== REACH_NONE && v <= level) return true;
-  }
-  return false;
-}
 
 // ---------------------------------------------------------------- Vérification d'un niveau
 
@@ -403,6 +77,7 @@ function checkLevel(id: string, level: LevelData): Report {
   if (!VALID_THEMES.includes(level.theme)) err(`thème inconnu « ${level.theme} »`);
   if (!VALID_MUSIC.includes(level.music)) err(`musique inconnue « ${level.music} »`);
   if (!level.name.trim()) err('nom vide');
+  if (level.ending !== undefined && level.ending !== 'exit' && level.ending !== 'guardian') err(`fin inconnue « ${level.ending} »`);
 
   // ---- Format
   const map = level.map;
@@ -423,12 +98,22 @@ function checkLevel(id: string, level: LevelData): Report {
     return out;
   };
   const starts = find('P');
-  const exits = find('X');
+  // Sortie : exactement une, Comète 'X' ou balise 'L' ; aucune pour un niveau qui finit par le gardien.
+  const ships = find('X');
+  const beacons = find('L');
+  const exits = [...ships, ...beacons];
+  const guardian = level.ending === 'guardian';
   if (starts.length !== 1) err(`${starts.length} départ(s) 'P' (exactement 1 attendu)`);
-  if (exits.length !== 1) err(`${exits.length} vaisseau(x) 'X' (exactement 1 attendu)`);
-  if (starts.length !== 1 || exits.length !== 1) return rep;
+  if (guardian && exits.length > 0) {
+    err(`${exits.length} sortie(s) 'X' / 'L' dans un niveau qui finit par le gardien (ending: 'guardian') : aucune attendue`);
+  } else if (!guardian && exits.length !== 1) {
+    err(`${exits.length} sortie(s) ('X' : ${ships.length}, 'L' : ${beacons.length}) : exactement une attendue, vaisseau 'X' ou balise 'L'`);
+  }
+  if (rep.errors.length > 0) return rep;
   const P = starts[0];
-  const X = exits[0];
+  const E: Pos | null = exits.length === 1 ? exits[0] : null;
+  const isShip = ships.length === 1;
+  const exitName = E ? `${isShip ? 'vaisseau X' : 'balise L'} (${E.col}, ${E.row})` : '';
 
   const crystals = find('c');
   const bonus: Pos[] = [];
@@ -442,16 +127,29 @@ function checkLevel(id: string, level: LevelData): Report {
     }
   }
 
-  // ---- Vaisseau : 3x2 à droite et au-dessus de la case, posé sur le sol
-  if (X.col + 2 >= g.cols) err(`vaisseau X (${X.col}, ${X.row}) : dépasse le bord droit`);
-  for (let k = 0; k < 3; k++) {
-    for (let j = 0; j < 2; j++) {
-      const c = X.col + k;
-      const r = X.row - j;
-      if ((k !== 0 || j !== 0) && g.ch(c, r) !== '.') err(`vaisseau X : case (${c}, ${r}) occupée par « ${g.ch(c, r)} »`);
+  // ---- Sortie, posée sur un sol plein. Vaisseau : 3x2 à droite et au-dessus de la case ; balise : sa case et
+  // toute la colonne au-dessus, vide (le faisceau descend du ciel ; Kaï qui y entre, à toute hauteur, l'active).
+  if (E && isShip) {
+    if (E.col + 2 >= g.cols) err(`${exitName} : dépasse le bord droit`);
+    for (let k = 0; k < 3; k++) {
+      for (let j = 0; j < 2; j++) {
+        const c = E.col + k;
+        const r = E.row - j;
+        if ((k !== 0 || j !== 0) && g.ch(c, r) !== '.') err(`vaisseau X : case (${c}, ${r}) occupée par « ${g.ch(c, r)} »`);
+      }
+      if (!g.solid(E.col + k, E.row + 1)) err(`vaisseau X : pas de sol plein sous la colonne ${E.col + k}`);
     }
-    if (!g.solid(X.col + k, X.row + 1)) err(`vaisseau X : pas de sol plein sous la colonne ${X.col + k}`);
+  } else if (E) {
+    for (let r = E.row - 1; r >= 0; r--) {
+      const ch = g.ch(E.col, r);
+      if (ch !== '.') err(`balise L : case (${E.col}, ${r}) occupée par « ${ch} » : la colonne du faisceau reste vide jusqu'en haut`);
+    }
+    if (!g.solid(E.col, E.row + 1)) err(`${exitName} : pas de sol plein dessous`);
   }
+  const arena = checkArena(id, level, g, find('|'), find('M'), checkpoints, E, err, warn, rep.notes);
+  // Faisceau de la balise : Kaï y est happé à toute hauteur, rien ne s'atteint au-delà (sauf par une porte).
+  const beam = E && !isShip ? E : null;
+  const past = (p: Pos): string => (beam && p.col > beam.col ? ', après la balise L (infranchissable)' : '');
 
   // ---- Plateformes mobiles : place libre sur toute la course
   for (const m of g.movers) {
@@ -554,7 +252,7 @@ function checkLevel(id: string, level: LevelData): Report {
   }
 
   // ---- Accessibilité
-  const graph = new ReachGraph(g);
+  const graph = new ReachGraph(g, beam);
   const nodeReach = new Uint8Array(graph.total);
   graph.flood(nodeReach, [g.key(P.col, P.row)], false, REACH_NORMAL);
   // Compétence « double saut » : plus aucun bloc ne la donne, une fois apprise elle sert partout. Second
@@ -569,10 +267,10 @@ function checkLevel(id: string, level: LevelData): Report {
     return v !== REACH_NONE && v <= lvl;
   };
 
-  if (!isReached(X, REACH_NORMAL)) err(`le vaisseau X (${X.col}, ${X.row}) n'est PAS accessible depuis P`);
+  if (E && !isReached(E, REACH_NORMAL)) err(`${exitName} : sortie PAS accessible depuis P`);
   for (const k of checkpoints) {
     if (!g.standable(k.col, k.row)) err(`point de contrôle (${k.col}, ${k.row}) : pas de sol dessous`);
-    else if (!isReached(k, REACH_NORMAL)) err(`point de contrôle (${k.col}, ${k.row}) inaccessible`);
+    else if (!isReached(k, REACH_NORMAL)) err(`point de contrôle (${k.col}, ${k.row}) inaccessible${past(k)}`);
     for (let x = k.col - 1; x <= k.col + 1; x++) if (g.hazard(x, k.row)) err(`point de contrôle (${k.col}, ${k.row}) : danger à côté`);
     for (const e of enemies) {
       if (e.kind !== 'f' && Math.abs(e.col - k.col) <= 2 && Math.abs(e.row - k.row) <= 2) {
@@ -581,20 +279,20 @@ function checkLevel(id: string, level: LevelData): Report {
     }
   }
   for (const d of doors) {
-    if (!isReached(d, REACH_DJ)) warn(`porte (${d.col}, ${d.row}) inaccessible (même avec le double saut)`);
+    if (!isReached(d, REACH_DJ)) warn(`porte (${d.col}, ${d.row}) inaccessible (même avec le double saut)${past(d)}`);
   }
 
   // Cristaux (posés 'c' et blocs '?') : atteints normalement, secrets de compétence, ou erreur.
   let openCrystals = 0;
   let skillCrystals = 0;
   for (const cr of crystals) {
-    if (touchable(g, reach, cr.col, cr.row, REACH_NORMAL)) {
+    if (touchable(g, reach, beam, cr.col, cr.row, REACH_NORMAL)) {
       openCrystals++;
-    } else if (touchable(g, reach, cr.col, cr.row, REACH_DJ)) {
+    } else if (touchable(g, reach, beam, cr.col, cr.row, REACH_DJ)) {
       skillCrystals++;
       warn(`cristal (${cr.col}, ${cr.row}) : seulement avec le double saut [secret de compétence]`);
     } else {
-      err(`cristal (${cr.col}, ${cr.row}) : inaccessible (même avec le double saut)`);
+      err(`cristal (${cr.col}, ${cr.row}) : inaccessible (même avec le double saut)${past(cr)}`);
     }
   }
   for (const b of bonus) {
@@ -605,7 +303,7 @@ function checkLevel(id: string, level: LevelData): Report {
       if (ch === '?') skillCrystals++;
       warn(`bloc ${bonusName(ch)} (${b.col}, ${b.row}) : seulement avec le double saut [secret de compétence]`);
     } else {
-      err(`bloc ${bonusName(ch)} (${b.col}, ${b.row}) : impossible à frapper par dessous (même avec le double saut)`);
+      err(`bloc ${bonusName(ch)} (${b.col}, ${b.row}) : impossible à frapper par dessous (même avec le double saut)${past(b)}`);
     }
   }
 
@@ -619,9 +317,10 @@ function checkLevel(id: string, level: LevelData): Report {
   const nQ = bonus.filter((b) => g.ch(b.col, b.row) === '?').length;
   const count = (k: string): number => enemies.filter((e) => e.kind === k).length;
   const powers = bonus.filter((b) => g.ch(b.col, b.row) !== '?').map((b) => `${bonusName(g.ch(b.col, b.row))} col. ${b.col}`);
-  const pureRun = (X.col - P.col) / (RUN_SPEED / TILE);
-  // Estimation grossière : course x2,4 (sauts, hésitations) + temps par ennemi et par plateforme mobile.
-  const estimate = pureRun * 2.4 + enemies.length * 1.2 + g.movers.length * 2.5;
+  // Sans sortie (gardien) : course jusqu'au bout de la carte.
+  const pureRun = ((E ? E.col : g.cols - 1) - P.col) / (RUN_SPEED / TILE);
+  // Estimation grossière : course x2,4 (sauts, hésitations) + temps par ennemi et par plateforme mobile + combat.
+  const estimate = pureRun * 2.4 + enemies.length * 1.2 + g.movers.length * 2.5 + (arena ? BOSS_FIGHT_S : 0);
   let pits = 0;
   for (let c = 0; c < g.cols; c++) {
     if (!g.solid(c, g.rows - 1) && (c === 0 || g.solid(c - 1, g.rows - 1))) pits++;
@@ -653,6 +352,7 @@ function checkLevel(id: string, level: LevelData): Report {
     `points de contrôle : ${checkpoints.length} (colonnes ${checkpoints.map((k) => k.col).join(', ') || '-'}) ; ` +
       `bonus : ${powers.join(', ') || 'aucun'}`,
   );
+  rep.notes.push(`sortie : ${E ? exitName : 'aucune, la défaite du gardien termine le niveau'}`);
   if (doors.length > 0) {
     const pairs: string[] = [];
     for (let i = 0; i + 1 < doors.length; i += 2) {
@@ -662,20 +362,153 @@ function checkLevel(id: string, level: LevelData): Report {
     }
     rep.notes.push(`portes : ${doors.length} (paires : ${pairs.join(', ') || '-'})`);
   }
-  rep.notes.push(`durée : course pure ≈ ${Math.round(pureRun)} s, estimation de jeu ≈ ${fmtTime(estimate)}`);
+  checkRadio(level, g.cols, P, E, err, warn, rep.notes);
+  rep.notes.push(
+    `durée : course pure ≈ ${Math.round(pureRun)} s, estimation de jeu ≈ ${fmtTime(estimate)}${arena ? ` (combat ≈ ${BOSS_FIGHT_S} s compris)` : ''}`,
+  );
 
   if (checkpoints.length < 2) warn(`${checkpoints.length} point(s) de contrôle (2 attendus)`);
   if (nC + nQ < 40 || nC + nQ > 60) warn(`${nC + nQ} cristaux (40-60 visés)`);
   if (enemies.length < 18 || enemies.length > 28) warn(`${enemies.length} ennemis (18-28 visés)`);
   if (g.cols < 190 || g.cols > 260) warn(`${g.cols} colonnes (~200-240 visées)`);
 
-  if (showMap) printMap(g, reach, crystals, bonus, rep);
+  if (showMap) printMap(g, reach, beam, crystals, bonus, rep);
   return rep;
+}
+
+// ---------------------------------------------------------------- Arène de boss
+
+/**
+ * Aucune arène, ou : deux bornes '|' sur une même ligne (colonne vide au-dessus : la barrière monte jusqu'en haut),
+ * de ARENA_MIN_COLS à ARENA_MAX_COLS colonnes bornes comprises, sol plein continu de l'une à l'autre, intérieur
+ * libre (ARENA_FREE), un 'M' sur ce sol entre elles, un 'K' dans les ARENA_K_COLS colonnes avant la première, la
+ * sortie après la seconde ; LevelData.boss connu et le même que celui de l'étape dans core/worlds.ts. Renvoie les
+ * bornes, ou null. L'accessibilité au-delà (la victoire rouvre la seconde borne) est celle du graphe : '|' y est vide.
+ */
+function checkArena(
+  id: string,
+  level: LevelData,
+  g: LevelGrid,
+  bounds: Pos[],
+  bosses: Pos[],
+  checkpoints: readonly Pos[],
+  E: Pos | null,
+  err: (m: string) => void,
+  warn: (m: string) => void,
+  notes: string[],
+): { col0: number; col1: number } | null {
+  if (level.boss !== undefined && !VALID_BOSSES.includes(level.boss)) err(`boss inconnu « ${String(level.boss)} » (${VALID_BOSSES.join(', ')})`);
+  for (const w of WORLDS) {
+    for (const s of w.stages) {
+      if (s.levelId === id && (s.boss ?? null) !== (level.boss ?? null)) {
+        err(`boss « ${level.boss ?? 'aucun'} » différent de celui de l'étape ${s.id} (core/worlds.ts : « ${s.boss ?? 'aucun'} »)`);
+      }
+    }
+  }
+  if (bounds.length === 0 && bosses.length === 0) {
+    if (level.boss !== undefined) err(`boss « ${level.boss} » sans arène (deux bornes '|' et un 'M' attendus)`);
+    return null;
+  }
+  if (bounds.length !== 2 || bosses.length !== 1) {
+    err(`arène : ${bounds.length} borne(s) '|' et ${bosses.length} boss 'M' (2 bornes et 1 boss attendus)`);
+    return null;
+  }
+  if (level.boss === undefined) err('arène sans LevelData.boss');
+  bounds.sort((p, q) => p.col - q.col);
+  const [a, b] = bounds;
+  const M = bosses[0];
+  const row = a.row;
+  const label = `arène ${a.col}-${b.col}`;
+  if (b.row !== row) err(`${label} : bornes sur des lignes différentes (${a.row} et ${b.row})`);
+  const cols = b.col - a.col + 1;
+  if (cols < ARENA_MIN_COLS || cols > ARENA_MAX_COLS) {
+    err(`${label} : ${cols} colonnes, bornes comprises (${ARENA_MIN_COLS} à ${ARENA_MAX_COLS} attendues)`);
+  }
+  for (const p of bounds) {
+    for (let r = p.row - 1; r >= 0; r--) {
+      if (g.ch(p.col, r) === '.') continue;
+      err(`borne (${p.col}, ${p.row}) : case (${p.col}, ${r}) occupée par « ${g.ch(p.col, r)} » : la barrière monte jusqu'en haut`);
+      break;
+    }
+  }
+  for (let c = a.col; c <= b.col; c++) {
+    if (!g.solid(c, row + 1)) err(`${label} : pas de sol plein sous la colonne ${c} (sol continu attendu)`);
+    if (c === a.col || c === b.col) continue;
+    for (let r = 0; r <= row; r++) {
+      const ch = g.ch(c, r);
+      if (!ARENA_FREE.includes(ch)) err(`${label} : « ${ch} » en (${c}, ${r}) (dans l'arène, au-dessus du sol : « ${ARENA_FREE} » seulement)`);
+    }
+  }
+  if (M.col <= a.col || M.col >= b.col || M.row !== row) {
+    err(`boss M (${M.col}, ${M.row}) : à poser sur le sol de l'arène, entre ses bornes`);
+  } else if (M.col - a.col < 6) {
+    warn(`boss M (${M.col}, ${M.row}) : à ${M.col - a.col} colonnes de l'entrée de l'arène`);
+  }
+  const ks = checkpoints.filter((k) => k.col >= a.col - ARENA_K_COLS && k.col < a.col);
+  if (ks.length === 0) {
+    err(`${label} : aucun point de contrôle 'K' dans les ${ARENA_K_COLS} colonnes avant la première borne (${a.col - ARENA_K_COLS}-${a.col - 1})`);
+  }
+  if (E && E.col <= b.col) err(`sortie (${E.col}, ${E.row}) avant la seconde borne (${b.col}) : la balise vient après l'arène`);
+  notes.push(
+    `arène : bornes ${a.col} et ${b.col} (${cols} colonnes), boss ${level.boss ?? '?'} en (${M.col}, ${M.row}), ` +
+      `point de contrôle ${ks.map((k) => k.col).join(', ') || '-'}`,
+  );
+  return { col0: a.col, col1: b.col };
+}
+
+// ---------------------------------------------------------------- Radio de LUMA
+
+/**
+ * LevelData.radio : messages connus de core/story.ts, chacun une fois ; fenêtres [col0, col1] d'entiers dans la
+ * carte (une fenêtre au-delà de la sortie ne joue jamais : avertissement) ; déclencheurs de RADIO_TRIGGERS.
+ */
+function checkRadio(
+  level: LevelData,
+  cols: number,
+  P: Pos,
+  E: Pos | null,
+  err: (m: string) => void,
+  warn: (m: string) => void,
+  notes: string[],
+): void {
+  if (level.radio === undefined) return;
+  if (!Array.isArray(level.radio)) {
+    err('radio : liste attendue');
+    return;
+  }
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const raw of level.radio as readonly unknown[]) {
+    const r = (raw ?? {}) as { id?: unknown; cols?: unknown; on?: unknown };
+    const id = String(r.id);
+    const label = `radio « ${id} »`;
+    if (typeof r.id !== 'string' || !Object.prototype.hasOwnProperty.call(RADIO, r.id)) err(`${label} : message inconnu de core/story.ts`);
+    if (seen.has(id)) err(`${label} : en double (chaque message joue une fois par partie)`);
+    seen.add(id);
+    if (r.cols !== undefined && r.on !== undefined) {
+      err(`${label} : « cols » ou « on », pas les deux`);
+    } else if (r.cols !== undefined) {
+      const w = r.cols as unknown[];
+      const ok = Array.isArray(w) && w.length === 2 && w.every((c) => Number.isInteger(c));
+      const [c0, c1] = ok ? (w as number[]) : [0, -1];
+      if (!ok) err(`${label} : « cols » doit être [col0, col1] (entiers)`);
+      else if (c0 < 0 || c1 >= cols || c0 > c1) err(`${label} : colonnes ${c0}-${c1} hors de la carte (0-${cols - 1}) ou à l'envers`);
+      else if (E && c0 > E.col) warn(`${label} : colonnes ${c0}-${c1} après la sortie (${E.col}) : jamais atteintes`);
+      else if (c1 < P.col) warn(`${label} : colonnes ${c0}-${c1} avant le départ (${P.col}) : sautées d'emblée`);
+      parts.push(`${id} ${ok ? `${c0}-${c1}` : '?'}`);
+    } else if (r.on !== undefined) {
+      if (!(RADIO_TRIGGERS as readonly unknown[]).includes(r.on)) err(`${label} : déclencheur inconnu « ${String(r.on)} » (${RADIO_TRIGGERS.join(', ')})`);
+      parts.push(`${id} (${String(r.on)})`);
+    } else {
+      err(`${label} : ni « cols » ni « on »`);
+    }
+  }
+  notes.push(`radio : ${parts.join(', ') || 'aucun message'}`);
 }
 
 // ---------------------------------------------------------------- Carte annotée (--map)
 
-function printMap(g: LevelGrid, reach: Uint8Array, crystals: Pos[], bonus: Pos[], rep: Report): void {
+function printMap(g: LevelGrid, reach: Uint8Array, beam: Pos | null, crystals: Pos[], bonus: Pos[], rep: Report): void {
   const out: string[][] = [];
   for (let r = 0; r < g.rows; r++) {
     const line: string[] = [];
@@ -689,8 +522,8 @@ function printMap(g: LevelGrid, reach: Uint8Array, crystals: Pos[], bonus: Pos[]
     out.push(line);
   }
   for (const cr of crystals) {
-    if (!touchable(g, reach, cr.col, cr.row, REACH_NORMAL)) {
-      out[cr.row][cr.col] = touchable(g, reach, cr.col, cr.row, REACH_DJ) ? 'd' : '!';
+    if (!touchable(g, reach, beam, cr.col, cr.row, REACH_NORMAL)) {
+      out[cr.row][cr.col] = touchable(g, reach, beam, cr.col, cr.row, REACH_DJ) ? 'd' : '!';
     }
   }
   for (const b of bonus) {

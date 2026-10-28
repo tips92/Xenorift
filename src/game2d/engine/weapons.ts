@@ -57,6 +57,8 @@ export class Gun {
   /** Rafale en cours : balles restantes, délai avant la suivante. */
   private burstLeft = 0;
   private burstMs = 0;
+  /** Appelé à chaque surchauffe (événements du niveau : message de la radio). */
+  onOverheat: (() => void) | null = null;
 
   /** `mods` : multiplicateurs par arme (hooks.loadout.mods) ; absent ou invalide : fiches d'origine. */
   constructor(
@@ -146,6 +148,7 @@ export class Gun {
       this.overheated = true;
       scene.playSfx('overheat');
       scene.showToast('Surchauffe !', 'bad');
+      if (this.onOverheat) this.onOverheat();
     }
   }
 

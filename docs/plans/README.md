@@ -11,7 +11,7 @@ en lisant le code concerné ; l'utilisateur valide les choix proposés, qui pass
 | 1. Contrôles 2D (stick à 8 directions, visée, accroupi, descente, portes, réglage des boutons) | [01-controles.md](01-controles.md) | codé et vérifié par la suite e2e complète (branche `plans-etapes-1-3`) ; essai sur téléphone à faire (secteurs d'angle du stick, taille) |
 | 2. Armes et nouveaux bonus | [02-armes.md](02-armes.md) | codé et vérifié par la suite e2e complète (nouveaux scénarios `weapons` / `powerups`) ; essai sur téléphone à faire (réglage des armes, sons, vitesse) |
 | 3. Hangar (3a : hangar et armes de Kaï ; 3b : combat en vol) | [03-hangar.md](03-hangar.md) | 3a codée et vérifiée par la suite e2e complète (scénarios adaptés, nouveau scénario `hangar`, hangar de 844x390 à 568x320) ; essai sur téléphone à faire ; 3b (combat en vol) et la balise à coder |
-| 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | rédigé ; choix proposés en attente de validation |
+| 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | décisions validées le 28/10 (les 19 choix tels quels) ; en cours de réalisation sur la branche `claude/world-1-completion-866505` ; la balise de LUMA (point 16 du plan 03) est faite ici, en 4a |
 | 5. Monde 2 au même format | à écrire | — |
 | 6. Carte galactique, puis Boréa, Vulkar, Cœur de la Faille | à écrire | — |
 | 7. Objets secrets et niveaux bonus | à écrire | — |

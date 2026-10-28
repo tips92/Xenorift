@@ -2,7 +2,6 @@ import {
   BASE_HEARTS,
   BASE_SHIELDS,
   BOOST_MULS,
-  departLabel,
   formatMul,
   HANGAR_TABS,
   MAX_HEARTS_CAP,
@@ -22,6 +21,7 @@ import { equipWeapon, getCrystals, getItemState, getSave, playLoadout, purchase 
 import type { StageDef, UpgradeStat, WeaponId } from '../../core/types';
 import { WEAPON_IDS, WEAPONS } from '../../core/weapons';
 import { div, el, formatNumber, icon, play, prefersReducedMotion } from '../dom';
+import { departLabel } from '../flow';
 import type { HangarPreview, PreviewView } from '../hangarPreview';
 import { ICONS, upgradeIcon, weaponIcon } from '../icons';
 import type { UiCtx } from '../services';

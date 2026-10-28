@@ -68,6 +68,8 @@ export class AudioEngine implements AudioApi, SfxHost, MusicFxHost {
   private appSuspended = false;
   private pageHidden = typeof document !== 'undefined' ? document.hidden : false;
   private wanted: MusicId | null = null;
+  /** Intensité demandée pour le morceau voulu (remise à 0 à chaque changement de morceau). */
+  private wantedLevel = 0;
   private resumeAskedAt = -1;
   private readonly voices: SfxVoice[] = [];
   private readonly lastPlayed = new Map<SfxId, number>();
@@ -209,9 +211,21 @@ export class AudioEngine implements AudioApi, SfxHost, MusicFxHost {
       return;
     }
     this.wanted = id;
+    this.wantedLevel = 0;
     if (!this.player) return; // démarrera au déverrouillage
     if (id === null) this.player.stop();
     else this.startWantedMusic();
+  }
+
+  /**
+   * Intensité du morceau en cours (0 = de base) : prise en compte au prochain temps fort (début de mesure),
+   * sans relancer le morceau ni régler l'écho ; sans effet sur un morceau à un seul niveau. Retenue si la
+   * musique est coupée ou pas encore débloquée ; remise à 0 par music() quand le morceau change.
+   */
+  musicLevel(n: number): void {
+    if (!Number.isFinite(n)) return;
+    this.wantedLevel = Math.max(0, Math.floor(n));
+    if (this.player) this.player.setLevel(this.wantedLevel);
   }
 
   setMusicEnabled(on: boolean): void {
@@ -387,7 +401,7 @@ export class AudioEngine implements AudioApi, SfxHost, MusicFxHost {
     const id = this.wanted;
     if (!id || !this.musicOn || !this.player) return;
     if (this.player.playing === id) return;
-    this.player.play(id);
+    this.player.play(id, this.wantedLevel);
   }
 
   /** Les sons peuvent être programmés si le contexte tourne (ou va reprendre d'un instant à l'autre). */

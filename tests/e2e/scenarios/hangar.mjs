@@ -34,7 +34,7 @@
 //  (UPGRADE_MULS, BOOST_MULS), fiches du laser et du fusil (src/core/weapons.ts), BOOST_DRAIN / BOOST_FILL
 //  (src/game3d/flight.ts). Voir tests/e2e/README.md, « Scénario du hangar ».
 import { assert, assertEq, assertNear, fmt, readSave, screenText, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
-import { hudFlight, press, pressPause, recordToasts, resultDetails, waitPause } from '../lib/core.mjs';
+import { hudFlight, pickStage, press, pressPause, recordToasts, resultDetails, waitPause } from '../lib/core.mjs';
 import { pressBack, waitIntroCard } from '../lib/shell.mjs';
 
 export const meta = {
@@ -703,7 +703,7 @@ export default async function (t) {
 
   // j1 lancé depuis les Niveaux : pompe, 4 cœurs, réapparition à 4 cœurs, portée du fusil, cadence du laser
   await back(t, 'Escape', 'select');
-  await t.page.locator('.screens [data-screen="select"].is-active .card').first().click({ timeout: 5000 });
+  await pickStage(t, 'j1');
   await waitFor2dPlay(t);
   k = await t.ev(() => window.__xr2d.info());
   assert(k.weapon === 'shotgun' && k.maxHearts === 4 && k.hearts === 4, `j1 en mode test : pompe, 4 cœurs (${fmt({ weapon: k.weapon, hearts: k.hearts, maxHearts: k.maxHearts })})`);
@@ -744,7 +744,7 @@ export default async function (t) {
   st = await buy(t, 'kai.heart', 250, 'Acheter un cœur supplémentaire (5 cœurs)', 2);
   assert(st.items['kai.heart'].max && st.slots === 5 && st.wallet === 0, `cœur niveau 2 : Max, 5 cœurs, réserve vide (${fmt({ item: st.items['kai.heart'], slots: st.slots, wallet: st.wallet })})`);
   await back(t, 'android', 'select');
-  await t.page.locator('.screens [data-screen="select"].is-active .card').first().click({ timeout: 5000 });
+  await pickStage(t, 'j1');
   await waitFor2dPlay(t);
   k = await t.ev(() => window.__xr2d.info());
   assert(k.maxHearts === 5 && k.hearts === 5, `j1 : 5 cœurs (${fmt({ hearts: k.hearts, maxHearts: k.maxHearts })})`);

@@ -1,6 +1,7 @@
 import type { LevelData } from './types';
 import { joinSegments } from './build.ts';
 import type { Segment } from './build.ts';
+import { stageText } from '../../core/story.ts';
 
 // Monde 1 — Jungle de Xéna : niveau d'apprentissage, à la manière d'un « 1-1 ».
 // Chaque mécanique est présentée seule, sans danger, puis combinée. Sol de base : lignes 12-13.
@@ -180,28 +181,47 @@ const REVIEW: Segment = [
 ];
 
 /** 200 — Grand escalier final (un cristal par marche), paire de marcheurs à écraser en redescendant,
- *  atterrissage à plat et la Comète. */
+ *  atterrissage à plat et point de contrôle 3, juste avant l'arène. */
 const FINALE: Segment = [
-  '..........................',
-  '..........................',
-  '..........................',
-  '..........................',
-  '......cccc................',
-  '.....c####................',
-  '....c#####................',
-  '...c######................',
-  '...#######....f...........',
-  '..########................',
-  '.#########................',
-  '##########..w.w..X.....*..',
-  '##########################',
-  '##########################',
+  '....................',
+  '....................',
+  '....................',
+  '....................',
+  '......cccc..........',
+  '.....c####..........',
+  '....c#####..........',
+  '...c######..........',
+  '...#######....f.....',
+  '..########..........',
+  '.#########..........',
+  '##########..w.w..K..',
+  '####################',
+  '####################',
+];
+
+/** 220 — Arène du Blob-roi (bornes 220 et 239, 20 colonnes, sol plat), puis la balise de LUMA (244), qui
+ *  remonte Kaï dans la Comète restée en orbite. Les colonnes au-delà laissent la caméra centrer l'arène. */
+const ARENA: Segment = [
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '................................',
+  '|............M.....|....L...*...',
+  '################################',
+  '################################',
 ];
 
 export const JUNGLE: LevelData = {
   id: 'jungle',
   theme: 'jungle',
-  name: 'Jungle de Xéna',
+  name: stageText('j1').title,
   music: 'jungle',
   map: joinSegments('jungle', [
     START,
@@ -214,5 +234,16 @@ export const JUNGLE: LevelData = {
     DOUBLE_JUMP,
     REVIEW,
     FINALE,
+    ARENA,
   ]),
+  boss: 'blobKing',
+  // Départ (LUMA brouillée), sous la ruine astréenne (salle murée 127-137), avant l'escalier final (arène : 220-239,
+  // balise : 244), à l'entrée dans l'arène.
+  radio: [
+    { id: 'j1-start', cols: [0, 12] },
+    { id: 'j1-ruin', cols: [127, 137] },
+    { id: 'j1-beacon', cols: [193, 206] },
+    { id: 'tuto-overheat', on: 'overheat' },
+    { id: 'j1-boss', on: 'boss' },
+  ],
 };

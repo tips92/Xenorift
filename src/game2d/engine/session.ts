@@ -1,4 +1,4 @@
-import type { ModeHooks, SfxId, StageDef, ToastKind } from '../../core/types';
+import type { BossHud, ModeHooks, MusicId, RadioId, SfxId, StageDef, ToastKind } from '../../core/types';
 import type { LevelData } from '../levels/types';
 
 // Une « session » = un appel à startPlatformer. Elle relie la poignée renvoyée à l'interface
@@ -78,6 +78,40 @@ export function toast(session: Session, text: string, kind?: ToastKind): void {
     session.hooks.hud.toast(text, kind);
   } catch (err) {
     report('hud.toast', err);
+  }
+}
+
+export function music(session: Session, id: MusicId | null): void {
+  try {
+    session.hooks.audio.music(id);
+  } catch (err) {
+    report('audio.music', err);
+  }
+}
+
+export function musicLevel(session: Session, n: number): void {
+  try {
+    session.hooks.audio.musicLevel(n);
+  } catch (err) {
+    report('audio.musicLevel', err);
+  }
+}
+
+/** Message de la radio de LUMA (bulle de l'interface). */
+export function radio(session: Session, id: RadioId): void {
+  try {
+    session.hooks.hud.radio(id);
+  } catch (err) {
+    report('hud.radio', err);
+  }
+}
+
+/** Barre de vie du boss (null : masquée). */
+export function bossBar(session: Session, s: BossHud | null): void {
+  try {
+    session.hooks.hud.updateBoss(s);
+  } catch (err) {
+    report('hud.updateBoss', err);
   }
 }
 

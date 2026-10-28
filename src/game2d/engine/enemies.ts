@@ -57,6 +57,8 @@ export interface Enemy {
   dieMs: number;
   dvx: number;
   dvy: number;
+  /** Renfort d'un boss : créé caché au chargement (hors carte), appelé par summon(), jamais compté au score. */
+  summoned: boolean;
 }
 
 interface KindSpec {
@@ -83,12 +85,26 @@ export class EnemyManager {
   private readonly box: Box = { l: 0, t: 0, r: 0, b: 0 };
   /** Horloge de jeu du dernier son de touche (plombs simultanés : un seul son). */
   private lastHitSfxAt = -1e9;
+  /** Arène de boss (px, bornes comprises) : les ennemis de la carte font demi-tour devant. */
+  private fenceL = 0;
+  private fenceR = -1;
 
+  /**
+   * `reserve` : renforts des boss, créés dès le chargement (le collider des corps Arcade est posé avec la liste
+   * de départ) puis rangés cachés en fin de liste, jusqu'à summon().
+   */
   constructor(
     private readonly scene: PlatformScene,
     spawns: readonly EnemySpawn[],
+    reserve: readonly EnemySpawn[] = [],
   ) {
     for (const s of spawns) this.list.push(this.create(s));
+    for (const s of reserve) {
+      const e = this.create(s);
+      e.summoned = true;
+      this.park(e);
+      this.list.push(e);
+    }
   }
 
   private create(s: EnemySpawn): Enemy {
@@ -148,7 +164,76 @@ export class EnemyManager {
       dieMs: 0,
       dvx: 0,
       dvy: 0,
+      summoned: false,
     };
+  }
+
+  /** Zone interdite aux marcheurs et blindés de la carte (l'arène, de x0 à x1) ; les renforts y restent libres. */
+  fence(x0: number, x1: number): void {
+    this.fenceL = x0;
+    this.fenceR = x1;
+  }
+
+  /** Rangé (réserve des renforts) : ni simulé, ni visible, ni touché. */
+  private park(e: Enemy): void {
+    e.alive = false;
+    e.awake = false;
+    e.dying = DEATH_NONE;
+    if (e.body) {
+      e.body.stop();
+      e.body.enable = false;
+    }
+    e.sprite.anims.pause();
+    e.sprite.setVisible(false).setActive(false);
+  }
+
+  /**
+   * Appelle un marcheur de réserve, pieds en (x, feetY), tourné vers `dir`, lancé vers le haut à `vy` (px/s) ;
+   * faux si la réserve est vide (renforts encore en vie ou en train de mourir).
+   */
+  summon(x: number, feetY: number, dir: number, vy: number): boolean {
+    for (let i = 0; i < this.list.length; i++) {
+      const e = this.list[i];
+      if (!e.summoned || e.alive || e.dying !== DEATH_NONE || e.kind !== 'w') continue;
+      const s = e.sprite;
+      e.alive = true;
+      e.awake = true;
+      e.hp = ENEMY_HP;
+      e.dir = dir < 0 ? -1 : 1;
+      e.turnCd = 0;
+      e.flashMs = 0;
+      e.homeX = x;
+      e.homeY = feetY;
+      s.setPosition(x, feetY).setVisible(true).setActive(true).setAlpha(1).setScale(1).setAngle(0).setDepth(DEPTH.enemies);
+      s.flipY = false;
+      s.flipX = e.dir < 0;
+      s.clearTint();
+      if (this.scene.anims.exists(SPECS.w.anim)) s.anims.play(SPECS.w.anim);
+      const b = e.body;
+      if (b) {
+        b.enable = true;
+        b.updateFromGameObject();
+        b.prev.copy(b.position);
+        b.prevFrame.copy(b.position);
+        b.velocity.set(e.dir * WALKER_SPEED, vy);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** Renforts renvoyés en réserve (boss remis à neuf) ; `pop` : avec une gerbe (boss vaincu). */
+  recall(pop: boolean): void {
+    const box = this.box;
+    for (let i = 0; i < this.list.length; i++) {
+      const e = this.list[i];
+      if (!e.summoned || (!e.alive && e.dying === DEATH_NONE)) continue;
+      if (pop && e.alive) {
+        this.bounds(e, box);
+        this.scene.fx.burst((box.l + box.r) * 0.5, (box.t + box.b) * 0.5, this.scene.fx.colors.enemyBurst, 10);
+      }
+      this.park(e);
+    }
   }
 
   /** Boîte de touche courante de l'ennemi (écrite dans `out`). */
@@ -225,7 +310,8 @@ export class EnemyManager {
           else if (b.blocked.down && e.turnCd <= 0) {
             const fx = e.dir > 0 ? b.x + b.width + 3 : b.x - 3;
             const feet = b.y + b.height;
-            if (!grid.groundAtPx(fx, feet + 6) || grid.solidAtPx(fx, feet - 12) || grid.hazardAtPx(fx, feet - 6)) {
+            const fenced = !e.summoned && fx > this.fenceL && fx < this.fenceR;
+            if (fenced || !grid.groundAtPx(fx, feet + 6) || grid.solidAtPx(fx, feet - 12) || grid.hazardAtPx(fx, feet - 6)) {
               e.dir = -e.dir;
               e.turnCd = 180;
             }
@@ -372,7 +458,7 @@ export class EnemyManager {
       e.body.enable = false;
     }
     e.sprite.clearTint();
-    scene.enemiesKilled += 1;
+    if (!e.summoned) scene.enemiesKilled += 1;
     scene.fx.burst((box.l + box.r) * 0.5, (box.t + box.b) * 0.5, scene.fx.colors.enemyBurst, 14);
     scene.playSfx('enemyDie', 0.8);
 

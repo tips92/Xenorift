@@ -285,20 +285,26 @@ function mite(ctx: Ctx, frame: number, squashed: boolean): void {
   }
 }
 
+/** Frame i du blob (4 = écrasé). */
+function slimeFrame(ctx: Ctx, i: number): void {
+  if (i === 4) return slimeSquashed(ctx);
+  const shapes: [number, number, number][] = [
+    [46, 32, 0],
+    [51, 27, -2],
+    [44, 36, 3],
+    [40, 39, 1],
+  ];
+  const [w, h, lean] = shapes[i];
+  slime(ctx, w, h, lean, i);
+}
+
+/** Frame i de la mite (4 = écrasée). */
+function miteFrame(ctx: Ctx, i: number): void {
+  mite(ctx, i, i === 4);
+}
+
 export function drawWalker(ctx: Ctx, theme: ThemeId, i: number): void {
-  if (theme === 'jungle') {
-    if (i === 4) return slimeSquashed(ctx);
-    const shapes: [number, number, number][] = [
-      [46, 32, 0],
-      [51, 27, -2],
-      [44, 36, 3],
-      [40, 39, 1],
-    ];
-    const [w, h, lean] = shapes[i];
-    slime(ctx, w, h, lean, i);
-  } else {
-    mite(ctx, i, i === 4);
-  }
+  ENEMIES[theme].walker(ctx, i);
 }
 
 // ================================================================ Volant
@@ -484,8 +490,7 @@ function eyeDrone(ctx: Ctx, frame: number): void {
 }
 
 export function drawFlyer(ctx: Ctx, theme: ThemeId, i: number): void {
-  if (theme === 'jungle') wasp(ctx, i);
-  else eyeDrone(ctx, i);
+  ENEMIES[theme].flyer(ctx, i);
 }
 
 // ================================================================ Blindé
@@ -724,8 +729,7 @@ function claw(ctx: Ctx, x: number, y: number, open: number, far: boolean, scale:
 }
 
 export function drawArmored(ctx: Ctx, theme: ThemeId, i: number): void {
-  if (theme === 'jungle') beetle(ctx, i);
-  else rockCrab(ctx, i);
+  ENEMIES[theme].armored(ctx, i);
 }
 
 // ================================================================ Cracheur
@@ -899,44 +903,66 @@ function turret(ctx: Ctx, frame: number): void {
 }
 
 export function drawSpitter(ctx: Ctx, theme: ThemeId, i: number): void {
-  if (theme === 'jungle') plant(ctx, i);
-  else turret(ctx, i);
+  ENEMIES[theme].spitter(ctx, i);
 }
 
 // ================================================================ Projectile
 
-export function drawSpore(ctx: Ctx, theme: ThemeId): void {
+/** Spore épineuse (jungle). */
+function seedSpore(ctx: Ctx): void {
   const c = 12;
-  if (theme === 'jungle') {
-    softDot(ctx, c, c, 12, '#9dff3a', 0.6);
-    const body = new Path2D();
-    const n = 9;
-    for (let k = 0; k < n * 2; k++) {
-      const a = (k / (n * 2)) * Math.PI * 2;
-      const rr = k % 2 === 0 ? 7.2 : 5.8;
-      const x = c + Math.cos(a) * rr;
-      const y = c + Math.sin(a) * rr;
-      if (k === 0) body.moveTo(x, y);
-      else body.lineTo(x, y);
-    }
-    body.closePath();
-    fillOutlined(ctx, body, sphereGrad(ctx, c, c, 7, '#f6ffb0', '#9dff3a', '#2e8a1a'), '#0a2a0a', 1.6);
-    ctx.fillStyle = 'rgba(30,110,20,0.6)';
-    for (const [x, y] of [[c + 2, c + 2], [c - 2.5, c + 1.5], [c + 1, c - 2.5]] as const) {
-      ctx.beginPath();
-      ctx.arc(x, y, 1.1, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(c - 2, c - 2.4, 1.4, 0, Math.PI * 2);
-    ctx.fill();
-  } else {
-    softDot(ctx, c, c, 12, '#ff3fc8', 0.7);
-    const gem = poly([c, c - 7.5, c + 6, c, c, c + 7.5, c - 6, c]);
-    fillOutlined(ctx, gem, sphereGrad(ctx, c, c, 7, '#ffe6fa', '#ff3fc8', '#7a0a5a'), '#2a0626', 1.6);
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.fill(poly([c, c - 7.5, c - 6, c, c, c]));
-    softDot(ctx, c, c, 4, '#ffffff', 0.9);
+  softDot(ctx, c, c, 12, '#9dff3a', 0.6);
+  const body = new Path2D();
+  const n = 9;
+  for (let k = 0; k < n * 2; k++) {
+    const a = (k / (n * 2)) * Math.PI * 2;
+    const rr = k % 2 === 0 ? 7.2 : 5.8;
+    const x = c + Math.cos(a) * rr;
+    const y = c + Math.sin(a) * rr;
+    if (k === 0) body.moveTo(x, y);
+    else body.lineTo(x, y);
   }
+  body.closePath();
+  fillOutlined(ctx, body, sphereGrad(ctx, c, c, 7, '#f6ffb0', '#9dff3a', '#2e8a1a'), '#0a2a0a', 1.6);
+  ctx.fillStyle = 'rgba(30,110,20,0.6)';
+  for (const [x, y] of [[c + 2, c + 2], [c - 2.5, c + 1.5], [c + 1, c - 2.5]] as const) {
+    ctx.beginPath();
+    ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(c - 2, c - 2.4, 1.4, 0, Math.PI * 2);
+  ctx.fill();
 }
+
+/** Éclat de cristal (lune). */
+function gemSpore(ctx: Ctx): void {
+  const c = 12;
+  softDot(ctx, c, c, 12, '#ff3fc8', 0.7);
+  const gem = poly([c, c - 7.5, c + 6, c, c, c + 7.5, c - 6, c]);
+  fillOutlined(ctx, gem, sphereGrad(ctx, c, c, 7, '#ffe6fa', '#ff3fc8', '#7a0a5a'), '#2a0626', 1.6);
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.fill(poly([c, c - 7.5, c - 6, c, c, c]));
+  softDot(ctx, c, c, 4, '#ffffff', 0.9);
+}
+
+export function drawSpore(ctx: Ctx, theme: ThemeId): void {
+  ENEMIES[theme].spore(ctx);
+}
+
+// ================================================================ Par thème
+
+/** Ennemis de chaque thème (un thème oublié ici fait échouer tsc). */
+interface ThemeEnemies {
+  walker(ctx: Ctx, i: number): void;
+  flyer(ctx: Ctx, i: number): void;
+  armored(ctx: Ctx, i: number): void;
+  spitter(ctx: Ctx, i: number): void;
+  spore(ctx: Ctx): void;
+}
+
+const ENEMIES: Record<ThemeId, ThemeEnemies> = {
+  jungle: { walker: slimeFrame, flyer: wasp, armored: beetle, spitter: plant, spore: seedSpore },
+  moon: { walker: miteFrame, flyer: eyeDrone, armored: rockCrab, spitter: turret, spore: gemSpore },
+};

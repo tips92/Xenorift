@@ -506,7 +506,7 @@ export class Player {
     this.placeArm(1);
   }
 
-  /** Décollage : le bras suit le sprite animé par le vaisseau (saut vers le cockpit, rétrécissement). */
+  /** Sortie du niveau : le bras suit le sprite animé par la sortie (saut vers le cockpit, faisceau de la balise). */
   syncArmToSprite(): void {
     if (!this.dying) this.placeArm(this.sprite.scaleY);
   }
@@ -551,14 +551,14 @@ export class Player {
     if (this.scene.anims.exists(key)) this.sprite.anims.play(key);
   }
 
-  /** Commandes coupées, corps physique désactivé (mort, décollage). */
+  /** Commandes coupées, corps physique désactivé (mort, sortie du niveau). */
   freeze(): void {
     this.body.stop();
     this.body.enable = false;
     this.aim = 'front';
     this.dropUntil = -1e9;
     this.dropThrough = false;
-    // Bras au repos : plus de mise à jour visuelle ensuite (décollage), le recul resterait affiché.
+    // Bras au repos : plus de mise à jour visuelle ensuite (sortie), le recul resterait affiché.
     this.recoilMs = 0;
     this.crouchShotMs = 0;
     if (this.armFrame !== FRAMES.arm.rest) {
@@ -618,7 +618,7 @@ export class Player {
     this.placeArm(1);
   }
 
-  /** Masque Kaï (entré dans le vaisseau). */
+  /** Masque Kaï (entré dans le vaisseau, emporté par le faisceau de la balise). */
   hide(): void {
     this.sprite.setVisible(false);
     this.bubble.setVisible(false);

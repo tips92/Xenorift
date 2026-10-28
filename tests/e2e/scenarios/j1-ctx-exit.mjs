@@ -1,6 +1,7 @@
-// Jungle 2D (j1) : contexte WebGL perdu pour de bon pendant le décollage du vaisseau de sortie.
-// Le décollage est figé ; ~5 s plus tard le niveau est VALIDÉ (« NIVEAU TERMINÉ », record sauvegardé),
-// jamais échoué. REJOUER (contexte toujours perdu) -> jeu Phaser neuf qui s'affiche et répond.
+// Jungle 2D (j1) : contexte WebGL perdu pour de bon pendant la sortie du niveau (balise de LUMA activée par le
+// contact, Kaï posé haut dans la colonne du faisceau ; état exit, séquence de 2,6 s au plus). La sortie est figée ;
+// ~5 s plus tard le niveau est VALIDÉ une seule fois (« NIVEAU TERMINÉ », record sauvegardé), jamais échoué.
+// REJOUER (contexte toujours perdu) -> jeu Phaser neuf qui s'affiche et répond.
 import { assert, fmt, readSave, screenText, waitFor, waitForScreen } from '../lib/helpers.mjs';
 import {
   RESTORE_WAIT_MS,
@@ -21,7 +22,7 @@ import {
 } from '../lib/game2d.mjs';
 
 export const meta = {
-  title: 'Jungle 2D : perte définitive du contexte pendant le décollage -> niveau validé',
+  title: 'Jungle 2D : perte définitive du contexte pendant la sortie (balise de LUMA) -> niveau validé',
   suites: ['full'],
   dev: true,
   timeoutMs: 120000,
@@ -33,26 +34,39 @@ export default async function (t) {
   const g1 = await waitPlay(t);
   await home(t);
   await t.wait(300);
-  const ref = await assertRenders(t, 'avant le décollage');
+  const ref = await assertRenders(t, 'avant la sortie');
 
-  await t.ev(() => window.__xr2d.win());
-  await waitFor(t, () => window.__xr2d.scene.state === 'exit', { timeout: 3000, label: 'décollage commencé (état exit)' });
-  const loss = await loseGameOk(t, 0, 'perte pendant le décollage');
-  assert(loss.state === 'exit', `perte attendue pendant le décollage, état ${fmt(loss.state)}`);
+  // Sortie par le contact (win() est vérifié par j1-play) : Kaï posé 5 tuiles au-dessus de la balise de LUMA, dans
+  // la colonne du faisceau, est happé avant de retomber (on ne saute pas la balise).
+  await t.ev(() => {
+    const e = window.__xr2d.scene.parsed.exit;
+    window.__xr2d.teleport(e.col, e.row - 5);
+  });
+  await waitFor(t, () => window.__xr2d.scene.state === 'exit', { timeout: 3000, label: 'sortie commencée par le contact (état exit)' });
+  const caught = await t.ev(() => {
+    const s = window.__xr2d.scene;
+    return { kind: s.exit.kind, launched: s.exit.launched, height: Math.round(s.exit.feetY - s.player.feetY) };
+  });
+  assert(
+    caught.kind === 'beacon' && caught.launched && caught.height > 4 * 64,
+    `balise de LUMA activée par Kaï au-dessus d'elle (plus de 4 tuiles au-dessus du sol), obtenu ${fmt(caught)}`,
+  );
+  const loss = await loseGameOk(t, 0, 'perte pendant la sortie');
+  assert(loss.state === 'exit', `perte attendue pendant la sortie, état ${fmt(loss.state)}`);
   await waitFor(
     t,
     () => {
       const s = window.__xr2d && window.__xr2d.scene;
       return !!(s && s.session.gfxLost && s.sys.isPaused());
     },
-    { timeout: 5000, label: 'décollage figé par la perte' },
+    { timeout: 5000, label: 'sortie figée par la perte' },
   );
   assert(await toastVisible(t, 'Liaison graphique perdue'), 'message « Liaison graphique perdue… » attendu');
   await t.shot('exit-lost');
-  // Le décollage normal dure 2,6 s : à 3,5 s de la perte, l'étape ne doit toujours pas être terminée (scène figée).
+  // Une sortie dure 2,6 s au plus : à 3,5 s de la perte, l'étape ne doit toujours pas être terminée (scène figée).
   await t.wait(3500);
   const mid = await engine2d(t);
-  assert(mid && mid.state === 'exit' && (await ends(t)).length === 0, `décollage toujours figé attendu 3,5 s après la perte, obtenu ${fmt(mid)} / ${fmt(await ends(t))}`);
+  assert(mid && mid.state === 'exit' && (await ends(t)).length === 0, `sortie toujours figée attendue 3,5 s après la perte, obtenu ${fmt(mid)} / ${fmt(await ends(t))}`);
 
   await waitForScreen(t, 'results', { timeout: 20000 });
   const text = await screenText(t, 'results');
@@ -68,7 +82,9 @@ export default async function (t) {
   await t.wait(1500);
   assert((await screensSince(t, 'fail', 0)).length === 0, 'aucun écran d\'échec attendu');
   const save = await readSave(t);
-  assert(save && save.best && save.best.j1 && save.unlocked >= 1, `record de j1 et étape suivante débloquée attendus (sauvegarde : ${fmt(save)})`);
+  // Mode test (?unlock=1) : tout est ouvert, seule la réussite de j1 se vérifie ici.
+  const j1 = await t.ev(() => window.__xrShell.info().stages.find((s) => s.id === 'j1'));
+  assert(save && save.best && save.best.j1 && j1 && j1.cleared, `record de j1 et étape réussie attendus (sauvegarde : ${fmt(save)}, j1 : ${fmt(j1)})`);
   await t.shot('results');
 
   // REJOUER : le contexte de l'ancien jeu est toujours perdu -> instance Phaser neuve

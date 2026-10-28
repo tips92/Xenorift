@@ -134,13 +134,109 @@ export async function press(t, screen, label, { timeout = 20000 } = {}) {
 }
 
 /**
- * « Suivant » des résultats → hangar (plan 03, étape suivante à venir) → bouton de départ (`.hg-depart`, libellé
- * « Décoller ») : l'enchaînement continue vers la carte d'intro de l'étape suivante. Sans aide DEV.
+ * « Suivant » des résultats → hangar (plan 03, étape suivante à venir) → bouton de départ (`.hg-depart` :
+ * « Atterrir » vers un niveau 1, « Redescendre » vers un niveau 2 ou 3, « Décoller » vers un vol) :
+ * l'enchaînement continue vers la carte d'intro de l'étape suivante. Sans aide DEV.
  */
 export async function nextViaHangar(t, { timeout = 20000 } = {}) {
   await press(t, 'results', 'Suivant', { timeout });
   await waitForScreen(t, 'hangar', { timeout });
   await t.page.locator('.screens [data-screen="hangar"].is-active .hg-depart').click({ timeout: 5000 });
+}
+
+// ---------------------------------------------------------------- Écran Niveaux (une page par monde)
+
+const SELECT = '.screens [data-screen="select"].is-active';
+
+/**
+ * Écran Niveaux affiché, lu sur la page (null s'il n'est pas actif) : `worlds` (numéros des pages, dans l'ordre),
+ * `world` (page affichée), `name` et `worldStars` (barre du monde : « Monde 1 · Jungle de Xéna », « 3/6 »),
+ * `total` (en-tête, « 5/12 »), flèches `prev` / `next` (désactivées), `order` (étapes dans l'ordre des cartes) et
+ * `cards[id]` : `world` (page), `locked`, `title`, `sub`, `best` (record affiché, « — » sans record), `stars`
+ * (allumées), `label` (aria-label).
+ */
+export function selectState(t) {
+  return t.ev((sel) => {
+    const s = document.querySelector(sel);
+    if (!s) return null;
+    const txt = (e) => (e ? e.textContent.replace(/\s+/g, ' ').trim() : null);
+    const cur = s.querySelector('.select-page.is-current');
+    const cards = {};
+    for (const c of s.querySelectorAll('.card[data-stage]')) {
+      const page = c.closest('.select-page');
+      cards[c.dataset.stage] = {
+        world: page ? Number(page.dataset.world) : null,
+        locked: c.classList.contains('is-locked'),
+        title: txt(c.querySelector('.card-title')),
+        sub: txt(c.querySelector('.card-sub')),
+        best: txt(c.querySelector('.card-best b')),
+        stars: c.querySelectorAll('.card-foot .star.is-on').length,
+        label: c.getAttribute('aria-label'),
+      };
+    }
+    const arrow = (k) => {
+      const b = s.querySelector(`.select-${k}`);
+      return b ? { disabled: b.disabled } : null;
+    };
+    return {
+      worlds: [...s.querySelectorAll('.select-page')].map((p) => Number(p.dataset.world)),
+      world: cur ? Number(cur.dataset.world) : null,
+      name: txt(s.querySelector('.select-world-name')),
+      worldStars: txt(s.querySelector('.select-world-n')),
+      total: txt(s.querySelector('.select-total-n')),
+      prev: arrow('prev'),
+      next: arrow('next'),
+      order: [...s.querySelectorAll('.card[data-stage]')].map((c) => c.dataset.stage),
+      cards,
+    };
+  }, SELECT);
+}
+
+/** Attend la page du monde `world` affichée et immobile (bande arrivée à sa place, autres pages masquées). */
+export function waitSelectPage(t, world, { timeout = 4000 } = {}) {
+  return waitFor(
+    t,
+    ([sel, w]) => {
+      const s = document.querySelector(sel);
+      const p = s && s.querySelector('.select-page.is-current');
+      const v = s && s.querySelector('.select-pages');
+      if (!p || Number(p.dataset.world) !== w || !v) return false;
+      const a = p.getBoundingClientRect();
+      const b = v.getBoundingClientRect();
+      const others = [...s.querySelectorAll('.select-page:not(.is-current)')];
+      return Math.abs(a.left - b.left) < 1 && others.every((o) => getComputedStyle(o).visibility === 'hidden');
+    },
+    { timeout, interval: 50, label: `page du monde ${world} des Niveaux`, arg: [SELECT, world] },
+  );
+}
+
+/**
+ * Niveaux : amène la page de la carte de l'étape `id` (flèches ◀ ▶), puis la touche (carte `[data-stage=id]`).
+ * Sans aide DEV.
+ */
+export async function pickStage(t, id, { timeout = 20000 } = {}) {
+  await waitForScreen(t, 'select', { timeout });
+  for (let k = 0; k < 12; k++) {
+    const w = await t.ev(
+      ([sel, sid]) => {
+        const s = document.querySelector(sel);
+        const c = s && s.querySelector(`.card[data-stage="${sid}"]`);
+        const cur = s && s.querySelector('.select-page.is-current');
+        return c && cur ? { want: Number(c.closest('.select-page').dataset.world), cur: Number(cur.dataset.world) } : null;
+      },
+      [SELECT, id],
+    );
+    if (!w) throw new AssertionError(`Niveaux : carte de l'étape ${id} introuvable`);
+    if (w.want === w.cur) break;
+    await t.page.locator(`${SELECT} ${w.want > w.cur ? '.select-next' : '.select-prev'}`).click({ timeout: 5000 });
+    await waitFor(t, ([sel, c]) => Number((document.querySelector(`${sel} .select-page.is-current`) || {}).dataset?.world) !== c, {
+      timeout: 3000,
+      interval: 30,
+      label: 'changement de page des Niveaux',
+      arg: [SELECT, w.cur],
+    });
+  }
+  await t.page.locator(`${SELECT} .card[data-stage="${id}"]`).click({ timeout: 5000 });
 }
 
 /**

@@ -1,6 +1,7 @@
 import type { MusicId } from '../core/types';
 import type { Band, MixSpec } from './band';
 import { bars, holdLen, note, notes, seq, type Rng } from './theory';
+import { WORLD1_TRACKS } from './world1Tracks';
 
 // Morceaux procéduraux : chaque pas (double croche) appelle play(), qui décide quoi jouer
 // selon la mesure (sections), le pas, le numéro de boucle et un aléa rejouable.
@@ -20,6 +21,8 @@ export interface StepCtx {
   rng: Rng;
   /** Mémoire propre à l'instance (ex. dernière note jouée, pour les glissandos). */
   mem: number[];
+  /** Intensité (musicLevel), 0 = de base : changée seulement au début d'une mesure (pas 0). */
+  level: number;
 }
 
 export interface TrackDef {
@@ -33,6 +36,8 @@ export interface TrackDef {
   delayBeats: number;
   delayFb: number;
   mix: MixSpec;
+  /** Nombre d'intensités (absent : 1, insensible à musicLevel). */
+  levels?: number;
   play(c: StepCtx): void;
 }
 
@@ -613,4 +618,4 @@ const asteroids: TrackDef = {
   },
 };
 
-export const TRACKS: Record<MusicId, TrackDef> = { menu, jungle, moon, nebula, asteroids };
+export const TRACKS: Record<MusicId, TrackDef> = { menu, jungle, moon, nebula, asteroids, ...WORLD1_TRACKS };

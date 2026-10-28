@@ -1,21 +1,36 @@
 // Contrats partagés entre tous les modules du jeu.
 // Toute modification ici doit être répercutée dans chaque module qui les implémente.
 
+import type { BOSS_IDS, COURSE_IDS, MUSIC_IDS, THEME_IDS } from './ids';
+import type { RADIO } from './story';
 import type { WeaponMods } from './weapons';
 
 export type StageKind = 'platform' | 'flight';
-export type ThemeId = 'jungle' | 'moon';
-export type CourseId = 'nebula' | 'asteroids';
+export type ThemeId = (typeof THEME_IDS)[number];
+export type CourseId = (typeof COURSE_IDS)[number];
 
-/** Une étape de la campagne (niveau 2D ou vol 3D). */
+/** Place d'une étape dans son monde : niveaux 1 à 3, 4 = le vol qui le quitte. */
+export type StagePart = 1 | 2 | 3 | 4;
+
+/** Compétence de Kaï (clé de Loadout.skills). */
+export type SkillId = keyof Loadout['skills'];
+
+/** Récompense de la première réussite d'une étape (core/worlds.ts), appliquée par core/save.ts. */
+export type StageReward =
+  | { readonly kind: 'skill'; readonly id: SkillId }
+  | { readonly kind: 'crew'; readonly id: CrewId }
+  | { readonly kind: 'blueprint'; readonly id: Exclude<WeaponId, 'laser'> };
+
+/** Une étape de la campagne (niveau 2D ou vol 3D), construite par core/stages.ts depuis WORLDS. */
 export interface StageDef {
-  /** Identifiant stable utilisé dans la sauvegarde : 'j1' | 'f1' | 'm1' | 'f2'. */
+  /** Identifiant stable, clé de SaveData.best ('j1', 'f1', 'm1', 'f2'…) : ne jamais le renommer. */
   id: string;
-  /** Ordre dans la campagne, à partir de 0. */
+  /** Ordre dans la campagne, à partir de 0 (= rang dans STAGES). */
   index: number;
   kind: StageKind;
   /** Numéro de monde affiché (1, 2…). */
   world: number;
+  part: StagePart;
   title: string;
   subtitle: string;
   /** Conseil d'une ligne affiché sur la carte d'introduction. */
@@ -24,6 +39,13 @@ export interface StageDef {
   levelId: string;
   /** Thème visuel (pour un vol : la planète que l'on quitte). */
   theme: ThemeId;
+  /** Cinématiques jouées avant la carte d'intro et avant les résultats (identifiants : étape 14 du plan 04). */
+  before?: string;
+  after?: string;
+  /** Récompenses de la réussite (vide : aucune). */
+  rewards: readonly StageReward[];
+  /** Boss de l'arène du niveau 2D (le même que LevelData.boss). */
+  boss?: BossId;
 }
 
 export interface StageResult {
@@ -38,6 +60,8 @@ export interface StageResult {
   /** Vols 3D uniquement. */
   gates?: number;
   gatesTotal?: number;
+  /** Prime du boss vaincu, comprise dans `score` (absente sans boss ou s'il n'a pas été vaincu). */
+  bossBonus?: number;
 }
 
 /** Bonus du mode plateforme : blocs `1` (vitesse), `2` (bouclier), `3` (cadence). Vitesse et cadence se cumulent. */
@@ -152,6 +176,35 @@ export interface HudApi {
   updateFlight(s: Partial<FlightHud>): void;
   /** Court message centré en haut de l'écran (ex. « Point de contrôle ! »). */
   toast(text: string, kind?: ToastKind): void;
+  /**
+   * Message de la radio de LUMA (core/story.ts) : bulle non bloquante en haut à gauche, file de 2 messages au plus,
+   * figée en pause ; vidée par hide(). Un message du tutoriel est ignoré une fois le tutoriel terminé.
+   */
+  radio(id: RadioId): void;
+  /** Barre de vie du boss (2D et vol), en bas au centre ; null la masque. Vidée par hide(). */
+  updateBoss(s: BossHud | null): void;
+}
+
+/** Message de la radio de LUMA : clé de RADIO (core/story.ts). */
+export type RadioId = keyof typeof RADIO;
+
+// ---------------------------------------------------------------- Boss (plan 04)
+
+export type BossId = (typeof BOSS_IDS)[number];
+
+/** Barre de boss : lue aussitôt par le HUD (l'appelant peut réutiliser l'objet). */
+export interface BossHud {
+  name: string;
+  /** Vie restante, 0..1. */
+  life: number;
+  /** Phase en cours, à partir de 1, sur `phases` (repères sur la barre). */
+  phase: number;
+  phases: number;
+}
+
+/** Point de départ imposé à un mode (aide de test `?at=boss`, serveur de dev) : 'boss' = point de contrôle avant l'arène. */
+export interface StartAt {
+  at: 'boss';
 }
 
 // ---------------------------------------------------------------- Entrées
@@ -231,6 +284,8 @@ export type SfxId =
   | 'death'
   | 'checkpoint'
   | 'takeoff'
+  // Balise de LUMA activée (sortie des niveaux 1 et 2) : faisceau qui emporte Kaï.
+  | 'beacon'
   | 'gate'
   | 'gateMiss'
   | 'boost'
@@ -239,9 +294,28 @@ export type SfxId =
   | 'win'
   | 'lose'
   // Hangar : achat confirmé.
-  | 'buy';
+  | 'buy'
+  // Monde 1 (audio/world1Sfx.ts, WORLD1_SFX_IDS) : boss, arène, champignons, créature, radio de LUMA, histoire.
+  | 'bossAppear'
+  | 'bossHit'
+  | 'bossArmor'
+  | 'bossPhase'
+  | 'bossDefeat'
+  | 'barrier'
+  | 'mushroomBounce'
+  | 'quake'
+  | 'sporeDrop'
+  | 'radioOpen'
+  | 'lumaBip'
+  | 'skill'
+  | 'liberation'
+  | 'blueprint'
+  | 'rescue'
+  | 'whaleCry'
+  | 'leviathanRoar'
+  | 'portalSwallow';
 
-export type MusicId = 'menu' | 'jungle' | 'moon' | 'nebula' | 'asteroids';
+export type MusicId = (typeof MUSIC_IDS)[number];
 
 export interface AudioApi {
   /** À appeler depuis un geste utilisateur (débloque l'AudioContext). */
@@ -249,6 +323,11 @@ export interface AudioApi {
   sfx(id: SfxId, opts?: { volume?: number; pitch?: number }): void;
   /** Lance une musique en boucle (fondu), ou null pour couper. Rejouer la même musique ne la relance pas. */
   music(id: MusicId | null): void;
+  /**
+   * Intensité du morceau en cours (0 = de base), appliquée au prochain début de mesure, sans le relancer ; sans
+   * effet sur un morceau à un seul niveau. Remise à 0 quand music() change de morceau (pas quand il le redemande).
+   */
+  musicLevel(n: number): void;
   setMusicEnabled(on: boolean): void;
   setSfxEnabled(on: boolean): void;
   setHapticsEnabled(on: boolean): void;
@@ -291,6 +370,8 @@ export interface ModeHooks {
    * ne le modifient pas.
    */
   loadout: Readonly<PlayLoadout>;
+  /** Départ imposé (serveur de dev seulement) ; ignoré par un niveau qui n'a pas ce point. */
+  startAt?: Readonly<StartAt>;
   /** Étape réussie. À appeler une seule fois, après l'animation de fin. */
   onComplete(result: StageResult): void;
   /** Étape perdue (plus de vies, chrono à zéro, vaisseau détruit). */
@@ -314,13 +395,21 @@ export interface BestScore {
   stars: 1 | 2 | 3;
 }
 
+/** Histoire : marques des cinématiques vues et des tutoriels terminés (identifiants : étapes 4 et 14 du plan 04). */
+export interface StoryProgress {
+  seen: string[];
+}
+
 /**
  * Sauvegarde, version 2 (hangar). Une version 1 est migrée au chargement (progression, scores, réglages et
  * loadout gardés ; le reste à sa valeur par défaut) ; une autre version est remise à zéro.
  */
 export interface SaveData {
   version: 2;
-  /** Index de la dernière étape débloquée. */
+  /**
+   * Hérité de la v0.1 (index de la dernière étape débloquée) : encore lu et écrit, plus aucune décision ne s'en
+   * sert. La progression se lit dans `best` (étape réussie = son id y figure ; voir isUnlocked de core/save.ts).
+   */
   unlocked: number;
   best: Record<string, BestScore>;
   settings: Settings;
@@ -338,4 +427,6 @@ export interface SaveData {
   crew: CrewId[];
   /** Plans d'armes récupérés, dans l'ordre de WEAPON_IDS ; jamais 'laser' (il n'en a pas besoin). */
   blueprints: WeaponId[];
+  /** Absent des anciennes sauvegardes (v1, v2 du plan 03) : valeur par défaut, sans changer de version. */
+  story: StoryProgress;
 }

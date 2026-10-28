@@ -1,5 +1,6 @@
 import type { SfxId } from '../core/types';
 import { perc, swell, type SfxVoice } from './voice';
+import { WORLD1_RECIPES } from './world1Sfx';
 
 // Recettes des effets sonores : oscillateurs + bruit + filtres + enveloppes.
 // `t` = instant de départ sur l'horloge audio, `p` = facteur de hauteur (1 = normal).
@@ -334,6 +335,33 @@ export const RECIPES: Record<SfxId, Recipe> = {
     gw.connect(v.out);
   },
 
+  // Balise de LUMA : souffle et voix qui montent dans le faisceau, arpège de cloches (≈ 1,5 s)
+  beacon(v, t, p) {
+    const n = v.noise(t, t + 1.5);
+    const bp = v.filter('bandpass', 700, 3);
+    bp.frequency.setValueAtTime(700, t);
+    bp.frequency.exponentialRampToValueAtTime(6500, t + 1.25);
+    n.connect(bp);
+    const gn = v.gain(0);
+    swell(gn.gain, t, 0.14, 0.3, 0.6, 0.5);
+    bp.connect(gn);
+    gn.connect(v.out);
+    for (let i = 0; i < 2; i++) {
+      const o = v.osc('sine', 330 * p, t, t + 1.5);
+      o.frequency.exponentialRampToValueAtTime(1320 * p, t + 1.2);
+      o.detune.value = i === 0 ? -9 : 9;
+      const g = v.gain(0);
+      swell(g.gain, t, 0.06, 0.2, 0.8, 0.45);
+      o.connect(g);
+      g.connect(v.out);
+    }
+    const run = [1046.5, 1318.5, 1568, 2093];
+    for (let i = 0; i < run.length; i++) {
+      const g = bellNote(v, run[i] * p, t + 0.1 + i * 0.09, 0.08, 0.7);
+      v.echo(g, 0.35);
+    }
+  },
+
   // Portail traversé : tintement brillant et chatoyant
   gate(v, t, p) {
     const g = v.env(t, 0.16, 0.002, 0.5);
@@ -587,4 +615,7 @@ export const RECIPES: Record<SfxId, Recipe> = {
     chirp(v, 'square', 1100 * p, 320 * p, t, 0.06, 0.08);
     noiseHit(v, t + 0.028, 'highpass', 5000, 0.8, 0.18, 0.035, 1.3);
   },
+
+  // Monde 1 : boss, arène, champignons, créature, radio de LUMA, histoire (world1Sfx.ts).
+  ...WORLD1_RECIPES,
 };

@@ -1,4 +1,16 @@
-import type { BestScore, CrewId, Loadout, PlayLoadout, SaveData, Settings, StageResult, WeaponId } from './types';
+import type {
+  BestScore,
+  CrewId,
+  Loadout,
+  PlayLoadout,
+  SaveData,
+  Settings,
+  StageDef,
+  StageResult,
+  StageReward,
+  StoryProgress,
+  WeaponId,
+} from './types';
 import {
   applyPurchase,
   buildPlayLoadout,
@@ -17,6 +29,8 @@ import {
   UPGRADE_STATS,
 } from './hangar.ts';
 import type { HangarItemId, ItemState, PurchaseResult } from './hangar';
+import { STAGES } from './stages.ts';
+import { TUTORIAL_MARK, TUTORIAL_STAGE } from './story.ts';
 import { isWeaponId, WEAPON_IDS } from './weapons.ts';
 
 // Sauvegarde locale (localStorage). Fonctionne dans la WebView Capacitor sur Android et iOS ;
@@ -69,6 +83,7 @@ function defaults(): SaveData {
     extraHearts: 0,
     crew: [],
     blueprints: [],
+    story: { seen: [] },
   };
 }
 
@@ -109,6 +124,15 @@ function readBest(raw: unknown): Record<string, BestScore> {
   return out;
 }
 
+/** Marques de l'histoire relues : chaînes non vides, sans doublon. */
+function readStory(raw: unknown): StoryProgress {
+  const src = asRecord(raw);
+  const list = Array.isArray(src.seen) ? (src.seen as unknown[]) : [];
+  const seen: string[] = [];
+  for (const v of list) if (typeof v === 'string' && v && !seen.includes(v)) seen.push(v);
+  return { seen };
+}
+
 /** Champs communs aux versions 1 et 2. */
 function readBase(src: Record<string, unknown>): SaveData {
   const u = src.unlocked;
@@ -118,6 +142,7 @@ function readBase(src: Record<string, unknown>): SaveData {
     best: readBest(src.best),
     settings: readSettings(src.settings),
     loadout: readLoadout(src.loadout),
+    story: readStory(src.story),
   };
 }
 
@@ -145,14 +170,51 @@ function readV2(src: Record<string, unknown>): SaveData {
   return out;
 }
 
+/**
+ * Applique des récompenses à la sauvegarde (ensembles : sans effet si déjà acquises) ; renvoie les NOUVELLES.
+ * Équipage et plans rangés dans l'ordre de CREW_IDS et WEAPON_IDS.
+ */
+function applyRewards(save: SaveData, rewards: readonly StageReward[]): StageReward[] {
+  const got: StageReward[] = [];
+  for (const r of rewards) {
+    switch (r.kind) {
+      case 'skill':
+        if (save.loadout.skills[r.id]) continue;
+        save.loadout = { ...save.loadout, skills: { ...save.loadout.skills, [r.id]: true } };
+        break;
+      case 'crew': {
+        if (save.crew.includes(r.id)) continue;
+        const crew = save.crew;
+        save.crew = CREW_IDS.filter((id) => id === r.id || crew.includes(id)) as CrewId[];
+        break;
+      }
+      case 'blueprint': {
+        if (save.blueprints.includes(r.id)) continue;
+        const plans = save.blueprints;
+        save.blueprints = WEAPON_IDS.filter((id) => id === r.id || plans.includes(id));
+        break;
+      }
+    }
+    got.push(r);
+  }
+  return got;
+}
+
+/** Récompenses des étapes réussies : qui avait fini une étape avant qu'elle en donne une la reçoit au chargement. */
+function withRewards(save: SaveData): SaveData {
+  for (const s of STAGES) if (save.best[s.id]) applyRewards(save, s.rewards);
+  return save;
+}
+
 let data: SaveData = load();
 /** Arme de la session (mode test ou ?weapon=) : jamais enregistrée ; null = arme de la sauvegarde. */
 let sessionWeapon: WeaponId | null = null;
 
 /**
- * Chargement. Version 1 : migrée (progression, scores, réglages et loadout gardés ; réserve, améliorations,
- * modules, cœurs, équipage et plans à zéro), réécrite en version 2 au prochain enregistrement. Autre
- * version, ou données illisibles : remise à zéro.
+ * Chargement. Version 1 : migrée (progression, scores, réglages, loadout et histoire gardés ; réserve,
+ * améliorations, modules, cœurs, équipage et plans à zéro), réécrite en version 2 au prochain enregistrement.
+ * Autre version, ou données illisibles : remise à zéro. Puis récompenses des étapes réussies réappliquées
+ * (enregistrées avec le prochain changement).
  */
 function load(): SaveData {
   try {
@@ -160,8 +222,8 @@ function load(): SaveData {
     if (!raw) return defaults();
     const parsed = JSON.parse(raw) as unknown;
     const src = asRecord(parsed);
-    if (src.version === 1) return readBase(src);
-    if (src.version === 2) return readV2(src);
+    if (src.version === 1) return withRewards(readBase(src));
+    if (src.version === 2) return withRewards(readV2(src));
     return defaults();
   } catch {
     return defaults();
@@ -190,35 +252,60 @@ export function updateSettings(patch: Partial<Settings>): Readonly<Settings> {
   return data.settings;
 }
 
-export function isUnlocked(stageIndex: number): boolean {
-  return data.settings.unlockAll || stageIndex <= data.unlocked;
+// ---------------------------------------------------------------- Progression (par identifiants d'étape)
+
+/** Étape réussie au moins une fois (son id figure dans les records). */
+export function isCleared(id: string): boolean {
+  return Object.prototype.hasOwnProperty.call(data.best, id);
 }
 
-/** Ce que recordResult a changé dans la réserve. */
+/** Étape jouable : la première, une réussie ou la suivante d'une réussie ; mode test : toutes. */
+export function isUnlocked(stage: StageDef): boolean {
+  if (data.settings.unlockAll || stage.index === 0 || isCleared(stage.id)) return true;
+  const prev = STAGES[stage.index - 1];
+  return !!prev && isCleared(prev.id);
+}
+
+/** Étape de JOUER : la première ouverte non réussie, sinon la dernière. */
+export function nextToPlay(): StageDef {
+  return STAGES.find((s) => isUnlocked(s) && !isCleared(s.id)) ?? STAGES[STAGES.length - 1];
+}
+
+/** Rien de réussi ni de vu : « Nouvelle aventure ». */
+export function isFresh(): boolean {
+  return Object.keys(data.best).length === 0 && data.story.seen.length === 0;
+}
+
+/** Ce que recordResult a changé : réserve et récompenses. */
 export interface RecordInfo {
   /** Cristaux de l'étape ajoutés à la réserve (0 en vol pour l'instant). */
   crystalsGained: number;
   /** Réserve après l'ajout. */
   crystals: number;
+  /** Récompenses obtenues par cette réussite (déjà acquises : absentes ; vide en rejouant). */
+  rewards: StageReward[];
 }
 
 /**
- * Enregistre un résultat (étape RÉUSSIE seulement) : meilleur score, déblocage de l'étape suivante, et
- * cristaux de l'étape ajoutés à la réserve, même en rejouant (seul endroit où ils s'ajoutent).
+ * Enregistre un résultat (étape RÉUSSIE seulement) : meilleur score, récompenses de l'étape, et cristaux de
+ * l'étape ajoutés à la réserve, même en rejouant (seul endroit où ils s'ajoutent). `unlocked` (hérité) reste
+ * tenu à jour. Réussir j1 termine le tutoriel de la radio (marque TUTORIAL_MARK).
  */
-export function recordResult(stageIndex: number, result: StageResult): RecordInfo {
-  const prev = data.best[result.stageId];
+export function recordResult(stage: StageDef, result: StageResult): RecordInfo {
+  const prev = data.best[stage.id];
   if (!prev || result.score > prev.score || result.stars > prev.stars) {
-    data.best[result.stageId] = {
+    data.best[stage.id] = {
       score: Math.max(result.score, prev?.score ?? 0),
       stars: Math.max(result.stars, prev?.stars ?? 1) as 1 | 2 | 3,
     };
   }
-  data.unlocked = Math.max(data.unlocked, stageIndex + 1);
+  data.unlocked = Math.max(data.unlocked, stage.index + 1);
+  const rewards = applyRewards(data, stage.rewards);
+  if (stage.id === TUTORIAL_STAGE && !data.story.seen.includes(TUTORIAL_MARK)) data.story.seen.push(TUTORIAL_MARK);
   const gained = stageCrystals(result);
   data.crystals += gained;
   persist();
-  return { crystalsGained: gained, crystals: data.crystals };
+  return { crystalsGained: gained, crystals: data.crystals, rewards };
 }
 
 // ---------------------------------------------------------------- Réserve et hangar
@@ -319,7 +406,7 @@ export function playLoadout(settings: Readonly<Settings>, override?: WeaponId | 
 
 /**
  * Efface la progression : déblocages, records, équipement (armes, compétences), réserve, améliorations,
- * modules de la Comète, cœurs, équipage et plans. Les réglages (et l'arme de la session) restent.
+ * modules de la Comète, cœurs, équipage, plans et histoire. Les réglages (et l'arme de la session) restent.
  */
 export function resetProgress(): void {
   data = { ...defaults(), settings: data.settings };

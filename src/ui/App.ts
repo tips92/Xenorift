@@ -13,13 +13,17 @@ import {
   getSave,
   getSessionWeapon,
   getSettings,
+  isCleared,
+  isFresh,
+  isUnlocked,
+  nextToPlay,
   playLoadout,
   recordResult,
   setSessionWeapon,
   updateSettings,
   type RecordInfo,
 } from '../core/save';
-import { STAGES, getStage, nextStage } from '../core/stages';
+import { STAGES, getStage } from '../core/stages';
 import type {
   ModeHandle,
   ModeHooks,
@@ -28,6 +32,7 @@ import type {
   StageDef,
   StageKind,
   StageResult,
+  StartAt,
   StartMode,
   WeaponId,
 } from '../core/types';
@@ -35,6 +40,7 @@ import { isWeaponId } from '../core/weapons';
 import { createInput } from '../input';
 import { createSpaceBackground } from './background';
 import { deferred, delay, div, enableSecondFingerTaps, nextFrame } from './dom';
+import { playSubtitle, stageAfter } from './flow';
 import { createHud } from './hud';
 import { ensureSvgDefs } from './icons';
 import { FADE_MS, createFader, createRotatePrompt } from './overlays';
@@ -135,7 +141,7 @@ export function startApp(): void {
   // ---------------------------------------------------------------- Couches de l'interface
 
   const bg = createSpaceBackground(uiRoot);
-  const hud = createHud(uiRoot, () => pauseGame());
+  const hud = createHud(uiRoot, () => pauseGame(), audio);
   const screensLayer = div('screens');
   uiRoot.append(screensLayer);
   const fader = createFader(uiRoot, true);
@@ -176,6 +182,8 @@ export function startApp(): void {
   let urlWeapon: WeaponId | null = null;
   /** ?weapon= inconnu : message affiché une fois, sur l'accueil ou au premier lancement (?stage=). */
   let weaponWarning = '';
+  /** ?at=boss (serveur de dev) : chaque niveau 2D lancé part du point de contrôle d'avant son arène. */
+  let urlStartAt: StartAt | null = null;
   let portrait = false;
   let backgrounded = false;
   let flowId = 0;
@@ -246,34 +254,27 @@ export function startApp(): void {
     }
   }
 
-  function continueStage(): StageDef {
-    const idx = Math.max(0, Math.min(getSave().unlocked, STAGES.length - 1));
-    return STAGES[idx];
-  }
-
-  function playSub(): string {
-    const save = getSave();
-    const fresh = save.unlocked <= 0 && Object.keys(save.best).length === 0;
-    if (fresh) return 'Nouvelle aventure';
-    return `Continuer · ${continueStage().title}`;
-  }
-
   function makeTitle(): Screen {
     return createTitleScreen(ctx, {
-      playSub: playSub(),
-      play: () => startStage(continueStage(), true),
+      playSub: playSubtitle(isFresh(), nextToPlay()),
+      play: () => startStage(nextToPlay(), true),
       levels: () => goSelect(),
       options: () => goOptions(),
     });
   }
 
-  function makeSelect(): Screen {
-    return createLevelSelect(ctx, {
-      back: () => goTitle(),
-      start: (stage) => startStage(stage, true),
-      // Hangar sans départ : le retour ramène aux Niveaux.
-      hangar: () => goHangar(null, () => goSelect()),
-    });
+  /** Niveaux, ouverts sur le monde `world` (par défaut : celui de l'étape de JOUER). */
+  function makeSelect(world?: number): Screen {
+    return createLevelSelect(
+      ctx,
+      {
+        back: () => goTitle(),
+        start: (stage) => startStage(stage, true),
+        // Hangar sans départ : le retour ramène aux Niveaux, sur le même monde.
+        hangar: (w) => goHangar(null, () => goSelect(w)),
+      },
+      world,
+    );
   }
 
   /**
@@ -344,8 +345,8 @@ export function startApp(): void {
     showMenu(makeTitle, force);
   }
 
-  function goSelect(): void {
-    showMenu(makeSelect);
+  function goSelect(world?: number): void {
+    showMenu(() => makeSelect(world));
   }
 
   function goOptions(): void {
@@ -378,7 +379,7 @@ export function startApp(): void {
 
   /** « Suivant » des résultats : hangar avant l'étape suivante (`back` : retour aux résultats), sinon la fin. */
   function goNext(stage: StageDef, back: () => void): void {
-    const nxt = nextStage(stage);
+    const nxt = stageAfter(stage);
     if (nxt) goHangar(nxt, back);
     else showEnd();
   }
@@ -485,6 +486,7 @@ export function startApp(): void {
       onComplete: (result) => endRun(r, { ok: true, result }),
       onFail: (reason) => endRun(r, { ok: false, reason: typeof reason === 'string' ? reason : '' }),
     };
+    if (urlStartAt && stage.kind === 'platform') hooks.startAt = urlStartAt;
 
     try {
       r.handle = start(gameRoot, stage, hooks);
@@ -524,10 +526,11 @@ export function startApp(): void {
     if (outcome.ok) {
       const result = sanitizeResult(outcome.result, r.stage);
       const prev = getSave().best[r.stage.id];
-      // Cristaux de l'étape ajoutés à la réserve par recordResult (une seule fois : r.ended est déjà posé).
-      let info: RecordInfo = { crystalsGained: 0, crystals: getCrystals() };
+      // Cristaux de l'étape ajoutés à la réserve et récompenses données par recordResult (une seule fois :
+      // r.ended est déjà posé).
+      let info: RecordInfo = { crystalsGained: 0, crystals: getCrystals(), rewards: [] };
       try {
-        info = recordResult(r.stage.index, result);
+        info = recordResult(r.stage, result);
       } catch (err) {
         console.error('[ui] sauvegarde impossible', err);
       }
@@ -538,6 +541,7 @@ export function startApp(): void {
         best: getSave().best[r.stage.id]?.score ?? result.score,
         crystalsGained: info.crystalsGained,
         crystals: info.crystals,
+        rewards: info.rewards,
       };
     }
     input.setLayout('none');
@@ -610,6 +614,7 @@ export function startApp(): void {
       console.error('[ui] pause du mode', err);
     }
     input.setLayout('none');
+    hud.setPaused(true);
     closePause(true);
     const p = createPauseOverlay(ctx, r.stage, {
       resume: () => resumeGame(),
@@ -635,6 +640,7 @@ export function startApp(): void {
     if (!isPlayable()) return;
     r.paused = false;
     closePause(false);
+    hud.setPaused(false);
     input.setLayout(r.stage.kind);
     input.clearPresses();
     try {
@@ -793,6 +799,7 @@ export function startApp(): void {
   setSessionWeapon(urlWeapon);
   if (weaponParam && !urlWeapon) weaponWarning = `Arme inconnue : ${weaponParam}`;
   if (params.get('unlock') === '1' && !live.unlockAll) setSettings({ unlockAll: true });
+  if (import.meta.env.DEV && params.get('at') === 'boss') urlStartAt = { at: 'boss' };
 
   audio.setMusicEnabled(live.music);
   audio.setSfxEnabled(live.sfx);
@@ -837,6 +844,8 @@ export function startApp(): void {
     (window as unknown as Record<string, unknown>).__xrShell = {
       cap: (name: keyof typeof capHandlers) => capHandlers[name](),
       audio,
+      /** Radio de LUMA : phase, message affiché, file, messages affichés depuis le début de l'étape, pause. */
+      radio: () => hud.radioInfo(),
       info: () => {
         // Équipement effectif : celui de la partie en cours, sinon celui du prochain lancement.
         const play = run ? run.loadout : playLoadout(live);
@@ -847,6 +856,14 @@ export function startApp(): void {
           // Arme, armes possédées et compétences seulement ; `play` : tout (améliorations, cœurs, Comète).
           loadout: { equipped: play.equipped, owned: [...play.owned], skills: { ...play.skills } },
           play,
+          // Progression lue par core/save.ts (mode test compris pour `unlocked`).
+          stages: STAGES.map((s) => ({
+            id: s.id,
+            kind: s.kind,
+            world: s.world,
+            cleared: isCleared(s.id),
+            unlocked: isUnlocked(s),
+          })),
           crystals: getCrystals(),
           weapon: getSessionWeapon(),
           backgrounded,

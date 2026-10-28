@@ -1,6 +1,7 @@
 import type { LevelData } from './types';
 import { joinSegments } from './build.ts';
 import type { Segment } from './build.ts';
+import { stageText } from '../../core/story.ts';
 
 // Monde 2 — Lune Krator : plus exigeant. Cratères, ascenseurs verticaux, mares d'acide de cristal,
 // crabes blindés dans des passages étroits, tourelles qui couvrent les sauts, ennemis par paires.
@@ -192,7 +193,7 @@ const LANDING: Segment = [
 export const MOON: LevelData = {
   id: 'moon',
   theme: 'moon',
-  name: 'Lune Krator',
+  name: stageText('m1').title,
   music: 'moon',
   map: joinSegments('moon', [
     START,

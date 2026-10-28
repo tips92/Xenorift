@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import '@fontsource/exo-2/600.css';
+import { THEME_IDS } from '../src/core/ids';
 import type { ThemeId, WeaponId } from '../src/core/types';
 import { PELLET_SPEED_JITTER, WEAPON_IDS, WEAPONS } from '../src/core/weapons';
 import { createParallax, generatePlatformArt, PLAYER_SHOULDER, type ParallaxHandle } from '../src/game2d/art';
@@ -8,16 +9,16 @@ import { ANIM, ARM_MUZZLE, ARM_RIG, ARM_TEX, BULLET_ADDITIVE, BULLET_SIZE, BULLE
 import { AIM_ANGLE, type AimDir, DEPTH, LEVEL_ROWS, TILE, VIEW_H } from '../src/game2d/constants';
 
 // Page d'aperçu du module graphique 2D (outil de développement, hors jeu).
-// Paramètres : ?theme=jungle|moon &view=world|sheet|weapons &w=1080..1600 &speed=90 &x=0 &vy=1 &regen=1 &ff=0
+// Paramètres : ?theme=jungle|moon (THEME_IDS) &view=world|sheet|weapons &w=1080..1600 &speed=90 &x=0 &vy=1 &regen=1 &ff=0
 // &z=1 (&cx, &cy) ; vue weapons : &bg=0 sans le décor du thème.
 
 const params = new URLSearchParams(location.search);
-const theme: ThemeId = params.get('theme') === 'moon' ? 'moon' : 'jungle';
+const theme: ThemeId = THEME_IDS.find((id) => id === params.get('theme')) ?? THEME_IDS[0];
 const viewParam = params.get('view');
 const view = viewParam === 'sheet' || viewParam === 'weapons' ? viewParam : 'world';
 const viewW = Math.min(1600, Math.max(1080, Number(params.get('w')) || 1280));
-/** La planche est plus haute que la vue du jeu (rangée « Kaï + bras » et portes en bas). */
-const viewH = view === 'sheet' ? 880 : VIEW_H;
+/** La planche est plus haute que la vue du jeu (rangée « Kaï + bras » et portes, puis la balise de LUMA en bas). */
+const viewH = view === 'sheet' ? 1080 : VIEW_H;
 const speed = params.has('speed') ? Number(params.get('speed')) : 90;
 const startX = Number(params.get('x')) || 0;
 const vertical = params.get('vy') === '1';
@@ -71,7 +72,7 @@ class ArtScene extends Phaser.Scene {
 
   create(): void {
     (window as unknown as { __artScene: Phaser.Scene }).__artScene = this;
-    if (regen) generatePlatformArt(this, theme === 'jungle' ? 'moon' : 'jungle');
+    if (regen) for (const other of THEME_IDS) if (other !== theme) generatePlatformArt(this, other);
     const t0 = performance.now();
     generatePlatformArt(this, theme);
     const t1 = performance.now();
@@ -253,6 +254,26 @@ class ArtScene extends Phaser.Scene {
     x = this.frames(TEX.door, 2, 998, ky - FRAME_SIZE.door.h, FRAME_SIZE.door.w, FRAME_SIZE.door.h, 'porte');
     for (let k = 0; k < 4; k++) this.add.image(x + (k % 2) * 64, ky - 128 + Math.floor(k / 2) * 64, TEX.roomWall).setOrigin(0, 0);
     this.label(x + 64, ky + 2, 'mur de salle');
+    // Balise de LUMA (sortie des niveaux 1 et 2) : frames brutes, faisceau, puis en veille et activée, Kaï dans
+    // le faisceau (comme engine/exit.ts : faisceau derrière Kaï, en mode additif, lueur au sol)
+    const by = 1060;
+    const Bc = FRAME_SIZE.beacon;
+    const Bb = FRAME_SIZE.beaconBeam;
+    x = this.frames(TEX.beacon, 4, 10, by - Bc.h, Bc.w, Bc.h, 'balise');
+    x = this.frames(TEX.beaconBeam, 2, x, by - Bb.h, Bb.w, Bb.h, 'faisceau');
+    this.animSprite(x + 40, by, TEX.beacon, ANIM.beaconIdle, 'veille');
+    const lx = x + 150;
+    this.animSprite(lx, by, TEX.beacon, ANIM.beaconOn, 'activée');
+    this.add
+      .sprite(lx, by, TEX.beaconBeam)
+      .setOrigin(0.5, 1)
+      .setDisplaySize(76, by - 880)
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setAlpha(0.9)
+      .setDepth(DEPTH.player - 1)
+      .play(ANIM.beaconBeam);
+    this.add.image(lx, by - 4, TEX.spark).setScale(6, 1.4).setTint(0x8ffcff).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.8).setDepth(DEPTH.player - 1);
+    this.kai(lx, by - 60, ANIM.playerJump, 'front');
     this.zoom();
   }
 
@@ -534,6 +555,9 @@ class ArtScene extends Phaser.Scene {
         .setOrigin(1, 0.5)
         .setDepth(DEPTH.items - 1)
         .play(ANIM.shipFlame);
+      // Balise de LUMA (1x3 tuiles, posée au bas de sa case)
+      p = at(o + 61, 11);
+      this.add.sprite(p.x, p.y, TEX.beacon).setOrigin(0.5, 1).setDepth(DEPTH.items).play(ANIM.beaconIdle);
       // Tirs laser
       for (let k = 0; k < 3; k++) {
         const l = this.add.image(at(o + 3, 10).x + 40 + k * 120, at(o + 3, 10).y - 38, TEX.laser).setDepth(DEPTH.projectiles);

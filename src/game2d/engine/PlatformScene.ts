@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
-import type { PowerUpKind, SfxId, StageResult, ToastKind, WeaponId } from '../../core/types';
+import type { BossHud, BossId, PowerUpKind, RadioId, SfxId, StageResult, ToastKind, WeaponId } from '../../core/types';
 import { isWeaponId } from '../../core/weapons';
-import { createParallax, generatePlatformArt } from '../art';
+import { createParallax, destroyArenaArt, generateArenaArt, generatePlatformArt } from '../art';
 import type { ParallaxHandle } from '../art';
 import { TILE_FRAME } from '../art/keys';
 import {
@@ -14,19 +14,24 @@ import {
   START_LIVES,
   TILE,
 } from '../constants';
+import { Arena } from './arena';
+import { bossWalkers, createBoss, destroyBossArt, generateBossArt } from './bosses';
+import type { Boss } from './bosses/types';
 import { Doors } from './doors';
 import type { DoorArrival } from './doors';
 import { EnemyManager } from './enemies';
 import { Effects } from './effects';
-import { ExitShip } from './exitShip';
+import { createExit } from './exit';
+import type { LevelExit } from './exit';
 import { HudSync } from './hudSync';
 import { Items } from './items';
-import { buildTilemap, CELL_HAZARD, CELL_ONEWAY, CELL_SOLID, Grid, parseLevel } from './mapBuilder';
-import type { GridPos, ParsedLevel } from './mapBuilder';
+import { LevelEvents } from './levelEvents';
+import { buildTilemap, CELL_HAZARD, CELL_ONEWAY, Grid, parseLevel } from './mapBuilder';
+import type { EnemySpawn, GridPos, ParsedLevel } from './mapBuilder';
 import { Movers } from './movers';
 import { Player, PLAYER_HALF_H } from './Player';
 import { ShotPool, SporePool } from './projectiles';
-import { endSession, haptic, reportError, sfx, toast } from './session';
+import { bossBar, endSession, haptic, music, radio, reportError, sfx, toast } from './session';
 import type { Session } from './session';
 import {
   BG_RGB,
@@ -39,6 +44,7 @@ import {
   HAZARD_POP_Y,
   PHYS_FPS,
   SCENE_KEY,
+  SCORE_BOSS,
   SCORE_CRYSTAL,
   SCORE_ENEMY,
   SCORE_LIFE,
@@ -74,10 +80,18 @@ export class PlatformScene extends Phaser.Scene {
   lasers!: ShotPool;
   spores!: SporePool;
   movers!: Movers;
-  ship!: ExitShip;
+  /** Sortie du niveau (Comète ou balise de LUMA) ; null pour un niveau sans sortie dans la carte. */
+  exit: LevelExit | null = null;
   gun!: Gun;
   hud!: HudSync;
   doors!: Doors;
+  /** Messages de la radio du niveau (fenêtres de colonnes, première surchauffe) ; une partie = un objet. */
+  levelEvents: LevelEvents | null = null;
+  /** Arène de boss du niveau et son boss (lu par ShotPool.probe) ; null sans arène. */
+  arena: Arena | null = null;
+  boss: Boss | null = null;
+  /** Boss vaincu pendant cette partie : prime SCORE_BOSS. */
+  bossBeaten = false;
 
   /** Horloge de jeu (ms, hors pause). */
   clockMs = 0;
@@ -110,12 +124,22 @@ export class PlatformScene extends Phaser.Scene {
   private readonly camTarget = { x: 0, y: 0 };
   /** Hauteur des pieds au dernier contact avec le sol (zone morte verticale). */
   private camGroundFeet = 0;
+  /** Cadre de départ du glissement vers l'arène (px) : la vue à la fermeture, toute la carte à l'ouverture. */
+  private camFromX = 0;
+  private camFromW = 0;
   private lastBumpAt = -1e9;
   private heatHudMs = 0;
   private crystalCombo = 0;
   private lastCrystalAt = -1e9;
   /** Arrivée d'un passage de porte (objet réutilisé, écrit par Doors.enter). */
   private readonly doorArrival: DoorArrival = { x: 0, feetY: 0 };
+  /** Textures du boss générées pour cette partie (libérées à l'arrêt de la scène). */
+  private bossArt: BossId | null = null;
+  /** Barre de boss : objet réutilisé, dernier état envoyé (vie en %). */
+  private readonly bossHud: BossHud = { name: '', life: 1, phase: 1, phases: 1 };
+  private bossHudOn = false;
+  private bossHudLife = -1;
+  private bossHudPhase = 0;
 
   constructor() {
     super({ key: SCENE_KEY });
@@ -128,6 +152,15 @@ export class PlatformScene extends Phaser.Scene {
     this.map = null;
     this.parallax = null;
     this.world = null;
+    this.exit = null;
+    this.levelEvents = null;
+    this.arena = null;
+    this.boss = null;
+    this.bossBeaten = false;
+    this.bossArt = null;
+    this.bossHudOn = false;
+    this.bossHudLife = -1;
+    this.bossHudPhase = 0;
     this.clockMs = 0;
     this.elapsedMs = 0;
     this.lives = START_LIVES;
@@ -140,6 +173,8 @@ export class PlatformScene extends Phaser.Scene {
     this.trailMs = 0;
     this.stompGraceMs = 0;
     this.camOffsetX = CAMERA_LOOKAHEAD;
+    this.camFromX = 0;
+    this.camFromW = 0;
     this.lastBumpAt = -1e9;
     this.heatHudMs = 0;
     this.crystalCombo = 0;
@@ -176,6 +211,13 @@ export class PlatformScene extends Phaser.Scene {
     const built = buildTilemap(this, p);
     this.map = built.map;
     this.layer = built.layer;
+    // Arène de boss : barrières et planches du boss générées avec le niveau (libérées dans onShutdown).
+    const bossId = p.arena && p.boss && level.boss ? level.boss : null;
+    if (bossId) {
+      generateArenaArt(this, theme);
+      generateBossArt(this, bossId, theme);
+      this.bossArt = bossId;
+    }
 
     const world = this.physics.world;
     this.world = world;
@@ -188,20 +230,32 @@ export class PlatformScene extends Phaser.Scene {
     this.items = new Items(this, p);
     // Portes : elles ne lisent this.player qu'à la mise à jour, on peut donc les créer avant lui.
     this.doors = new Doors(this, p.doors);
-    this.enemies = new EnemyManager(this, p.enemies);
-    const exit = p.exit ?? this.fallbackExit(p);
-    this.ship = new ExitShip(this, exit.col, exit.row);
+    // Renforts du boss créés dès maintenant, cachés (le collider des marcheurs est posé plus bas).
+    const reserve: EnemySpawn[] = [];
+    if (bossId && p.boss) for (let i = 0; i < bossWalkers(bossId); i++) reserve.push({ kind: 'w', col: p.boss.col, row: p.boss.row });
+    this.enemies = new EnemyManager(this, p.enemies, reserve);
+    this.exit = p.exit ? createExit(this, p.exit) : null;
+    if (bossId && p.arena && p.boss) {
+      const arena = new Arena(this, p.arena);
+      this.arena = arena;
+      this.enemies.fence(arena.outerLeft, arena.outerRight);
+      const spot = { x: p.boss.col * TILE + TILE / 2, feetY: (p.boss.row + 1) * TILE, left: arena.left, right: arena.right };
+      this.boss = createBoss(bossId, this, spot);
+    }
 
     // Équipement de la partie (hooks.loadout, fixe) : arme tenue, ses améliorations (et celles des autres
     // armes), compétence du double saut. Cœurs max : init().
     const weapon = this.loadoutWeapon(session);
-    this.respawnX = p.start.col * TILE + TILE / 2;
-    this.respawnFeetY = (p.start.row + 1) * TILE;
+    const start = this.startPoint(session, p);
+    this.respawnX = start.col * TILE + TILE / 2;
+    this.respawnFeetY = (start.row + 1) * TILE;
     this.player = new Player(this, this.respawnX, this.respawnFeetY, weapon);
     this.player.canDoubleJump = this.loadoutDoubleJump(session);
     this.lasers = new ShotPool(this);
     this.spores = new SporePool(this);
     this.gun = new Gun(this, weapon, session.hooks.loadout ? session.hooks.loadout.mods : undefined);
+    this.levelEvents = new LevelEvents(level.radio, this.sayRadio);
+    this.gun.onOverheat = this.onGunOverheat;
 
     // Collisions Arcade : uniquement le décor (le reste est géré à la main).
     this.physics.add.collider(this.player.zone, this.layer, undefined, this.processTile, this);
@@ -214,9 +268,9 @@ export class PlatformScene extends Phaser.Scene {
       this.movers.prime(1 / PHYS_FPS);
     }
 
-    // Caméra : suivi adouci, anticipation dans le sens de la course, hauteur calée sur le dernier sol.
+    // Caméra : suivi adouci, anticipation dans le sens de la course, hauteur calée sur le dernier sol. Cadre :
+    // updateCameraBounds (appelé par snapCamera).
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, p.width, p.height);
     cam.setRoundPixels(true);
     this.camOffsetX = CAMERA_LOOKAHEAD * this.player.facing;
     this.snapCamera();
@@ -257,19 +311,19 @@ export class PlatformScene extends Phaser.Scene {
     return Math.min(MAX_HEARTS_CAP, Math.max(MAX_HEARTS, Math.floor(n)));
   }
 
+  /** Départ : P, ou le dernier point de contrôle avant l'arène avec ModeHooks.startAt `boss` (?at=boss). */
+  private startPoint(session: Session, p: ParsedLevel): GridPos {
+    const at = session.hooks.startAt;
+    if (!at || at.at !== 'boss' || !p.arena) return p.start;
+    let k: GridPos | null = null;
+    for (const c of p.checkpoints) if (c.col < p.arena.col0) k = c;
+    return k ?? p.start;
+  }
+
   /** Double saut : compétence apprise (ou mode test). */
   private loadoutDoubleJump(session: Session): boolean {
     const lo = session.hooks.loadout;
     return !!(lo && lo.skills && lo.skills.doubleJump);
-  }
-
-  /** Pas de 'X' dans la carte : vaisseau posé sur le sol, près de la fin. */
-  private fallbackExit(p: ParsedLevel): GridPos {
-    const col = Math.max(0, p.cols - 5);
-    for (let row = 0; row < p.rows - 1; row++) {
-      if (this.grid.at(col, row) !== CELL_SOLID && this.grid.at(col, row + 1) === CELL_SOLID) return { col, row };
-    }
-    return { col, row: p.rows - 2 };
   }
 
   // ---------------------------------------------------------------- Boucle
@@ -311,6 +365,7 @@ export class PlatformScene extends Phaser.Scene {
     }
 
     this.updateCamera(dt);
+    this.syncBossHud(s);
     this.hud.flush();
   }
 
@@ -331,6 +386,13 @@ export class PlatformScene extends Phaser.Scene {
       this.snapCamera();
     }
     this.doors.update(dtMs, true);
+    // Radio : après les portes (une fenêtre franchie par une porte ou une téléportation est sautée).
+    if (this.levelEvents) this.levelEvents.update(p.x);
+    // Arène : Kaï entre les bornes → barrières fermées, combat.
+    const arena = this.arena;
+    const boss = this.boss;
+    if (arena && boss && arena.state === 'open' && boss.state === 'wait' && arena.holds(p)) this.startBossFight(s, arena, boss);
+    this.updateArena(dt, dtMs);
 
     this.enemies.update(dt, dtMs);
     this.lasers.update(dt);
@@ -339,8 +401,9 @@ export class PlatformScene extends Phaser.Scene {
 
     if (this.state === 'play') this.checkHeadBump();
     if (this.state === 'play') this.enemies.checkPlayer();
+    if (this.state === 'play' && boss) this.checkBoss(boss);
     if (this.state === 'play') this.checkHazards();
-    if (this.state === 'play' && this.ship.touches(p)) this.startExit();
+    if (this.state === 'play' && this.exit && this.exit.touches(p)) this.startExit();
     if (this.state === 'play' && p.top > this.parsed.height) this.onFall();
 
     if (this.state === 'play') {
@@ -366,8 +429,9 @@ export class PlatformScene extends Phaser.Scene {
     }
   }
 
-  /** Le monde continue de vivre pendant la mort / le décollage (sans ramassage). */
+  /** Le monde continue de vivre pendant la mort / la sortie (sans ramassage). */
   private updateWorld(dt: number, dtMs: number): void {
+    this.updateArena(dt, dtMs);
     this.enemies.update(dt, dtMs);
     this.lasers.update(dt);
     this.spores.update(dt);
@@ -399,9 +463,46 @@ export class PlatformScene extends Phaser.Scene {
 
   /** Recentre la caméra immédiatement (départ, réapparition, téléportation). */
   private snapCamera(): void {
+    this.updateCameraBounds();
     this.camGroundFeet = this.player.feetY;
     this.updateCamTarget();
     this.cameras.main.centerOn(this.camTarget.x, this.camTarget.y);
+  }
+
+  /**
+   * Cadre de la caméra (seul appel à setBounds) : toute la carte, ou l'arène fermée (camBlend, adouci). Une arène
+   * plus étroite que la vue est centrée (Phaser calerait la vue sur son bord gauche). Appelé par snapCamera, au
+   * redimensionnement (largeur de vue variable) et pendant le glissement du cadre depuis camFromX / camFromW (à la
+   * fermeture, la vue elle-même : elle glisse dès la première image au lieu de sauter à la fin).
+   */
+  private updateCameraBounds(): void {
+    const cam = this.cameras.main;
+    const W = this.parsed.width;
+    const H = this.parsed.height;
+    const a = this.arena;
+    const k = a ? a.camBlend : 0;
+    if (!a || k <= 0) {
+      cam.setBounds(0, 0, W, H);
+      return;
+    }
+    let x0 = a.outerLeft;
+    let w = a.outerRight - a.outerLeft;
+    if (w < cam.width) {
+      x0 = (a.outerLeft + a.outerRight - cam.width) / 2;
+      w = cam.width;
+    }
+    x0 = Math.max(0, Math.min(x0, W - w));
+    if (k < 1) {
+      x0 = this.camFromX + (x0 - this.camFromX) * k;
+      w = this.camFromW + (w - this.camFromW) * k;
+      // Vue élargie entre-temps (rotation) : cadre centré.
+      if (w < cam.width) {
+        x0 -= (cam.width - w) / 2;
+        w = cam.width;
+      }
+      x0 = Math.max(0, Math.min(x0, W - w));
+    }
+    cam.setBounds(x0, 0, w, H);
   }
 
   /** Après la synchronisation Arcade (POST_UPDATE) : visuels recalés sur les corps physiques. */
@@ -413,7 +514,7 @@ export class PlatformScene extends Phaser.Scene {
     } else if (this.state === 'exit') {
       this.player.syncArmToSprite();
     }
-    this.ship.syncFlame();
+    if (this.exit) this.exit.sync();
   }
 
   private onWorldStep(delta: number): void {
@@ -427,6 +528,7 @@ export class PlatformScene extends Phaser.Scene {
     } catch (err) {
       reportError('parallax.resize', err);
     }
+    if (this.built) this.updateCameraBounds();
   }
 
   // ---------------------------------------------------------------- Collisions Arcade
@@ -585,6 +687,7 @@ export class PlatformScene extends Phaser.Scene {
     const s = this.session;
     if (!s) return;
     this.player.teleport(this.respawnX, this.respawnFeetY);
+    this.resetBossFight(s);
     this.doors.reset();
     this.player.invulnMs = INVULNERABLE_MS;
     this.hearts = this.maxHearts;
@@ -683,16 +786,102 @@ export class PlatformScene extends Phaser.Scene {
     }
   }
 
-  // ---------------------------------------------------------------- Fin du niveau
+  // ---------------------------------------------------------------- Arène et boss
 
-  private startExit(): void {
-    if (this.state !== 'play') return;
-    this.state = 'exit';
-    this.spores.clear();
-    this.ship.launch(this.player, () => this.finishLevel());
+  private startBossFight(s: Session, arena: Arena, boss: Boss): void {
+    const cam = this.cameras.main;
+    this.camFromX = cam.scrollX;
+    this.camFromW = cam.width;
+    arena.close();
+    music(s, 'boss');
+    boss.start();
+    if (this.levelEvents) this.levelEvents.trigger('boss');
   }
 
-  /** Décollage en cours : termine le niveau sans attendre la fin de l'animation. Faux sinon. */
+  /** Barrières, cadre de la caméra et boss (aussi pendant la mort et la sortie). */
+  private updateArena(dt: number, dtMs: number): void {
+    if (this.arena && this.arena.update(dtMs)) this.updateCameraBounds();
+    if (this.boss) this.boss.update(dt, dtMs);
+  }
+
+  /** Contact avec le boss, après les ennemis : rebond par le dessus, sinon dégâts (pas juste après un rebond). */
+  private checkBoss(boss: Boss): void {
+    const p = this.player;
+    if (boss.stomp && boss.stomp(p)) return;
+    if (this.stompGraceMs > 0) return;
+    const x = boss.hurts(p);
+    if (!Number.isNaN(x)) this.damagePlayer(x, 'enemy');
+  }
+
+  /** Appelé par le boss vaincu : barrières rouvertes, renforts éclatés, musique du niveau (il s'enfuit seul). */
+  onBossBeaten(): void {
+    const s = this.session;
+    this.bossBeaten = true;
+    // Le cadre se rouvre vers toute la carte (la caméra suit Kaï à son rythme une fois libérée).
+    this.camFromX = 0;
+    this.camFromW = this.parsed.width;
+    if (this.arena) this.arena.open(true);
+    this.enemies.recall(true);
+    if (s) music(s, s.level.music);
+    if (this.boss) this.showToast(`${this.boss.name} s’enfuit !`, 'good');
+  }
+
+  /** Vie perdue pendant le combat : arène rouverte, boss remis à neuf (choix 6), renforts rangés. */
+  private resetBossFight(s: Session): void {
+    if (!this.arena || this.arena.state !== 'closed') return;
+    this.arena.reset();
+    if (this.boss) this.boss.reset();
+    this.enemies.recall(false);
+    music(s, s.level.music);
+  }
+
+  /** Aide de test (win) : combat passé, arène ouverte pour de bon, sans prime. */
+  private skipBossFight(s: Session): void {
+    const arena = this.arena;
+    if (!arena || arena.state === 'done') return;
+    const fighting = arena.state === 'closed';
+    arena.open(false);
+    if (!fighting) return;
+    if (this.boss) this.boss.reset();
+    this.enemies.recall(false);
+    music(s, s.level.music);
+  }
+
+  /** Barre de boss : affichée pendant le combat, envoyée seulement quand la vie (en %) ou la phase change. */
+  private syncBossHud(s: Session): void {
+    const b = this.boss;
+    if (!b || b.state !== 'fight' || !this.arena || this.arena.state !== 'closed') {
+      if (this.bossHudOn) {
+        this.bossHudOn = false;
+        bossBar(s, null);
+      }
+      return;
+    }
+    const life = Math.ceil((b.life / b.maxLife) * 100);
+    if (this.bossHudOn && life === this.bossHudLife && b.phase === this.bossHudPhase) return;
+    this.bossHudOn = true;
+    this.bossHudLife = life;
+    this.bossHudPhase = b.phase;
+    const h = this.bossHud;
+    h.name = b.name;
+    h.life = life / 100;
+    h.phase = b.phase;
+    h.phases = b.phases;
+    bossBar(s, h);
+  }
+
+  // ---------------------------------------------------------------- Fin du niveau
+
+  /** Kaï touche la sortie : état 'exit' le temps de sa séquence (au plus EXIT_MAX_MS), puis finishLevel. */
+  private startExit(): void {
+    const exit = this.exit;
+    if (this.state !== 'play' || !exit) return;
+    this.state = 'exit';
+    this.spores.clear();
+    exit.launch(this.player, () => this.finishLevel());
+  }
+
+  /** Sortie en cours : termine le niveau sans attendre la fin de l'animation. Faux sinon. */
   finishExitNow(): boolean {
     if (this.state !== 'exit' || !this.built) return false;
     this.finishLevel();
@@ -706,11 +895,13 @@ export class PlatformScene extends Phaser.Scene {
     const timeMs = Math.round(this.elapsedMs);
     const seconds = Math.floor(timeMs / 1000);
     const total = this.parsed.crystalsTotal;
+    const bossBonus = this.bossBeaten ? SCORE_BOSS : 0;
     const score =
       this.crystals * SCORE_CRYSTAL +
       this.enemiesKilled * SCORE_ENEMY +
       Math.max(0, TIME_BONUS_REF_S - seconds) * TIME_BONUS_PER_S +
-      this.lives * SCORE_LIFE;
+      this.lives * SCORE_LIFE +
+      bossBonus;
     const ratio = total > 0 ? this.crystals / total : 1;
     const stars: 1 | 2 | 3 = ratio >= STARS_RATIO.three ? 3 : ratio >= STARS_RATIO.two ? 2 : 1;
     const result: StageResult = {
@@ -722,6 +913,7 @@ export class PlatformScene extends Phaser.Scene {
       crystalsTotal: total,
       enemies: this.enemiesKilled,
     };
+    if (bossBonus > 0) result.bossBonus = bossBonus;
     endSession(s, () => s.hooks.onComplete(result));
   }
 
@@ -738,6 +930,14 @@ export class PlatformScene extends Phaser.Scene {
   showToast(text: string, kind?: ToastKind): void {
     if (this.session) toast(this.session, text, kind);
   }
+
+  private readonly sayRadio = (id: RadioId): void => {
+    if (this.session) radio(this.session, id);
+  };
+
+  private readonly onGunOverheat = (): void => {
+    if (this.levelEvents) this.levelEvents.trigger('overheat');
+  };
 
   // ---------------------------------------------------------------- Nettoyage / outils de test
 
@@ -759,6 +959,21 @@ export class PlatformScene extends Phaser.Scene {
     if (this.map) {
       this.map.destroy();
       this.map = null;
+    }
+    if (this.boss) {
+      this.boss.destroy();
+      this.boss = null;
+    }
+    this.arena = null;
+    // Objets d'affichage déjà détruits : seules les textures (globales) restent à libérer.
+    if (this.bossArt) {
+      try {
+        destroyBossArt(this, this.bossArt);
+        destroyArenaArt(this);
+      } catch (err) {
+        reportError('destroyBossArt', err);
+      }
+      this.bossArt = null;
     }
     this.built = false;
     this.session = null;
@@ -782,8 +997,59 @@ export class PlatformScene extends Phaser.Scene {
       god: (on = true): void => {
         this.player.god = on;
       },
+      /**
+       * Kaï posé juste avant la sortie (balise ou Comète), qui démarre aussitôt (état 'exit') ; un combat de boss
+       * est passé (arène ouverte pour de bon, sans prime).
+       */
       win: (): void => {
-        if (this.state === 'play') this.startExit();
+        const exit = this.exit;
+        const s = this.session;
+        if (this.state !== 'play' || !exit || !s) return;
+        this.skipBossFight(s);
+        this.player.teleport(exit.approachX, exit.feetY);
+        this.snapCamera();
+        this.startExit();
+      },
+      /** Boss de l'arène (null sans arène). */
+      boss: {
+        info: () => {
+          const b = this.boss;
+          const a = this.arena;
+          if (!b || !a) return null;
+          return {
+            id: b.id,
+            name: b.name,
+            state: b.state,
+            life: b.life,
+            maxLife: b.maxLife,
+            phase: b.phase,
+            phases: b.phases,
+            x: b.x,
+            y: b.y,
+            beaten: this.bossBeaten,
+            arena: { state: a.state, col0: a.col0, col1: a.col1, row: a.row, left: a.left, right: a.right, camBlend: a.camBlend },
+            ...(b.info ? b.info() : {}),
+          };
+        },
+        /** Kaï posé dans l'arène, juste après la première borne : le combat commence à l'image suivante. */
+        enter: (): void => {
+          const a = this.arena;
+          if (this.state !== 'play' || !a) return;
+          this.player.teleport(a.left + TILE, (a.row + 1) * TILE);
+          this.snapCamera();
+        },
+        /** Dégâts directs pendant le combat (où que soit le tir) ; renvoie la vie restante. */
+        hit: (n = 2): number => {
+          const b = this.boss;
+          if (!b) return -1;
+          b.takeDamage(Number(n));
+          return b.life;
+        },
+        /** Boss vaincu (comme par les tirs : fuite, barrières, prime). */
+        win: (): void => {
+          const b = this.boss;
+          if (b && b.state === 'fight') b.takeDamage(b.life);
+        },
       },
       kill: (): void => {
         if (this.state === 'play') this.killPlayer(true);

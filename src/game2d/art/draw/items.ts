@@ -1,5 +1,5 @@
 import type { ThemeId, WeaponId } from '../../../core/types';
-import { PALETTES } from '../palette';
+import { PALETTES, type ThemePalette } from '../palette';
 import {
   type Ctx,
   circle,
@@ -570,96 +570,102 @@ export function drawPuff(ctx: Ctx): void {
 
 // ---------------------------------------------------------------- Plateforme mobile (192x32)
 
-export function drawMover(ctx: Ctx, theme: ThemeId): void {
-  const pal = PALETTES[theme];
-  if (theme === 'jungle') {
-    // Dalle de pierre flottante couverte de mousse, runes lumineuses
-    const slab = new Path2D();
-    slab.moveTo(4, 6);
-    slab.lineTo(188, 6);
-    slab.quadraticCurveTo(191, 6, 190, 10);
-    slab.lineTo(184, 22);
-    slab.quadraticCurveTo(160, 30, 96, 30);
-    slab.quadraticCurveTo(32, 30, 8, 22);
-    slab.lineTo(2, 10);
-    slab.quadraticCurveTo(1, 6, 4, 6);
-    slab.closePath();
-    softDot(ctx, 40, 30, 14, pal.bioA, 0.5);
-    softDot(ctx, 152, 30, 14, pal.bioA, 0.5);
-    fillOutlined(ctx, slab, linGrad(ctx, 0, 6, 0, 30, [[0, '#5d6aa6'], [0.5, '#2e3c5e'], [1, '#141a33']]), pal.outline, 2.6);
-    rimLight(ctx, slab, 'rgba(160,190,255,0.5)', 1.6, 1.2, 1.4);
-    // Runes
-    glow(ctx, pal.bioA, 6, () => {
-      ctx.strokeStyle = pal.bioA;
-      ctx.lineWidth = 1.6;
-      for (const x of [40, 96, 152]) {
-        ctx.beginPath();
-        ctx.moveTo(x - 8, 18);
-        ctx.lineTo(x - 3, 14);
-        ctx.lineTo(x + 3, 22);
-        ctx.lineTo(x + 8, 16);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(x, 18, 2, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    });
-    // Mousse sur le dessus
-    const moss = new Path2D();
-    moss.moveTo(2, 9);
-    for (let x = 2; x <= 190; x += 4) moss.lineTo(x, 3 + Math.sin(x * 0.35) * 1.1);
-    moss.lineTo(190, 9);
-    for (let x = 190; x >= 2; x -= 6) moss.lineTo(x, 10 + Math.sin(x * 0.21 + 1) * 1.6 + (x % 36 < 6 ? 3 : 0));
-    moss.closePath();
-    glow(ctx, pal.surfaceGlow, 6, () => {
-      ctx.fillStyle = linGrad(ctx, 0, 2, 0, 13, [[0, pal.surfaceLight], [0.4, pal.surface], [1, pal.surfaceDark]]);
-      ctx.fill(moss);
-    });
-    // Racines pendantes
-    ctx.strokeStyle = pal.outline;
-    ctx.lineWidth = 2.6;
-    for (const [x, len] of [[30, 6], [118, 5], [168, 4]] as const) {
+/** Dalle de pierre flottante couverte de mousse, runes lumineuses (jungle). */
+function stoneSlab(ctx: Ctx, pal: ThemePalette): void {
+  const slab = new Path2D();
+  slab.moveTo(4, 6);
+  slab.lineTo(188, 6);
+  slab.quadraticCurveTo(191, 6, 190, 10);
+  slab.lineTo(184, 22);
+  slab.quadraticCurveTo(160, 30, 96, 30);
+  slab.quadraticCurveTo(32, 30, 8, 22);
+  slab.lineTo(2, 10);
+  slab.quadraticCurveTo(1, 6, 4, 6);
+  slab.closePath();
+  softDot(ctx, 40, 30, 14, pal.bioA, 0.5);
+  softDot(ctx, 152, 30, 14, pal.bioA, 0.5);
+  fillOutlined(ctx, slab, linGrad(ctx, 0, 6, 0, 30, [[0, '#5d6aa6'], [0.5, '#2e3c5e'], [1, '#141a33']]), pal.outline, 2.6);
+  rimLight(ctx, slab, 'rgba(160,190,255,0.5)', 1.6, 1.2, 1.4);
+  // Runes
+  glow(ctx, pal.bioA, 6, () => {
+    ctx.strokeStyle = pal.bioA;
+    ctx.lineWidth = 1.6;
+    for (const x of [40, 96, 152]) {
       ctx.beginPath();
-      ctx.moveTo(x, 27);
-      ctx.quadraticCurveTo(x + 2, 27 + len * 0.6, x - 1, 27 + len);
+      ctx.moveTo(x - 8, 18);
+      ctx.lineTo(x - 3, 14);
+      ctx.lineTo(x + 3, 22);
+      ctx.lineTo(x + 8, 16);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x, 18, 2, 0, Math.PI * 2);
       ctx.stroke();
     }
-  } else {
-    // Plateforme métallique en lévitation, feux orange
-    const body = roundRect(2, 4, 188, 18, 7);
-    softDot(ctx, 36, 28, 12, '#ff9a2e', 0.6);
-    softDot(ctx, 156, 28, 12, '#ff9a2e', 0.6);
-    for (const x of [36, 156]) {
-      fillOutlined(ctx, roundRect(x - 10, 18, 20, 9, 3), '#2a2542', pal.outline, 2);
-      glow(ctx, '#ff9a2e', 8, () => {
-        ctx.fillStyle = '#ffd27a';
-        ctx.fillRect(x - 6, 25, 12, 2);
-      });
-    }
-    fillOutlined(ctx, body, linGrad(ctx, 0, 4, 0, 22, [[0, '#e6e0f6'], [0.25, '#a59cc6'], [0.7, '#5a5278'], [1, '#2e2946']]), pal.outline, 2.6);
-    rimLight(ctx, body, 'rgba(255,255,255,0.65)', 1.4, 1, 1.2);
-    // Bande d'avertissement
-    ctx.save();
-    ctx.clip(body);
-    ctx.fillStyle = '#2a2542';
-    ctx.fillRect(2, 13, 188, 5);
-    for (let x = -4; x < 192; x += 12) {
-      ctx.fillStyle = '#ff9a2e';
-      ctx.beginPath();
-      ctx.moveTo(x, 18);
-      ctx.lineTo(x + 5, 13);
-      ctx.lineTo(x + 9, 13);
-      ctx.lineTo(x + 4, 18);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-    for (const x of [12, 180]) glowDot(ctx, x, 9, 1.6, '#ff9a2e');
-    for (const x of [60, 96, 132]) {
-      ctx.fillStyle = 'rgba(30,24,50,0.6)';
-      ctx.beginPath();
-      ctx.arc(x, 8.5, 1.4, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  });
+  // Mousse sur le dessus
+  const moss = new Path2D();
+  moss.moveTo(2, 9);
+  for (let x = 2; x <= 190; x += 4) moss.lineTo(x, 3 + Math.sin(x * 0.35) * 1.1);
+  moss.lineTo(190, 9);
+  for (let x = 190; x >= 2; x -= 6) moss.lineTo(x, 10 + Math.sin(x * 0.21 + 1) * 1.6 + (x % 36 < 6 ? 3 : 0));
+  moss.closePath();
+  glow(ctx, pal.surfaceGlow, 6, () => {
+    ctx.fillStyle = linGrad(ctx, 0, 2, 0, 13, [[0, pal.surfaceLight], [0.4, pal.surface], [1, pal.surfaceDark]]);
+    ctx.fill(moss);
+  });
+  // Racines pendantes
+  ctx.strokeStyle = pal.outline;
+  ctx.lineWidth = 2.6;
+  for (const [x, len] of [[30, 6], [118, 5], [168, 4]] as const) {
+    ctx.beginPath();
+    ctx.moveTo(x, 27);
+    ctx.quadraticCurveTo(x + 2, 27 + len * 0.6, x - 1, 27 + len);
+    ctx.stroke();
   }
+}
+
+/** Plateforme métallique en lévitation, feux orange (lune). */
+function metalLift(ctx: Ctx, pal: ThemePalette): void {
+  const body = roundRect(2, 4, 188, 18, 7);
+  softDot(ctx, 36, 28, 12, '#ff9a2e', 0.6);
+  softDot(ctx, 156, 28, 12, '#ff9a2e', 0.6);
+  for (const x of [36, 156]) {
+    fillOutlined(ctx, roundRect(x - 10, 18, 20, 9, 3), '#2a2542', pal.outline, 2);
+    glow(ctx, '#ff9a2e', 8, () => {
+      ctx.fillStyle = '#ffd27a';
+      ctx.fillRect(x - 6, 25, 12, 2);
+    });
+  }
+  fillOutlined(ctx, body, linGrad(ctx, 0, 4, 0, 22, [[0, '#e6e0f6'], [0.25, '#a59cc6'], [0.7, '#5a5278'], [1, '#2e2946']]), pal.outline, 2.6);
+  rimLight(ctx, body, 'rgba(255,255,255,0.65)', 1.4, 1, 1.2);
+  // Bande d'avertissement
+  ctx.save();
+  ctx.clip(body);
+  ctx.fillStyle = '#2a2542';
+  ctx.fillRect(2, 13, 188, 5);
+  for (let x = -4; x < 192; x += 12) {
+    ctx.fillStyle = '#ff9a2e';
+    ctx.beginPath();
+    ctx.moveTo(x, 18);
+    ctx.lineTo(x + 5, 13);
+    ctx.lineTo(x + 9, 13);
+    ctx.lineTo(x + 4, 18);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+  for (const x of [12, 180]) glowDot(ctx, x, 9, 1.6, '#ff9a2e');
+  for (const x of [60, 96, 132]) {
+    ctx.fillStyle = 'rgba(30,24,50,0.6)';
+    ctx.beginPath();
+    ctx.arc(x, 8.5, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** Plateforme mobile de chaque thème. */
+const MOVERS: Record<ThemeId, (ctx: Ctx, pal: ThemePalette) => void> = { jungle: stoneSlab, moon: metalLift };
+
+export function drawMover(ctx: Ctx, theme: ThemeId): void {
+  MOVERS[theme](ctx, PALETTES[theme]);
 }

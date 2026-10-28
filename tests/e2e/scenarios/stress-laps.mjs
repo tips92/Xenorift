@@ -1,9 +1,10 @@
-// Endurance : 3 tours complets de campagne dans la même page (choix du niveau → j1 → f1 → m1 → f2 → fin → MENU,
-// le hangar entre deux étapes), victoires par les aides DEV. À chaque étape : images/s mesurées, au plus 2 canevas
+// Endurance : 3 tours complets de campagne dans la même page (choix du niveau → première étape → … → dernière →
+// fin → MENU, le hangar entre deux étapes ; étapes lues dans __xrShell.info().stages), victoires par les aides DEV.
+// Dès le 2e tour, les Niveaux s'ouvrent sur le dernier monde : la carte de la première étape est atteinte par ◀. À chaque étape : images/s mesurées, au plus 2 canevas
 // dans #game-root (Phaser + three.js, réutilisés) dont un seul affiché. À la fin de chaque tour, sur l'accueil : tas
 // JS après ramasse-miettes et nombre de nœuds DOM ; ni l'un ni l'autre ne doit grimper d'un tour à l'autre (fuite).
 import { assert, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
-import { domNodes, gameCanvases, heapMB, measureFps, nextViaHangar, press } from '../lib/core.mjs';
+import { domNodes, gameCanvases, heapMB, measureFps, nextViaHangar, pickStage, press } from '../lib/core.mjs';
 
 export const meta = {
   title: 'Endurance : 3 tours de campagne (mémoire, images/s, canevas)',
@@ -13,12 +14,6 @@ export const meta = {
 };
 
 const LAPS = 3;
-const STAGES = [
-  ['j1', '2d'],
-  ['f1', '3d'],
-  ['m1', '2d'],
-  ['f2', '3d'],
-];
 /** Images/s minimales tolérées (iGPU lent, Chrome sans fenêtre) : en dessous, le jeu n'est plus jouable. */
 const MIN_FPS = { '2d': 20, '3d': 15 };
 /**
@@ -31,11 +26,12 @@ const NODES_SLACK = 40;
 export default async function (t) {
   await t.goto('?touch=1&unlock=1');
   await waitForScreen(t, 'title');
+  const STAGES = (await t.ev(() => window.__xrShell.info().stages)).map((s) => [s.id, s.kind === 'flight' ? '3d' : '2d']);
+  const lastId = STAGES[STAGES.length - 1][0];
   const laps = [];
   for (let lap = 1; lap <= LAPS; lap++) {
     await press(t, 'title', 'Niveaux');
-    await waitForScreen(t, 'select');
-    await t.page.locator('.screens [data-screen="select"].is-active .card').first().click();
+    await pickStage(t, STAGES[0][0]);
     const fps = {};
     for (const [id, kind] of STAGES) {
       if (kind === '2d') await waitFor2dPlay(t, { timeout: 40000 });
@@ -58,8 +54,8 @@ export default async function (t) {
       if (lap === 1 || lap === LAPS) await t.shot(`lap${lap}-${id}`);
       await t.ev((k) => (k === '2d' ? window.__xr2d.win() : window.__xr3d.win()), kind);
       await waitForScreen(t, 'results', { timeout: 30000 });
-      // Étape suivante par le hangar (plan 03) ; après f2, « Suivant » mène à la fin.
-      if (id === 'f2') await press(t, 'results', 'Suivant');
+      // Étape suivante par le hangar (plan 03) ; après la dernière, « Suivant » mène à la fin.
+      if (id === lastId) await press(t, 'results', 'Suivant');
       else await nextViaHangar(t, { timeout: 30000 });
     }
     await waitForScreen(t, 'end', { timeout: 20000 });

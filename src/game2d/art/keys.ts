@@ -48,6 +48,13 @@ export const TEX = {
   ship: 'ship',
   /** Flamme du réacteur (48x32) — 2 frames, à placer sous/derrière le vaisseau. */
   shipFlame: 'ship-flame',
+  /**
+   * Balise de LUMA = sortie des niveaux 1 et 2 d'un monde (64x160, posée au bas de sa case), identique dans tous
+   * les thèmes — frames : FRAMES.beacon (veille, activée).
+   */
+  beacon: 'beacon',
+  /** Faisceau de la balise (64x128) — 2 frames, colonne de lumière à étirer en hauteur, en mode additif. */
+  beaconBeam: 'beacon-beam',
   /** Plateforme mobile (192x32). */
   mover: 'mover',
   /** Porte (64x128 = 1x2 tuiles, posée au bas de sa case), selon le thème — frame 0 fermée, 1 ouverte. */
@@ -60,6 +67,13 @@ export const TEX = {
   spark: 'spark',
   /** Petit nuage de poussière (32x32). */
   puff: 'puff',
+  /**
+   * Barrière d'arène (64x64 par case, 7 frames : FRAMES.barrier), une texture par partie de la colonne : borne du
+   * haut, milieu, borne du bas. Générées avec l'arène (generateArenaArt), pas par generatePlatformArt.
+   */
+  barrierTop: 'w1-barrier-top',
+  barrierMid: 'w1-barrier-mid',
+  barrierBottom: 'w1-barrier-bottom',
 } as const;
 
 export const FRAME_SIZE = {
@@ -73,6 +87,8 @@ export const FRAME_SIZE = {
   crystal: { w: 32, h: 40 },
   checkpoint: { w: 48, h: 128 },
   shipFlame: { w: 48, h: 32 },
+  beacon: { w: 64, h: 160 },
+  beaconBeam: { w: 64, h: 128 },
 } as const;
 
 /** Index des frames dans chaque planche (frames numérotées 0..n de gauche à droite). */
@@ -88,6 +104,11 @@ export const FRAMES = {
   crystal: { spin: [0, 1, 2, 3, 4, 5] },
   checkpoint: { off: 0, on: [1, 2] },
   shipFlame: { burn: [0, 1] },
+  /** Balise : veille (lueur qui pulse, chevrons allumés tour à tour), activée (tout allumé, anneaux). */
+  beacon: { idle: [0, 1], on: [2, 3] },
+  beaconBeam: { flicker: [0, 1] },
+  /** Barrière : crépitement (fermée), éteinte (bornes seules), allumage, extinction ; même frame sur toute la colonne. */
+  barrier: { crackle: [0, 1, 2, 3], off: 4, close: [4, 5, 6], open: [6, 5, 4] },
 } as const;
 
 /** Clés des animations créées par le module graphique (anims.create). */
@@ -108,6 +129,9 @@ export const ANIM = {
   crystalSpin: 'crystal-spin',
   checkpointOn: 'checkpoint-on',
   shipFlame: 'ship-flame-burn',
+  beaconIdle: 'beacon-idle',
+  beaconOn: 'beacon-on',
+  beaconBeam: 'beacon-beam-flicker',
 } as const;
 
 // ---------------------------------------------------------------- Bras armé de Kaï

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Xeno Rift — aperçu des cinématiques</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #05010f;
+        overflow: hidden;
+        font-family: 'Exo 2', system-ui, sans-serif;
+      }
+      /* Comme #ui-root dans le jeu : pointer-events: none (la cinématique doit rétablir les siens). */
+      #root {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+        touch-action: manipulation;
+      }
+      #panel {
+        position: fixed;
+        left: 8px;
+        top: 8px;
+        z-index: 10;
+        width: 280px;
+        max-height: calc(100% - 140px);
+        overflow: auto;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: rgba(5, 1, 15, 0.72);
+        color: #dff8ff;
+        font: 12px/1.4 ui-monospace, Consolas, monospace;
+      }
+      #panel[hidden] {
+        display: none;
+      }
+      #panel button {
+        margin: 2px 2px 2px 0;
+        padding: 2px 6px;
+        border: 1px solid rgba(63, 247, 255, 0.5);
+        border-radius: 4px;
+        background: rgba(20, 10, 50, 0.9);
+        color: #dff8ff;
+        font: inherit;
+        cursor: pointer;
+      }
+      #panel input[type='range'] {
+        width: 100%;
+      }
+      #log {
+        margin: 4px 0 0;
+        white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Aperçu : ?cut=prologue|liberation &t=<s> &hold=1 (figé sur l'instant t) &ui=0 (sans panneau) &sound=1
+         &world=1 &guardian=Méduse-baleine &skill=DOUBLE%20SAUT -->
+    <div id="root"></div>
+    <div id="panel"></div>
+    <script type="module" src="./story.ts"></script>
+  </body>
+</html>

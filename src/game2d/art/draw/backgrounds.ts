@@ -62,7 +62,7 @@ function galaxyY(x: number): number {
 
 // ================================================================ Ciel
 
-function drawSky(pal: ThemePalette, theme: ThemeId): HTMLCanvasElement {
+function drawSky(pal: ThemePalette, st: BgStyle): HTMLCanvasElement {
   const W = BG.skyW;
   const H = BG.skyH;
   const { canvas, ctx } = makeCanvas(W * BG.skyRes, H * BG.skyRes);
@@ -74,16 +74,15 @@ function drawSky(pal: ThemePalette, theme: ThemeId): HTMLCanvasElement {
     [1, pal.horizon],
   ]);
   ctx.fillRect(0, 0, W, H);
-  const r = rng(theme === 'jungle' ? 71 : 93);
+  const r = rng(st.skySeed);
   ctx.globalCompositeOperation = 'lighter';
   // Nébuleuses
-  const neb = theme === 'jungle' ? 9 : 7;
-  for (let i = 0; i < neb; i++) {
+  for (let i = 0; i < st.nebulae; i++) {
     const x = r() * W;
     const y = 40 + r() * 220;
     const rad = 60 + r() * 120;
     const col = i % 2 === 0 ? pal.nebulaA : pal.nebulaB;
-    const a = (theme === 'jungle' ? 0.16 : 0.11) + r() * 0.08;
+    const a = st.nebulaAlpha + r() * 0.08;
     wrapX(W, x, rad, (px) => softDot(ctx, px, y, rad, col, a));
   }
   // Bande galactique
@@ -92,7 +91,7 @@ function drawSky(pal: ThemePalette, theme: ThemeId): HTMLCanvasElement {
     const y = galaxyY(x) + (r() - 0.5) * 50;
     const rad = 14 + r() * 38;
     const col = r() < 0.75 ? pal.galaxy : '#ffffff';
-    const a = (theme === 'jungle' ? 0.09 : 0.07) * (0.5 + r());
+    const a = st.galaxyAlpha * (0.5 + r());
     wrapX(W, x, rad, (px) => softDot(ctx, px, y, rad, col, a));
   }
   ctx.globalCompositeOperation = 'source-over';
@@ -106,20 +105,19 @@ function drawSky(pal: ThemePalette, theme: ThemeId): HTMLCanvasElement {
   // Lueur d'horizon
   const hz = ctx.createLinearGradient(0, H * 0.6, 0, H);
   hz.addColorStop(0, rgba(pal.horizon, 0));
-  hz.addColorStop(1, rgba(theme === 'jungle' ? '#b05ad0' : '#6a4a9a', 0.45));
+  hz.addColorStop(1, rgba(st.horizonGlow, 0.45));
   ctx.fillStyle = hz;
   ctx.fillRect(0, H * 0.6, W, H * 0.4);
   return canvas;
 }
 
-function drawStars(theme: ThemeId): HTMLCanvasElement {
+function drawStars(st: BgStyle): HTMLCanvasElement {
   const W = BG.starsW;
   const H = BG.starsH;
   const { canvas, ctx } = makeCanvas(W, H);
-  const r = rng(theme === 'jungle' ? 5 : 6);
+  const r = rng(st.starSeed);
   const cols = ['#ffffff', '#ffffff', '#cfffff', '#ffd6f4', '#fff2c0', '#c8d8ff'];
-  const count = theme === 'jungle' ? 380 : 520;
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < st.stars; i++) {
     const nearBand = i % 3 === 0;
     const x = r() * W;
     const y = nearBand ? galaxyY(x) * 2 + (r() - 0.5) * 120 : r() * H;
@@ -1102,6 +1100,75 @@ function drawComet(ctx: Ctx, w: number, h: number): void {
   ctx.fill();
 }
 
+// ================================================================ Par thème
+
+/** Arrière-plan de chaque thème (un thème oublié ici fait échouer tsc). */
+interface BgStyle {
+  /** Ciel : graine, nombre de nébuleuses, opacité de base des nébuleuses et de la bande galactique, lueur d'horizon. */
+  skySeed: number;
+  nebulae: number;
+  nebulaAlpha: number;
+  galaxyAlpha: number;
+  horizonGlow: string;
+  /** Étoiles fixes : graine et nombre. */
+  starSeed: number;
+  stars: number;
+  /** Silhouettes : lointaine (brumeuse), intermédiaire et proche. */
+  far(pal: ThemePalette): HTMLCanvasElement;
+  mid(pal: ThemePalette): HTMLCanvasElement;
+  near(pal: ThemePalette): HTMLCanvasElement;
+  /** Astres de l'atlas 'bodies' (placés par parallax.ts). */
+  bodies(pal: ThemePalette): AtlasItem[];
+  /** Créatures et effets propres au thème, ajoutés à l'atlas 'fx' (animés par parallax.ts). */
+  fx(pal: ThemePalette): AtlasItem[];
+}
+
+const BG_STYLES: Record<ThemeId, BgStyle> = {
+  jungle: {
+    skySeed: 71,
+    nebulae: 9,
+    nebulaAlpha: 0.16,
+    galaxyAlpha: 0.09,
+    horizonGlow: '#b05ad0',
+    starSeed: 5,
+    stars: 380,
+    far: jungleFar,
+    mid: jungleMid,
+    near: jungleNear,
+    bodies: () => [
+      { name: 'moonA', w: 280, h: 280, draw: (c) => planetMoon(c, 140, 140, 92, '#e6fbff', '#8ab6e0', '#2a2a7a', '#6af0ff', 11) },
+      { name: 'moonB', w: 110, h: 110, draw: (c) => planetMoon(c, 55, 55, 32, '#ffe0f6', '#d07ad0', '#4a1a5a', '#ff7ae0', 12) },
+    ],
+    fx: (pal) => [
+      { name: 'whale', w: WHALE.w, h: WHALE.h, draw: (c) => drawWhale(c, pal) },
+      { name: 'tent', w: 22, h: 22, draw: (c, w, h) => drawTentacle(c, w, h, pal) },
+      { name: 'flyer0', w: 28, h: 18, draw: (c, w, h) => drawTinyFlyer(c, w, h, true, pal) },
+      { name: 'flyer1', w: 28, h: 18, draw: (c, w, h) => drawTinyFlyer(c, w, h, false, pal) },
+    ],
+  },
+  moon: {
+    skySeed: 93,
+    nebulae: 7,
+    nebulaAlpha: 0.11,
+    galaxyAlpha: 0.07,
+    horizonGlow: '#6a4a9a',
+    starSeed: 6,
+    stars: 520,
+    far: moonFar,
+    mid: moonMid,
+    near: moonNear,
+    bodies: () => [
+      { name: 'ringed', w: 640, h: 330, draw: (c, w, h) => ringedPlanet(c, w, h) },
+      { name: 'sun', w: 160, h: 160, draw: (c, w, h) => drawSun(c, w, h) },
+    ],
+    fx: (pal) => [
+      { name: 'wormHead', w: 120, h: 110, draw: (c, w, h) => drawWormHead(c, w, h, pal) },
+      { name: 'wormSeg', w: 84, h: 84, draw: (c, w, h) => drawWormSeg(c, w, h, pal) },
+      { name: 'comet', w: 260, h: 40, draw: (c, w, h) => drawComet(c, w, h) },
+    ],
+  },
+};
+
 // ================================================================ Génération (avec cache)
 
 /** Durées de génération (ms) de la dernière création, pour le profilage sur appareil. */
@@ -1118,47 +1185,19 @@ function timed<T>(name: string, fn: () => T): T {
 export function ensureBackgroundTextures(scene: Phaser.Scene, theme: ThemeId): void {
   if (scene.textures.exists(bgKey(theme, 'fx'))) return;
   const pal = PALETTES[theme];
+  const st = BG_STYLES[theme];
   const reg = (name: string, draw: () => HTMLCanvasElement) =>
     timed(name, () => registerCanvas(scene, bgKey(theme, name), draw()));
-  reg('sky', () => drawSky(pal, theme));
-  reg('stars', () => drawStars(theme));
-  if (theme === 'jungle') {
-    reg('far', () => jungleFar(pal));
-    reg('mid', () => jungleMid(pal));
-    reg('near', () => jungleNear(pal));
-  } else {
-    reg('far', () => moonFar(pal));
-    reg('mid', () => moonMid(pal));
-    reg('near', () => moonNear(pal));
-  }
-  const bodies: AtlasItem[] =
-    theme === 'jungle'
-      ? [
-          { name: 'moonA', w: 280, h: 280, draw: (c) => planetMoon(c, 140, 140, 92, '#e6fbff', '#8ab6e0', '#2a2a7a', '#6af0ff', 11) },
-          { name: 'moonB', w: 110, h: 110, draw: (c) => planetMoon(c, 55, 55, 32, '#ffe0f6', '#d07ad0', '#4a1a5a', '#ff7ae0', 12) },
-        ]
-      : [
-          { name: 'ringed', w: 640, h: 330, draw: (c, w, h) => ringedPlanet(c, w, h) },
-          { name: 'sun', w: 160, h: 160, draw: (c, w, h) => drawSun(c, w, h) },
-        ];
-  timed('bodies', () => buildAtlas(scene, bgKey(theme, 'bodies'), bodies, 1024));
+  reg('sky', () => drawSky(pal, st));
+  reg('stars', () => drawStars(st));
+  reg('far', () => st.far(pal));
+  reg('mid', () => st.mid(pal));
+  reg('near', () => st.near(pal));
+  timed('bodies', () => buildAtlas(scene, bgKey(theme, 'bodies'), st.bodies(pal), 1024));
   const fx: AtlasItem[] = [
     { name: 'twinkle', w: 24, h: 24, draw: (c, w, h) => drawTwinkle(c, w, h) },
     { name: 'dust', w: 64, h: 64, draw: (c, w, h) => drawDust(c, w, h) },
+    ...st.fx(pal),
   ];
-  if (theme === 'jungle') {
-    fx.push(
-      { name: 'whale', w: WHALE.w, h: WHALE.h, draw: (c) => drawWhale(c, pal) },
-      { name: 'tent', w: 22, h: 22, draw: (c, w, h) => drawTentacle(c, w, h, pal) },
-      { name: 'flyer0', w: 28, h: 18, draw: (c, w, h) => drawTinyFlyer(c, w, h, true, pal) },
-      { name: 'flyer1', w: 28, h: 18, draw: (c, w, h) => drawTinyFlyer(c, w, h, false, pal) },
-    );
-  } else {
-    fx.push(
-      { name: 'wormHead', w: 120, h: 110, draw: (c, w, h) => drawWormHead(c, w, h, pal) },
-      { name: 'wormSeg', w: 84, h: 84, draw: (c, w, h) => drawWormSeg(c, w, h, pal) },
-      { name: 'comet', w: 260, h: 40, draw: (c, w, h) => drawComet(c, w, h) },
-    );
-  }
   timed('fx', () => buildAtlas(scene, bgKey(theme, 'fx'), fx, 1024));
 }

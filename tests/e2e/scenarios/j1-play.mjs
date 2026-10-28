@@ -1,5 +1,7 @@
 // Plateforme 2D, Jungle (j1) lancée par ?stage=j1 : course à droite, saut (monte puis retombe),
-// tir laser, pause par Échap (overlay ouvert, Kaï figé), reprise, victoire (__xr2d.win) → écran de résultats.
+// tir laser, pause par Échap (overlay ouvert, Kaï figé), reprise, victoire (__xr2d.win : combat du Blob-roi passé,
+// balise de LUMA activée, état exit, Kaï emporté par le faisceau, son, sortie en 2,6 s au plus) → écran de résultats
+// sans prime de boss.
 import {
   assert,
   assertEq,
@@ -117,15 +119,73 @@ export default async function (t) {
   const xr2 = (await player2d(t)).x;
   assert(xr2 > xr + 30, `après reprise, flèche droite : x doit augmenter (${Math.round(xr)} -> ${Math.round(xr2)})`);
 
-  // --- Victoire : décollage du vaisseau puis écran de résultats, progression sauvegardée
-  await t.ev(() => window.__xr2d.win());
-  await waitFor(t, () => !window.__xr2d || window.__xr2d.scene.state !== 'play', { timeout: 5000, label: 'sortie de la phase play' });
+  // --- Victoire : win() pose Kaï devant la balise de LUMA, qui s'active aussitôt (état exit) ; le faisceau
+  // l'emporte vers le haut et la sortie se termine en 2,6 s de jeu au plus (horloge de la scène, celle des délais
+  // de la séquence : sondée par un minuteur posé juste avant). Relevé image par image dans la page
+  // (window.__exitRun) ; son « beacon » noté en enveloppant l'audio ; capture pendant le faisceau.
+  const begin = await t.ev(() => {
+    const s = window.__xr2d.scene;
+    const a = window.__xrShell.audio;
+    const sfx = [];
+    const orig = a.sfx;
+    a.sfx = function (id, opts) {
+      sfx.push(id);
+      return orig.call(this, id, opts);
+    };
+    const probe = s.time.addEvent({ delay: 1e9 });
+    window.__xr2d.win();
+    const e = s.exit;
+    const r = {
+      kind: e && e.kind,
+      state: s.state,
+      launched: !!(e && e.launched),
+      placed: !!e && Math.abs(s.player.x - e.approachX) < 1 && Math.abs(s.player.feetY - e.feetY) < 1,
+      // Le combat du Blob-roi est passé : arène ouverte pour de bon, boss resté en attente, sans prime.
+      arena: s.arena && s.arena.state,
+      boss: s.boss && s.boss.state,
+    };
+    const feet0 = s.player.sprite.y;
+    let rise = 0;
+    const real0 = performance.now();
+    window.__exitRun = null;
+    const tick = () => {
+      const spr = s.player.sprite;
+      if (spr.visible) rise = Math.max(rise, feet0 - spr.y);
+      if (s.state === 'exit' && performance.now() - real0 < 15000) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      a.sfx = orig;
+      window.__exitRun = { end: s.state, ms: Math.round(probe.getElapsed()), rise: Math.round(rise), hidden: !spr.visible, sfx };
+    };
+    requestAnimationFrame(tick);
+    return r;
+  });
+  assertEq(
+    begin,
+    { kind: 'beacon', state: 'exit', launched: true, placed: true, arena: 'done', boss: 'wait' },
+    'win() : combat du boss passé, Kaï posé devant la balise de LUMA, activée aussitôt (état exit)',
+  );
+  await t.wait(650);
+  await t.shot('beacon-beam');
+  const exit = await waitFor(t, () => window.__exitRun || false, { timeout: 20000, label: 'fin de la sortie (relevé dans la page)' });
+  t.log('sortie', JSON.stringify(exit));
+  assert(exit.end === 'over' && exit.ms <= 2620, `sortie terminée (état over) en 2,6 s de jeu au plus : ${exit.end}, ${exit.ms} ms`);
+  assert(exit.rise > 300 && exit.hidden, `Kaï emporté vers le haut puis masqué (montée ${exit.rise} px, masqué : ${exit.hidden})`);
+  assert(exit.sfx.includes('beacon'), `son de la balise attendu (sons : ${exit.sfx.join(', ')})`);
   await waitForScreen(t, 'results', { timeout: 25000 });
   const text = await screenText(t, 'results');
   t.log('résultats', text.slice(0, 120));
   assert(/NIVEAU TERMIN/i.test(text), `écran de résultats attendu (texte : ${text.slice(0, 160)})`);
+  assert(!(await t.ev(() => document.querySelector('.screens [data-screen="results"].is-active .results-bonus'))), 'combat passé par win() : pas de prime de boss');
   await t.shot('results');
   const save = await readSave(t);
   assert(save && save.best && save.best.j1, `record de j1 sauvegardé (sauvegarde : ${JSON.stringify(save)})`);
-  assertEq(save.unlocked >= 1, true, 'étape suivante débloquée après la victoire');
+  // Mode test (?unlock=1) : tout est ouvert ; l'étape réussie se lit dans `cleared`.
+  const prog = await t.ev(() => window.__xrShell.info().stages.slice(0, 2));
+  assertEq(
+    prog.map((s) => [s.id, s.cleared, s.unlocked]),
+    [['j1', true, true], ['f1', false, true]],
+    'j1 réussie, f1 non réussie (ouverte par le mode test)',
+  );
 }

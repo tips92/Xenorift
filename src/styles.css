@@ -989,12 +989,130 @@ svg {
   display: flex;
 }
 
+/* Barre du monde affiché : ◀, nom et étoiles du monde, ▶ (désactivés au bout). */
+.select-bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2vw, 18px);
+}
+
+.select-bar.is-single .select-arrow {
+  visibility: hidden;
+}
+
+.select-arrow {
+  flex: 0 0 auto;
+  width: clamp(34px, 11vh, 42px);
+  height: clamp(34px, 11vh, 42px);
+}
+
+.select-arrow .ico {
+  width: 20px;
+  height: 20px;
+}
+
+.select-next .ico {
+  transform: scaleX(-1);
+}
+
+.select-arrow:disabled {
+  opacity: 0.25;
+  box-shadow: none;
+  cursor: default;
+}
+
+/* Largeur fixe : les flèches ne bougent pas d'un monde à l'autre. */
+.select-world {
+  display: flex;
+  flex: 0 1 400px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.select-world-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 800 clamp(11px, 3.6vh, 15px) / 1.2 var(--font-title);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.select-world-stars {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ffe7a0;
+  font: 800 clamp(11px, 3.4vh, 14px) / 1 var(--font-title);
+  white-space: nowrap;
+}
+
+.select-world-stars .star {
+  width: 16px;
+  height: 16px;
+}
+
+/* Pages : une par monde, côte à côte dans une bande décalée de -100 % par page. Seule la page courante est
+   visible (les autres le restent pendant un glissement et le temps de sortir) ; pan-y : le navigateur laisse
+   les glissements horizontaux au jeu. */
+.select-pages {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: clip;
+  touch-action: pan-y;
+}
+
+.select-track {
+  display: flex;
+  flex: 0 0 100%;
+  min-width: 0;
+  transition: transform 340ms var(--ease-out);
+}
+
+.select-track.is-instant,
+.select-track.is-dragging {
+  transition: none;
+}
+
+.select-page {
+  display: flex;
+  flex: 0 0 100%;
+  min-width: 0;
+  visibility: hidden;
+  transition: visibility 0s linear 360ms;
+}
+
+.select-page.is-current,
+.select-track.is-dragging .select-page {
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+.select-page .card {
+  touch-action: pan-y;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .select-track {
+    transition: none;
+  }
+}
+
+/* --cols : cartes de la page (4 au plus) ; moins de 4 : mêmes largeurs qu'à 4, rangée centrée. */
 .cards {
+  --gap: clamp(8px, 1.6vw, 18px);
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(8px, 1.6vw, 18px);
-  width: 100%;
-  max-width: 1000px;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  gap: var(--gap);
+  width: calc((100% + var(--gap)) * var(--cols, 4) / 4 - var(--gap));
+  max-width: calc((1000px + var(--gap)) * var(--cols, 4) / 4 - var(--gap));
   margin: auto;
   padding: 4px 2px 8px;
 }
@@ -1191,6 +1309,8 @@ svg {
 @media (max-width: 560px) {
   .cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    max-width: 1000px;
   }
 }
 
@@ -1884,6 +2004,31 @@ svg {
   height: 18px;
 }
 
+/* Prime du boss vaincu, sous le score (comprise dedans) : doré, comme les récompenses. */
+.results-bonus {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border: 1px solid rgba(255, 216, 74, 0.38);
+  border-radius: 999px;
+  background: rgba(255, 216, 74, 0.08);
+  font: 600 clamp(11px, 3.4vh, 14px) / 1.1 var(--font-body);
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+
+.results-bonus .ico {
+  width: 16px;
+  height: 16px;
+  color: #ffd84a;
+}
+
+.results-bonus-value {
+  font: 800 clamp(12px, 3.6vh, 15px) / 1.1 var(--font-title);
+  color: #ffe7a0;
+}
+
 .results-details {
   display: flex;
   flex-direction: column;
@@ -1936,6 +2081,20 @@ svg {
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: #d8feff;
+}
+
+/* Récompense de l'étape (compétence, équipière, plan) : doré, comme les étoiles. */
+.detail--reward {
+  border-color: rgba(255, 216, 74, 0.38);
+  background: rgba(255, 216, 74, 0.08);
+}
+
+.detail--reward .detail-ico {
+  color: #ffd84a;
+}
+
+.detail--reward .detail-value {
+  color: #ffe7a0;
 }
 
 .detail-gain {
@@ -3834,6 +3993,121 @@ svg {
   font-size: 15px;
 }
 
+/* ---- Radio de LUMA (ui/radio.ts ; bulle : story/bubble.ts et story/styles.ts) : en haut à gauche, sous la
+   pastille des stats, à gauche des bonus quand ils passent dessous (petits écrans, 5 cœurs) ; jamais cliquable. */
+
+.hud .xr-bubble--radio {
+  top: calc(var(--hud-top) + 54px);
+  left: var(--hud-left);
+  max-width: min(440px, 52vw);
+}
+
+/* Bulle affichée (--radio-h : sa hauteur, posée par hud.ts) : les messages, centrés, passent dessous, un seul à la
+   fois (hud.ts) pour rester au-dessus de Kaï ; ils glissent (transition de .toasts) quand elle paraît ou se cache. */
+.toasts.is-below-radio {
+  top: max(26%, calc(var(--hud-top) + 54px + var(--radio-h, 0px) + 10px));
+}
+
+/* ---- Barre de boss (hud.ts, 2D et vol) : en bas au centre, sur le sol, entre le stick et les boutons (le haut
+   est pris par les stats, la jauge, le chrono, la bulle de LUMA et les messages) ; jamais cliquable. */
+
+.hud-boss {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--sab) + 10px);
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  width: clamp(180px, 38vw, 420px);
+  margin: 0 auto;
+  padding: 5px 12px 7px;
+  border: 1px solid rgba(255, 63, 210, 0.5);
+  border-radius: 12px;
+  background: var(--chip);
+  box-shadow:
+    0 4px 14px rgba(0, 0, 0, 0.35),
+    0 0 14px rgba(255, 63, 210, 0.22);
+}
+
+.hud-boss.is-on {
+  display: flex;
+  animation: boss-in 320ms var(--ease-out) both;
+}
+
+@keyframes boss-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+}
+
+.boss-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.boss-name {
+  overflow: hidden;
+  font: 800 12px / 1 var(--font-title);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: #ffd2f5;
+  text-shadow: 0 0 8px rgba(255, 63, 210, 0.85);
+}
+
+.boss-phase {
+  flex: none;
+  font: 500 10px / 1 var(--font-title);
+  letter-spacing: 0.1em;
+  color: var(--ink-dim);
+}
+
+.boss-track {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #0d0626;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.boss-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, #a0107a, #ff3fd2 55%, #ff9ae8);
+  box-shadow: 0 0 8px rgba(255, 63, 210, 0.6);
+  transform-origin: left center;
+  transition: transform 160ms ease-out;
+}
+
+/* Phase 2 et suivantes : la barre vire à l'acide (le boss enrage). */
+.hud-boss[data-phase='2'] .boss-fill,
+.hud-boss[data-phase='3'] .boss-fill {
+  background: linear-gradient(90deg, #ff3f5e, #ff9a3f 55%, #ffe680);
+}
+
+.boss-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(5, 1, 15, 0.9);
+}
+
+.boss-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+}
+
 /* ---- Messages (toasts) */
 
 /* Sous la pause (30) : les messages du jeu (« Vitesse ! »…) ne cachent pas le panneau. */
@@ -3849,6 +4123,7 @@ svg {
   gap: 8px;
   padding: 0 calc(var(--sar) + 16px) 0 calc(var(--sal) + 16px);
   pointer-events: none;
+  transition: top var(--t-screen) var(--ease-out);
 }
 
 .toast {

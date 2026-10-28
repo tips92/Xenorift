@@ -65,6 +65,14 @@ export function createSafeAudio(make: () => AudioApi): AudioApi {
         warn('audio.music', err);
       }
     },
+    musicLevel(n: number): void {
+      if (!a) return;
+      try {
+        a.musicLevel(n);
+      } catch (err) {
+        warn('audio.musicLevel', err);
+      }
+    },
     setMusicEnabled(on: boolean): void {
       if (!a) return;
       try {

@@ -1,52 +1,38 @@
 import type { StageDef } from './types';
+import { stageSubtitle, stageText } from './story.ts';
+import { WORLDS, type WorldDef } from './worlds.ts';
 
-/** La campagne de la démo : 2 niveaux de plateforme, chacun suivi d'un vol spatial. */
-export const STAGES: readonly StageDef[] = [
-  {
-    id: 'j1',
-    index: 0,
-    kind: 'platform',
-    world: 1,
-    title: 'Jungle de Xéna',
-    subtitle: 'Monde 1 — Planète Xéna',
-    hint: 'Saute sur les ennemis ou tire-leur dessus, puis rejoins ton vaisseau !',
-    levelId: 'jungle',
-    theme: 'jungle',
-  },
-  {
-    id: 'f1',
-    index: 1,
-    kind: 'flight',
-    world: 1,
-    title: "Nébuleuse d'Azur",
-    subtitle: 'Vol 1 — Cap sur la lune Krator',
-    hint: 'Traverse les portails et évite les astéroïdes !',
-    levelId: 'nebula',
-    theme: 'jungle',
-  },
-  {
-    id: 'm1',
-    index: 2,
-    kind: 'platform',
-    world: 2,
-    title: 'Lune Krator',
-    subtitle: 'Monde 2 — Lune de cristal',
-    hint: 'Les crabes blindés ne craignent que tes tirs. Attention aux trous !',
-    levelId: 'moon',
-    theme: 'moon',
-  },
-  {
-    id: 'f2',
-    index: 3,
-    kind: 'flight',
-    world: 2,
-    title: "Ceinture d'Orak",
-    subtitle: 'Vol 2 — Le grand saut',
-    hint: 'Champ d’astéroïdes dense : utilise le turbo avec prudence !',
-    levelId: 'asteroids',
-    theme: 'moon',
-  },
-];
+// La campagne : les étapes de WORLDS mises bout à bout (index séquentiel, textes de core/story.ts).
+// Lisible par Node : imports de valeurs avec l'extension .ts.
+
+function buildStages(): StageDef[] {
+  const out: StageDef[] = [];
+  WORLDS.forEach((w, wi) => {
+    for (const s of w.stages) {
+      const text = stageText(s.id);
+      const stage: StageDef = {
+        id: s.id,
+        index: out.length,
+        kind: s.part === 4 ? 'flight' : 'platform',
+        world: wi + 1,
+        part: s.part,
+        title: text.title,
+        subtitle: stageSubtitle(wi + 1, s.part),
+        hint: text.hint,
+        levelId: s.levelId,
+        theme: w.theme,
+        rewards: s.rewards ?? [],
+      };
+      if (s.before) stage.before = s.before;
+      if (s.after) stage.after = s.after;
+      if (s.boss) stage.boss = s.boss;
+      out.push(stage);
+    }
+  });
+  return out;
+}
+
+export const STAGES: readonly StageDef[] = buildStages();
 
 export function getStage(id: string): StageDef | undefined {
   return STAGES.find((s) => s.id === id);
@@ -54,4 +40,9 @@ export function getStage(id: string): StageDef | undefined {
 
 export function nextStage(stage: StageDef): StageDef | undefined {
   return STAGES[stage.index + 1];
+}
+
+/** Monde d'une étape. */
+export function stageWorld(stage: StageDef): WorldDef {
+  return WORLDS[stage.world - 1];
 }

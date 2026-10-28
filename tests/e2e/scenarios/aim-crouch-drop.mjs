@@ -368,7 +368,9 @@ async function jungle(t) {
   const tc = Date.now();
   while (!stood && Date.now() - tc < 4000) {
     const s = await kai2d(t);
-    if (s.x + HALF_W > ceilL && s.x - HALF_W < ceilR) {
+    // Marge d'1 px comme Player.canStand (bords du corps rentrés d'1 px) : relevé à moins d'1 px du bord, Kaï
+    // peut déjà être debout.
+    if (s.x + HALF_W - 1 > ceilL && s.x - HALF_W + 1 < ceilR) {
       under++;
       assert(s.crouching && s.h === CROUCH_H, `plafond bas : Kaï accroupi tant qu'il est dessous (${fmt(s)}, plafond ${ceilL}-${ceilR})`);
     } else if (!s.crouching && s.h === STAND_H) {

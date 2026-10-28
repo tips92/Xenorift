@@ -14,10 +14,16 @@ export const CELL_HAZARD = 3;
 
 export type EnemyKind = 'w' | 'f' | 'a' | 'p';
 export type BonusContent = 'crystal' | PowerUpKind;
+/** Sortie du niveau : la Comète ('X') ou la balise de LUMA ('L'). */
+export type ExitKind = 'ship' | 'beacon';
 
 export interface GridPos {
   col: number;
   row: number;
+}
+
+export interface ExitSpot extends GridPos {
+  kind: ExitKind;
 }
 
 export interface EnemySpawn extends GridPos {
@@ -26,6 +32,13 @@ export interface EnemySpawn extends GridPos {
 
 export interface MoverSpawn extends GridPos {
   vertical: boolean;
+}
+
+/** Arène de boss : colonnes des deux bornes '|' (col0 < col1) et leur ligne (le sol est la ligne suivante). */
+export interface ArenaSpot {
+  col0: number;
+  col1: number;
+  row: number;
 }
 
 export interface ParsedLevel {
@@ -51,7 +64,12 @@ export interface ParsedLevel {
   doors: GridPos[];
   /** Cases non pleines d'une salle close (aucun passage vers le bord de la carte) : mur de fond dessiné derrière. */
   enclosed: GridPos[];
-  exit: GridPos | null;
+  /** Sortie ('X' ou 'L', la première lue) ; null pour un niveau qui se termine autrement (gardien). */
+  exit: ExitSpot | null;
+  /** Arène (les deux premières bornes '|' par colonne) ; null sans arène. */
+  arena: ArenaSpot | null;
+  /** Case du boss ('M', la première lue). */
+  boss: GridPos | null;
   /** Cristaux posés + blocs « ? ». */
   crystalsTotal: number;
 }
@@ -92,8 +110,10 @@ export function parseLevel(level: LevelData): ParsedLevel {
   const checkpoints: GridPos[] = [];
   const movers: MoverSpawn[] = [];
   const doors: GridPos[] = [];
+  const bounds: GridPos[] = [];
   let start: GridPos | null = null;
-  let exit: GridPos | null = null;
+  let exit: ExitSpot | null = null;
+  let boss: GridPos | null = null;
   let bonusCrystals = 0;
 
   for (let row = 0; row < rows; row++) {
@@ -168,7 +188,8 @@ export function parseLevel(level: LevelData): ParsedLevel {
           checkpoints.push({ col, row });
           break;
         case 'X':
-          if (!exit) exit = { col, row };
+        case 'L':
+          if (!exit) exit = { col, row, kind: ch === 'X' ? 'ship' : 'beacon' };
           break;
         case 'm':
         case 'v':
@@ -179,6 +200,13 @@ export function parseLevel(level: LevelData): ParsedLevel {
         case 'D':
           // Décor non solide (sprite à part) ; la case du dessus fait partie de la porte.
           doors.push({ col, row });
+          break;
+        case '|':
+          // Vide tant que l'arène est ouverte (engine/arena.ts pose les barrières).
+          bounds.push({ col, row });
+          break;
+        case 'M':
+          if (!boss) boss = { col, row };
           break;
         default:
           break;
@@ -195,6 +223,8 @@ export function parseLevel(level: LevelData): ParsedLevel {
   checkpoints.sort((a, b) => a.col - b.col);
   // Lecture ligne par ligne : on remet les portes dans l'ordre des paires (colonne, puis ligne).
   doors.sort((a, b) => a.col - b.col || a.row - b.row);
+  bounds.sort((a, b) => a.col - b.col);
+  const arena: ArenaSpot | null = bounds.length >= 2 ? { col0: bounds[0].col, col1: bounds[1].col, row: bounds[0].row } : null;
 
   return {
     cols,
@@ -213,6 +243,8 @@ export function parseLevel(level: LevelData): ParsedLevel {
     doors,
     enclosed: enclosedCells(cols, rows, cells),
     exit,
+    arena,
+    boss,
     crystalsTotal: crystals.length + bonusCrystals,
   };
 }

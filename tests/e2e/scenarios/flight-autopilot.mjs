@@ -3,7 +3,7 @@
 // Chaque vol : aucun portail manqué, ni explosion ni temps écoulé, distorsion puis « VOL RÉUSSI » avec
 // 16/16 (puis 22/22). Le renderer three.js est réutilisé : un seul canevas 3D dans la page à la fin.
 import { assert, assertEq, screenText, waitFor, waitForScreen } from '../lib/helpers.mjs';
-import { gameCanvases, hudFlight, press, resultDetails } from '../lib/core.mjs';
+import { gameCanvases, hudFlight, pickStage, press, resultDetails } from '../lib/core.mjs';
 
 export const meta = {
   title: 'Vols complets au pilote automatique : f1 (16/16) et f2 (22/22)',
@@ -89,8 +89,7 @@ export default async function (t) {
   await press(t, 'results', 'Menu');
   await waitForScreen(t, 'title');
   await t.page.locator('.screens [data-screen="title"].is-active button', { hasText: 'Niveaux' }).click();
-  await waitForScreen(t, 'select');
-  await t.page.locator('.screens [data-screen="select"].is-active .card').nth(3).click();
+  await pickStage(t, 'f2');
   await autoFlight(t, 'f2', 22);
   await assertOneThreeCanvas(t, 'après f2');
 }

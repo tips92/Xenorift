@@ -1,8 +1,9 @@
 // Jungle 2D (j1) : contexte WebGL perdu pour de bon ET création de nouveaux contextes WebGL refusée
 // (getContext('webgl…') renvoie null pour tout nouveau canvas, comme un GPU bloqué après des pertes répétées).
 // Échec « Liaison graphique perdue » -> RÉESSAYER -> le jeu repart en rendu Canvas 2D (Renderer.type 1),
-// s'affiche et répond. WebGL de nouveau disponible -> RECOMMENCER retente WebGL (Renderer.type 2).
-import { assert, fmt } from '../lib/helpers.mjs';
+// s'affiche et répond ; l'arène du Blob-roi s'y affiche aussi (barrières, boss, barre, clignotement de dégât sans
+// teinte). WebGL de nouveau disponible -> RECOMMENCER retente WebGL (Renderer.type 2).
+import { assert, fmt, waitFor } from '../lib/helpers.mjs';
 import {
   CANVAS,
   LOST_REASON,
@@ -76,6 +77,33 @@ export default async function (t) {
   await assertRenders(t, 'rendu Canvas de secours', ref);
   await assertPlays(t, 'rendu Canvas de secours');
   await t.shot('canvas-fallback');
+
+  // Arène du Blob-roi en rendu Canvas : barrières, boss, barre, et clignotement de dégât (copie additive du sprite :
+  // setTintFill est sans effet en Canvas), figé le temps de la capture.
+  await t.ev(() => window.__xr2d.boss.enter());
+  await waitFor(t, () => {
+    const i = window.__xr2d.boss.info();
+    return !!i && i.state === 'fight' && i.arena.state === 'closed';
+  }, { timeout: 5000, label: 'Canvas : combat commencé (barrières fermées)' });
+  await t.wait(1200);
+  const hit = await t.ev(
+    () =>
+      new Promise((done) => {
+        window.__xr2d.boss.hit(2);
+        // Une image dessinée avec la copie additive, puis la scène figée.
+        requestAnimationFrame(() => {
+          window.__xr2d.scene.scene.pause();
+          done(window.__xr2d.boss.info());
+        });
+      }),
+  );
+  assert(hit.flashing && hit.life === 22, `Canvas : boss touché, clignotement visible (${fmt(hit)})`);
+  await t.shot('canvas-boss-flash');
+  await t.ev(() => window.__xr2d.scene.scene.resume());
+  await waitFor(t, () => !window.__xr2d.boss.info().flashing, { timeout: 2000, label: 'Canvas : fin du clignotement' });
+  await assertRenders(t, 'Canvas : arène du boss');
+  assert(!!(await t.ev(() => document.querySelector('.hud-boss.is-on'))), 'Canvas : barre de boss affichée');
+  await t.shot('canvas-arena');
 
   // WebGL de nouveau disponible : le lancement suivant (RECOMMENCER) quitte le secours et retente WebGL.
   await t.ev(() => {

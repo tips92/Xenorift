@@ -1,12 +1,15 @@
-import type { StageDef, StageResult } from '../../core/types';
+import { CREW } from '../../core/hangar';
+import { SKILL_NAMES } from '../../core/story';
+import type { CrewId, SkillId, StageDef, StageResult, StageReward } from '../../core/types';
+import { WEAPONS } from '../../core/weapons';
 import { clamp, div, el, formatDuration, formatNumber, icon } from '../dom';
-import { ICONS } from '../icons';
+import { ICONS, weaponIcon } from '../icons';
 import type { UiCtx } from '../services';
 import { button, screenRoot, starRow, type Screen } from './common';
 import { crystalsText } from './select';
 
 // Résultats d'une étape réussie : score qui défile, étoiles qui apparaissent une à une,
-// détails, réserve de cristaux, record. Toucher le panneau termine les animations.
+// détails, réserve de cristaux, récompenses nouvelles, record. Toucher le panneau termine les animations.
 
 export interface ResultsData {
   stage: StageDef;
@@ -19,6 +22,8 @@ export interface ResultsData {
   crystalsGained: number;
   /** Réserve après l'ajout (au retour du hangar : réserve actuelle, achats déduits). */
   crystals: number;
+  /** Récompenses obtenues par cette réussite (recordResult : les nouvelles seulement). */
+  rewards: readonly StageReward[];
   /** Retour du hangar : valeurs finales tout de suite, sans animation ni son. */
   settled?: boolean;
 }
@@ -29,10 +34,26 @@ export interface ResultsActions {
   menu(): void;
 }
 
-function detailRow(list: HTMLElement, svg: string, label: string, value: string): void {
+function detailRow(list: HTMLElement, svg: string, label: string, value: string): HTMLElement {
   const row = div('detail');
   row.append(icon(svg, 'ico detail-ico'), el('span', 'detail-label', label), el('b', 'detail-value', value));
   list.append(row);
+  return row;
+}
+
+const SKILL_ICONS: Record<SkillId, string> = { doubleJump: ICONS.doublejump };
+const CREW_LABELS: Record<CrewId, string> = { tess: 'Équipière', mira: 'Équipière' };
+
+/** Ligne d'une récompense : « Compétence : double saut », « Équipière : Tess », « Plan : mitrailleur ». */
+function rewardLine(r: StageReward): { svg: string; label: string; value: string } {
+  switch (r.kind) {
+    case 'skill':
+      return { svg: SKILL_ICONS[r.id], label: 'Compétence', value: SKILL_NAMES[r.id] };
+    case 'crew':
+      return { svg: ICONS.helmet, label: CREW_LABELS[r.id], value: CREW[r.id].name };
+    case 'blueprint':
+      return { svg: weaponIcon(r.id), label: 'Plan', value: WEAPONS[r.id].name.toLocaleLowerCase('fr-FR') };
+  }
 }
 
 export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsActions): Screen {
@@ -61,7 +82,14 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
   } else {
     record.append(el('span', '', `Record : ${formatNumber(d.best)}`));
   }
-  main.append(starsEl, scoreBox, record);
+  main.append(starsEl, scoreBox);
+  // Prime du boss vaincu (comprise dans le score), sous le score : la colonne des détails reste à 4 lignes.
+  if (stage.kind === 'platform' && result.bossBonus) {
+    const bonus = div('results-bonus');
+    bonus.append(icon(ICONS.trophy, 'ico'), el('span', 'results-bonus-label', 'Boss vaincu'), el('b', 'results-bonus-value', `+${formatNumber(result.bossBonus)}`));
+    main.append(bonus);
+  }
+  main.append(record);
 
   // ---- Colonne détails, puis rangée d'actions sous les deux colonnes
   const side = div('results-side');
@@ -94,6 +122,13 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
   if (showGain && gained > 0) bank.append(el('span', 'detail-gain', `+${crystalsText(gained)}`));
   bank.append(bankN);
   details.append(bank);
+  for (const r of d.rewards) {
+    const line = rewardLine(r);
+    const row = detailRow(details, line.svg, line.label, line.value);
+    row.classList.add('detail--reward');
+    row.dataset.reward = `${r.kind}:${r.id}`;
+    row.setAttribute('aria-label', `${line.label} : ${line.value}`);
+  }
 
   const actions = div('results-actions');
   actions.append(

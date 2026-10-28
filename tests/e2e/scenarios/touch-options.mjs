@@ -1,6 +1,6 @@
 // Rubrique « Commandes » des Options (réglages des commandes tactiles) :
-//  - ancienne sauvegarde v1 sans ces réglages : valeurs par défaut, progression (déblocage, record) et musique
-//    coupée conservées ; réglages abîmés (cran hors limites ou en texte, gaucher non booléen) : crans bornés ou
+//  - ancienne sauvegarde v1 sans ces réglages : valeurs par défaut, progression (record, étapes ouvertes d'après
+//    les étapes réussies) et musique coupée conservées ; réglages abîmés (cran hors limites ou en texte, gaucher non booléen) : crans bornés ou
 //    par défaut, interrupteur, aperçu et commandes d'accord ;
 //  - écran Options : taille (Petits / Moyens / Grands), opacité (Discrète / Moyenne / Opaque), mode gaucher ;
 //    toutes les commandes sont des <button> ; effet immédiat sur #touch-root (--xr-scale, --xr-tc-opacity,
@@ -108,11 +108,15 @@ function toggleOn(t, key) {
   }, [O, key]);
 }
 
-/** Libellés accessibles des cartes du choix du niveau (« …, record 1234 », « …, verrouillé »). */
+/** Libellés accessibles des cartes du choix du niveau, par étape (« …, record 1234 », « …, verrouillé »). */
 async function cardLabels(t) {
   await press(t, 'title', 'Niveaux');
   await waitForScreen(t, 'select');
-  const labels = await t.ev(() => [...document.querySelectorAll('.screens [data-screen="select"].is-active .card')].map((c) => c.getAttribute('aria-label')));
+  const labels = await t.ev(() =>
+    Object.fromEntries(
+      [...document.querySelectorAll('.screens [data-screen="select"].is-active .card[data-stage]')].map((c) => [c.dataset.stage, c.getAttribute('aria-label')]),
+    ),
+  );
   await t.key('Escape', 60);
   await waitForScreen(t, 'title');
   return labels;
@@ -127,9 +131,10 @@ async function oldSaves(t) {
   assertEq(await touchRoot(t), { scale: '1', opacity: '0.75', lefty: false }, 'ancienne sauvegarde : commandes tactiles par défaut');
   const cards = await cardLabels(t);
   t.log('ancienne sauvegarde : cartes', JSON.stringify(cards));
-  assert(/record 1\s?234/.test(cards[0]), `ancienne sauvegarde : record de j1 conservé (${cards[0]})`);
-  assert(!/verrouillé/.test(cards[2]), `ancienne sauvegarde : étape m1 débloquée (${cards[2]})`);
-  assert(/verrouillé/.test(cards[3]), `ancienne sauvegarde : étape f2 toujours verrouillée (${cards[3]})`);
+  assert(/record 1\s?234/.test(cards.j1), `ancienne sauvegarde : record de j1 conservé (${cards.j1})`);
+  // Étapes ouvertes d'après les étapes réussies (plan 04) : l'ancien index `unlocked: 2` n'ouvre plus m1.
+  assert(!/verrouillé/.test(cards.f1), `ancienne sauvegarde : étape f1 (après j1 réussie) ouverte (${cards.f1})`);
+  assert(/verrouillé/.test(cards.m1) && /verrouillé/.test(cards.f2), `ancienne sauvegarde : m1 et f2 verrouillées (${cards.m1} / ${cards.f2})`);
   await press(t, 'title', 'Options');
   await waitForScreen(t, 'options');
   let st = await controlsState(t, O);

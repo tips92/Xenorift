@@ -28,17 +28,49 @@ class TrackPlayer {
   /** Instant où le fondu de sortie se termine (Infinity tant que le morceau joue). */
   stopAt = Infinity;
   private readonly seed: number;
+  /** Nombre de niveaux d'intensité du morceau (1 = insensible à setLevel). */
+  private readonly levels: number;
+  /** Niveau demandé, appliqué au prochain début de mesure. */
+  private wantLevel: number;
 
-  constructor(host: MusicFxHost, id: MusicId, start: number) {
+  constructor(host: MusicFxHost, id: MusicId, start: number, level = 0) {
     this.id = id;
     const def = (this.def = TRACKS[id]);
     this.sd = 15 / def.bpm;
     this.next = start;
     this.band = new Band(host, def.mix, def.level);
     this.seed = Math.floor(Math.random() * 1e6);
-    this.ctx = { b: this.band, bar: 0, step: 0, t: 0, loop: 0, sd: this.sd, rng: new Rng(), mem: [-1, -1, -1, -1] };
+    const n = def.levels;
+    this.levels = n !== undefined && n > 1 ? Math.floor(n) : 1;
+    this.wantLevel = this.clampLevel(level);
+    this.ctx = {
+      b: this.band,
+      bar: 0,
+      step: 0,
+      t: 0,
+      loop: 0,
+      sd: this.sd,
+      rng: new Rng(),
+      mem: [-1, -1, -1, -1],
+      level: this.wantLevel,
+    };
     host.setDelay((def.delayBeats * 60) / def.bpm, def.delayFb);
     this.band.fade(1, CROSSFADE);
+  }
+
+  /** Niveau effectif (celui que play() lit en ce moment). */
+  get level(): number {
+    return this.ctx.level;
+  }
+
+  /** Change d'intensité au prochain temps fort (début de mesure), sans relancer le morceau. */
+  setLevel(n: number): void {
+    this.wantLevel = this.clampLevel(n);
+  }
+
+  private clampLevel(n: number): number {
+    if (this.levels <= 1 || !(n > 0)) return 0;
+    return Math.min(this.levels - 1, Math.floor(n));
   }
 
   /** Programme tous les pas qui tombent avant `until`. */
@@ -54,6 +86,7 @@ class TrackPlayer {
     while (this.next < limit) {
       const s = this.step & 15;
       const barAbs = this.step >> 4;
+      if (s === 0) c.level = this.wantLevel;
       c.step = s;
       c.bar = barAbs % def.bars;
       c.loop = Math.floor(barAbs / def.bars);
@@ -97,13 +130,24 @@ export class MusicPlayer {
     return this.current ? this.current.id : null;
   }
 
-  play(id: MusicId): void {
+  /** Intensité effective du morceau en cours (0 si silence ou morceau à un seul niveau). */
+  get level(): number {
+    return this.current ? this.current.level : 0;
+  }
+
+  /** Lance `id` au niveau d'intensité `level` (ignoré si `id` joue déjà : voir setLevel). */
+  play(id: MusicId, level = 0): void {
     if (this.current && this.current.id === id) return;
     const now = this.host.ac.currentTime;
     this.retire(now, CROSSFADE);
-    this.current = new TrackPlayer(this.host, id, now + 0.05);
+    this.current = new TrackPlayer(this.host, id, now + 0.05, level);
     this.ensureTimer();
     this.tick();
+  }
+
+  /** Intensité du morceau en cours, au prochain début de mesure (sans effet sur un morceau à un seul niveau). */
+  setLevel(n: number): void {
+    if (this.current) this.current.setLevel(n);
   }
 
   stop(fade = CROSSFADE): void {

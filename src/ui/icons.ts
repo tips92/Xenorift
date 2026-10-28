@@ -1,4 +1,4 @@
-import type { PowerUpKind, StageDef, UpgradeStat, WeaponId } from '../core/types';
+import type { PowerUpKind, StageDef, ThemeId, UpgradeStat, WeaponId } from '../core/types';
 
 // Icônes vectorielles en ligne (aucun fichier image). Les couleurs passent par `currentColor`
 // ou par les dégradés partagés définis une seule fois dans le document (ensureSvgDefs).
@@ -150,8 +150,11 @@ const STAGE_ASTEROIDS = `<svg ${V64}>
 <circle cx="24" cy="10" r="1.1" fill="#fff"/><circle cx="58" cy="30" r="1" fill="#fff"/>
 </svg>`;
 
+/** Icône des étapes de plateforme, par thème. */
+const PLATFORM_ICONS: Record<ThemeId, string> = { jungle: STAGE_JUNGLE, moon: STAGE_MOON };
+
 export function stageIcon(stage: StageDef): string {
-  if (stage.kind === 'platform') return stage.theme === 'moon' ? STAGE_MOON : STAGE_JUNGLE;
+  if (stage.kind === 'platform') return PLATFORM_ICONS[stage.theme];
   return stage.levelId === 'asteroids' ? STAGE_ASTEROIDS : STAGE_NEBULA;
 }
 

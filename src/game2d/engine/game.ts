@@ -219,7 +219,7 @@ function armLostTimer(s: Session): void {
 /** Pas de restauration : l'étape se termine (une seule fois) pour que l'interface propose de réessayer. */
 function giveUpSession(s: Session): void {
   const scene = sceneOf(s);
-  // Kaï décollait déjà : le niveau est gagné, inutile d'attendre la fin de l'animation.
+  // Kaï quittait déjà le niveau (Comète, balise) : il est gagné, inutile d'attendre la fin de l'animation.
   if (scene && scene.finishExitNow()) return;
   endSession(s, () => s.hooks.onFail(GFX_LOST_REASON));
 }

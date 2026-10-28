@@ -4,7 +4,6 @@ import type {
   SaveData,
   ShipLoadout,
   ShipModules,
-  StageDef,
   StageResult,
   UpgradeStat,
   WeaponId,
@@ -525,10 +524,4 @@ export function applyPurchase(
 export function stageCrystals(result: Readonly<StageResult>): number {
   const n = result.crystals;
   return typeof n === 'number' && Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
-}
-
-/** Libellé du bouton de départ du hangar vers l'étape `next` (seul endroit où il se décide ; plan 04 : par étape). */
-export function departLabel(next: StageDef): string {
-  // Plan 04 : « Atterrir », « Redescendre » ou « Décoller » selon `next` ; un seul libellé en 3a.
-  return 'Décoller';
 }

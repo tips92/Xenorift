@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
 import type { ThemeId, WeaponId } from '../../core/types';
+import { drawBeacon, drawBeaconBeam } from './draw/beacon';
 import { drawDoor, drawInteractArrow, drawRoomWall } from './draw/doors';
 import { drawArmored, drawFlyer, drawSpitter, drawSpore, drawWalker } from './draw/enemies';
 import {
@@ -17,14 +18,16 @@ import {
 import { ARM_FRAME_COUNT, type ArmWeapon, PLAYER_FRAME_COUNT, drawArmFrame, drawPlayerFrame } from './draw/player';
 import { drawShip, drawShipFlame } from './draw/ship';
 import { drawTileset, tileRect } from './draw/tiles';
+import { WORLD1_SHEETS } from './draw/world1';
 import { ANIM, ARM_TEX, BULLET_SIZE, BULLET_TEX, FRAMES, FRAME_SIZE, TEX, TILESET } from './keys';
 import { createParallaxImpl } from './parallax';
-import { buildSheet, registerCanvas } from './util';
+import { buildSheet, registerCanvas, removeTexture } from './util';
 
 // Module graphique du mode 2D : tout est dessiné par code (Canvas 2D), aucun fichier image.
 // Les signatures exportées ne doivent pas changer.
 
 export { SHIP_NOZZLE } from './draw/ship';
+export { BEACON_ORB } from './draw/beacon';
 export { BG_TIMINGS } from './draw/backgrounds';
 export { PLAYER_SHOULDER } from './draw/player';
 
@@ -47,7 +50,7 @@ export function generatePlatformArt(scene: Phaser.Scene, theme: ThemeId): void {
     }
   });
 
-  // --- Personnage (identique dans les deux thèmes)
+  // --- Personnage (identique dans tous les thèmes)
   const P = FRAME_SIZE.player;
   buildSheet(scene, TEX.player, P.w, P.h, PLAYER_FRAME_COUNT, (ctx, i) => drawPlayerFrame(ctx, i));
   // Bras armé : une planche (repos, recul) par arme
@@ -85,6 +88,10 @@ export function generatePlatformArt(scene: Phaser.Scene, theme: ThemeId): void {
   buildSheet(scene, TEX.ship, 192, 112, 1, (ctx) => drawShip(ctx));
   const SF = FRAME_SIZE.shipFlame;
   buildSheet(scene, TEX.shipFlame, SF.w, SF.h, 2, (ctx, i) => drawShipFlame(ctx, i));
+  const Bc = FRAME_SIZE.beacon;
+  buildSheet(scene, TEX.beacon, Bc.w, Bc.h, 4, (ctx, i) => drawBeacon(ctx, i));
+  const Bb = FRAME_SIZE.beaconBeam;
+  buildSheet(scene, TEX.beaconBeam, Bb.w, Bb.h, 2, (ctx, i) => drawBeaconBeam(ctx, i));
   buildSheet(scene, TEX.mover, 192, 32, 1, (ctx) => drawMover(ctx, theme));
   const Dr = FRAME_SIZE.door;
   buildSheet(scene, TEX.door, Dr.w, Dr.h, 2, (ctx, i) => drawDoor(ctx, theme, i));
@@ -114,6 +121,25 @@ export function generatePlatformArt(scene: Phaser.Scene, theme: ThemeId): void {
   anim(ANIM.crystalSpin, TEX.crystal, FRAMES.crystal.spin, 10, true);
   anim(ANIM.checkpointOn, TEX.checkpoint, FRAMES.checkpoint.on, 6, true);
   anim(ANIM.shipFlame, TEX.shipFlame, FRAMES.shipFlame.burn, 14, true);
+  anim(ANIM.beaconIdle, TEX.beacon, FRAMES.beacon.idle, 3, true);
+  anim(ANIM.beaconOn, TEX.beacon, FRAMES.beacon.on, 10, true);
+  anim(ANIM.beaconBeam, TEX.beaconBeam, FRAMES.beaconBeam.flicker, 14, true);
+}
+
+/** Planches des barrières d'arène (TEX.barrierTop / Mid / Bottom), pour un niveau qui a une arène. */
+const BARRIER_SHEETS = [
+  [TEX.barrierTop, WORLD1_SHEETS.barrierTop],
+  [TEX.barrierMid, WORLD1_SHEETS.barrierMid],
+  [TEX.barrierBottom, WORLD1_SHEETS.barrierBottom],
+] as const;
+
+/** Génère les barrières d'arène du thème (≈ 20 ms) ; libérées par destroyArenaArt à l'arrêt de la scène. */
+export function generateArenaArt(scene: Phaser.Scene, theme: ThemeId): void {
+  for (const [key, s] of BARRIER_SHEETS) buildSheet(scene, key, s.w, s.h, s.frames, (ctx, i) => s.draw(ctx, theme, i));
+}
+
+export function destroyArenaArt(scene: Phaser.Scene): void {
+  for (const [key] of BARRIER_SHEETS) removeTexture(scene, key);
 }
 
 export interface ParallaxHandle {

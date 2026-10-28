@@ -75,6 +75,8 @@ const hud: HudApi = {
     window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => (toastEl.style.opacity = '0'), 900);
   },
+  radio: (id) => console.log('[radio]', id),
+  updateBoss: () => undefined,
 };
 
 // ------------------------------------------------------------------ Entrées simulées (clavier)
@@ -158,6 +160,7 @@ const audio: AudioApi = {
   unlock: () => undefined,
   sfx: (id, opts) => console.log('[sfx]', id, opts ?? ''),
   music: (id) => console.log('[music]', id),
+  musicLevel: (n) => console.log('[musicLevel]', n),
   setMusicEnabled: () => undefined,
   setSfxEnabled: () => undefined,
   setHapticsEnabled: () => undefined,

@@ -12,16 +12,18 @@ node tests/e2e/run.mjs menu j1-play        # scénarios choisis (depuis n'import
 node tests/e2e/run.mjs --suite full        # smoke | full | diag | all (= full + diag)
 node tests/e2e/run.mjs --list              # scénarios, suites, titres
 node tests/e2e/run.mjs --repeat 5 j1-play  # recherche d'instabilités
-node tests/e2e/run.mjs --prod --suite full # build de production : menu, small-screens, prod-build (le reste : SKIP)
+node tests/e2e/run.mjs --prod --suite full # build de production : menu, small-screens, progress-ids, prod-build (le reste : SKIP)
 node tests/e2e/run.mjs --help              # aide (en-tête de run.mjs)
 ```
 
 Avec npm, les options passent après `--` : `npm run e2e -- --suite full`. Noms et `--suite` s'additionnent.
 `--prod` seul garde la suite smoke par défaut : seul `menu` y tourne.
 
-Durées sur cette machine : `smoke` ≈ 1 min 40 (`npm test` ≈ 2 min 10 en tout), `full` ≈ 25 min (dont
-`flight-autopilot` ≈ 2 min 45, `stress-laps` ≈ 2 min 20, `small-screens` ≈ 2 min, `weapons` ≈ 1 min 45,
-`hangar` ≈ 1 min 15 et `powerups` ≈ 45 s), `diag` ≈ 1 min 20, `--prod --suite full` ≈ 1 min 30.
+Durées sur cette machine : `smoke` ≈ 1 min 40 (`npm test` ≈ 2 min 10 en tout), `full` ≈ 27 min (dont
+`flight-autopilot` ≈ 2 min 45, `stress-laps` ≈ 2 min 20, `small-screens` ≈ 2 min 15, `weapons` ≈ 1 min 30,
+`audio-lifecycle` ≈ 1 min 20, `hangar` ≈ 1 min 15, `luma-radio` ≈ 1 min 20, `campaign-flow` ≈ 1 min, `boss-mini` ≈
+45 s, `powerups` ≈ 45 s et `progress-ids` ≈ 45 s), `diag` ≈ 5 min 30 (dont `audio-world1` ≈ 2 min 15 et `story-preview` ≈ 55 s), `--prod --suite full` ≈
+2 min 10.
 
 - **Serveur** : scénarios dev : le lanceur réutilise le serveur de dev déjà ouvert sur http://localhost:5173/
   (sans jamais l'arrêter), sinon il lance lui-même `vite`. Scénarios sur le build de production (`--prod`, ou
@@ -30,12 +32,12 @@ Durées sur cette machine : `smoke` ≈ 1 min 40 (`npm test` ≈ 2 min 10 en tou
   Ctrl+C. Un port occupé par autre chose que le bon serveur Xeno Rift fait échouer les scénarios (voir
   `XR_BASE`). Le build de production exige un `dist/` : **`npm run build` avant `--prod` ou `--suite full`**
   (le lanceur prévient si `dist/` est plus ancien que les sources, seulement quand il lance `vite preview`).
-- **`--prod`** : sans aides DEV, seuls `menu`, `small-screens`, `prod-build` (et `bench-shaders` en `diag`)
+- **`--prod`** : sans aides DEV, seuls `menu`, `small-screens`, `progress-ids`, `prod-build` (et `bench-shaders` en `diag`)
   tournent ; les autres sont SKIP.
 - **Variables** : `XR_BASE` (URL imposée à tous les scénarios, `prod-build` compris, aucun serveur géré),
   `XR_DEV_PORT` / `XR_PROD_PORT` (autres ports),
   `XR_TMP` (dossier temporaire du profil Chrome, `D:/DevTools/tmp` par défaut), `XR_VERBOSE=1`
-  (affiche aussi les `console.log` de la page).
+  (affiche aussi les `console.log` de la page), `XR_CAPTURES_REF` (référence de `theme-captures`, voir plus bas).
 - **Résultat** : tableau final (scénario, PASS / FAIL / SKIP, durée, première erreur) ; code de sortie 1
   si un scénario échoue, 2 pour une option ou un scénario inconnus, 130 si interrompu.
 - **Captures** : `tests/e2e/out/<scénario>/NN-nom.png` (dossier vidé au début du scénario ; avec `--repeat`,
@@ -48,7 +50,7 @@ Durées sur cette machine : `smoke` ≈ 1 min 40 (`npm test` ≈ 2 min 10 en tou
 |---|---|
 | `smoke` | rapide, lancée par `npm test` (`menu`, `j1-play`, `f1-play`, `touch-controls`, `back-button`) ; chaque scénario smoke est aussi dans `full` |
 | `full` | tous les vrais tests (avec assertions) |
-| `diag` | mesures et diagnostics (bancs d'essai, journaux, captures de l'aperçu graphique `art-preview`) : affichent des chiffres ou des images, sans vrai verdict |
+| `diag` | mesures et diagnostics (bancs d'essai, journaux, captures de l'aperçu graphique `art-preview`, captures par thème `theme-captures`, pages d'aperçu du monde 1 : sons et musiques `audio-world1`, cinématiques et bulle `story-preview`) : affichent des chiffres ou des images, sans vrai verdict (sauf `theme-captures` comparé à une référence, et les contrôles d'`audio-world1` et `story-preview`) |
 | `all` | `full` + `diag` |
 
 ## Écrire un scénario
@@ -122,7 +124,10 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
     donc utilisable aussi sur le build de production) :
     `trackThreeScenes` + `shipPos` (position du vaisseau via le crochet `__THREE_DEVTOOLS__` de three),
     `hudFlight` / `hudPlatform`, `waitHud`, `resultDetails`, `recordToasts` / `toasts`, `press`, `nextViaHangar`
-    (« Suivant » des résultats, puis « Décoller » du hangar : vers l'étape suivante), `waitPause`,
+    (« Suivant » des résultats, puis le bouton de départ du hangar, « Atterrir », « Redescendre » ou « Décoller » :
+    vers l'étape suivante), écran Niveaux : `selectState` (pages, monde affiché, barre du monde, flèches, et chaque
+    carte par étape : page, verrou, record, étoiles), `waitSelectPage` (page d'un monde arrivée à sa place, autres
+    pages masquées), `pickStage(t, id)` (amène la page de l'étape par ◀ ▶ puis touche sa carte), `waitPause`,
     `input` / `waitInput` / `waitInputIdle` (ces trois-là : DEV, `__xrShell` ; au repos = ni direction, `up` et
     `down` compris, ni bouton), `screenLuma`,
     `assertLayout` / `layoutProblems` / `rects` / `overlaps`, `heapMB`, `measureFps`, `gameCanvases`, `domNodes`.
@@ -145,7 +150,10 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
 
 ### Repères utiles
 
-- Aides DEV (serveur de dev uniquement) : `window.__xr2d` (scène 2D, `teleport`, `god`, `win`, `kill`,
+- Aides DEV (serveur de dev uniquement) : `window.__xr2d` (scène 2D, `teleport`, `god`, `win` (Kaï posé juste
+  avant la sortie de la carte, qui démarre aussitôt : état `exit`, 2,6 s de séquence au plus ; balise de LUMA en
+  j1, Comète sur la Lune ; un combat de boss est passé : arène ouverte pour de bon, sans prime), `kill`,
+  `boss` (arène et boss du niveau, voir « Boss » plus bas),
   `weapon(id)` (change d'arme, jauge et cadence remises à zéro ; garde les améliorations du hangar de cette arme),
   `power('speed' | 'rapid' | 'shield')` (bonus donné comme ramassé), `info()` (arme, chauffe, surchauffe,
   améliorations du hangar de l'arme tenue `mods` (multiplicateurs `damage`, `fireRate`, `range`, `cooling`), fiche
@@ -156,15 +164,19 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   `crouching`, `dropThrough`, `body`, `arm` : bras armé, texture `arm-<arme>`), `gun` (arme tenue), `doors`
   (`nearIndex`), `lasers.bolts` (tirs de toutes les armes, champ `weapon`), `enemies.list` (`hp`), `items.powers`
   (bonus sortis d'un bloc), `parsed.bonus` (contenu des blocs), `movers.list`, `grid` et `layer` pour poser une
-  tuile, voir `aim-crouch-drop`), `window.__xr3d` (`info` : dont `shield` / `maxShields` (3 + bouclier renforcé),
+  tuile (voir `aim-crouch-drop`), `exit` (sortie du niveau : `kind` `'beacon'` | `'ship'`, `launched`,
+  `approachX` / `feetY` : où `win` pose Kaï ; `j1-play` mesure la séquence sur l'horloge de la scène ; la balise
+  se déclenche dans toute la colonne de son faisceau, `j1-ctx-exit` y téléporte Kaï ; case dans `parsed.exit`)),
+  `window.__xr3d` (`info` : dont `shield` / `maxShields` (3 + bouclier renforcé),
   `boost` (jauge), `boostDrain` / `boostFill` (vidange et recharge par seconde, module Turbo compris) ; `autopilot`,
   `win`, `fail`, `advance(s)` (s secondes de jeu simulées dans la même tâche, renvoie `info()`), `timeScale`,
   `bench`), `window.__xrShell` (`info` : `phase`, `screen` (écran affiché), `loadout` (`equipped`, `owned`,
   `skills`), `play` (équipement effectif complet : améliorations `mods` par arme, `maxHearts`, `ship` :
-  `maxShields`, `boostDrainMul`, `boostFillMul`, `gunLevel`), `crystals` (réserve), `weapon` (l'arme de la
-  session) ; `cap` ; `addCrystals(n)` : ajoute des cristaux à la réserve, enregistrée, sans redessiner l'écran
-  affiché : l'appeler avant d'ouvrir le hangar). `__xr3d` disparaît quand la partie est détruite : toujours tester
-  sa présence. `lasers2d` (`helpers.mjs`) ne compte
+  `maxShields`, `boostDrainMul`, `boostFillMul`, `gunLevel`), `stages` (chaque étape de `STAGES`, dans l'ordre :
+  `id`, `kind`, `world`, `cleared` (réussie), `unlocked` (ouverte, mode test compris)), `crystals` (réserve), `weapon`
+  (l'arme de la session) ; `cap` ; `addCrystals(n)` : ajoute des cristaux à la réserve, enregistrée, sans redessiner l'écran
+  affiché : l'appeler avant d'ouvrir le hangar ; `radio()` : radio de LUMA, voir plus bas). `__xr3d` disparaît quand la
+  partie est détruite : toujours tester sa présence. `lasers2d` (`helpers.mjs`) ne compte
   que les traits du laser (texture `laser`) : pour les autres armes, `__xr2d.info().shots` ou `recordShots` /
   `shotLog`. Le HUD suit le jeu à l'image suivante : après `power()` ou `weapon()`, attendre (`waitFor`) avant
   de lire le HUD. Un ennemi se déplace avec `moveEnemy` (positions précédentes du corps Arcade recalées : sinon
@@ -172,12 +184,17 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
 - Paramètres d'URL (actifs aussi en production) : `?stage=j1|f1|m1|f2` (lancement direct, sans intro),
   `?unlock=1` (mode test, enregistré dans la sauvegarde : 4 armes et double saut, conditions du hangar levées mais
   pas les prix), `?weapon=laser|machinegun|shotgun|rifle` (arme de la session ; inconnue : message et laser),
-  `?touch=1` / `?touch=0`.
+  `?touch=1` / `?touch=0`. Serveur de dev seulement : `?at=boss` (`ModeHooks.startAt`) : chaque niveau 2D lancé part
+  du point de contrôle d'avant son arène (ignoré sans arène).
 - Sauvegarde (`localStorage` `xeno-rift-save-v1`) en version 2 depuis le plan 03 : `crystals`, `upgrades` (par arme),
-  `ship` (`gun`, `shield`, `boost`), `extraHearts`, `crew`, `blueprints` en plus de `unlocked`, `best`, `settings`,
-  `loadout`. Une sauvegarde version 1 écrite à la main est migrée (pas remise à zéro), réécrite en version 2 au
-  premier enregistrement ; pour poser des achats avant le chargement, écrire une version 2 (voir `patchSave` de
-  `small-screens`).
+  `ship` (`gun`, `shield`, `boost`), `extraHearts`, `crew`, `blueprints`, `story` (`seen` : marques de l'histoire,
+  absent des anciennes sauvegardes) en plus de `unlocked`, `best`, `settings`, `loadout`. Une sauvegarde version 1
+  écrite à la main est migrée (pas remise à zéro), réécrite en version 2 au premier enregistrement ; pour poser des
+  achats avant le chargement, écrire une version 2 (voir `patchSave` de `small-screens`). Progression par
+  identifiants (plan 04) : une étape est réussie si son id figure dans `best`, ouverte si c'est la première, une
+  réussie ou la suivante d'une réussie (mode test : toutes) ; JOUER lance la première ouverte non réussie (sinon la
+  dernière). `unlocked` (index hérité) est encore lu et écrit mais ne décide plus rien. Les récompenses des étapes
+  réussies (plan du mitrailleur pour f1) sont réappliquées au chargement, et enregistrées au changement suivant.
 - Clavier : flèches / WASD, Espace = saut (2D) et turbo (vol), K = saut, Haut/W = haut (visée, portes ; ne fait
   plus sauter), Bas/S = accroupi (+ Saut : descente d'une plateforme `=` ou mobile), J/X/F = tir, Maj = turbo,
   Échap/P = pause, Entrée/Espace passent l'intro.
@@ -186,7 +203,12 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   (`--heat-step` : graduations, `.is-over` : SURCHAUFFE), anneaux `.hud-powers .hud-power.is-on[data-kind=speed|
   rapid|shield]` (`.is-ending` : fin proche), cœurs `.hud-hearts .hud-heart` (`.is-empty`), boucliers du vol
   `.fl-pips .fl-pip` (`.is-empty`). Résultats : ligne `.detail--bank` (« Réserve », gain `.detail-gain` « +N
-  cristaux », total `.detail-value`). Niveaux : bouton `.select-hangar` (réserve en sous-titre). Hangar : réserve
+  cristaux », total `.detail-value`), récompenses nouvelles `.detail--reward[data-reward="<kind>:<id>"]` (libellé
+  « Plan », « Compétence », « Équipière »). Niveaux : bouton `.select-hangar` (réserve en sous-titre), total
+  `.select-total-n`, une page par monde `.select-page[data-world]` (`.is-current` : affichée ; les autres masquées
+  par `visibility`), barre du monde `.select-world-name` et `.select-world-n` (étoiles du monde), flèches
+  `.select-prev` / `.select-next` (`disabled` au bout), cartes `.card[data-stage="<id>"]` (`.is-locked`) ; un
+  glissement horizontal (doigt ou souris) change de page sans lancer la carte touchée, ← → aussi. Hangar : réserve
   `.hg-wallet-n`, onglets `.hg-tab--bench|ship|kai` (`aria-selected`), armes de l'Établi
   `.hg-weapon[data-weapon]` (`aria-checked` : choisie), cartes `[data-item="<HangarItemId>"]` (niveau :
   `.hg-pip.is-on`, notes `.hg-note`, `.hg-max` au niveau max), achat `[data-buy="<HangarItemId>"]` (`.is-locked` et
@@ -215,6 +237,18 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   amenée à l'écran, aperçu d'au moins 100x60 px, première amélioration de l'Établi entière sans défiler, cibles
   tactiles, confirmation, captures aux 4 tailles ; aussi en `--prod`, sans ce qui demande les aides DEV) ; `art-preview` (diag) capture `preview/art.html` (Kaï et
   son bras, poses accroupies, portes, stand de tir des 4 armes) pour une revue à l'œil.
+- **Refonte sans changement visible** : `theme-captures` (diag, ≈ 45 s) capture tout ce qui dépend du thème 2D de façon
+  reproductible : `preview/art.html` (planche, stand de tir, 3 vues du monde, avec avance rapide de la parallaxe) de
+  chaque thème, avec `Math.random` semé et une horloge virtuelle (1/60 s par image, `performance.now` et
+  `requestAnimationFrame` remplacés, pages `preview/` seulement) figée à l'image 90, textes Phaser masqués (police
+  chargée à un moment variable), plus l'empreinte des pixels de chaque texture ; puis le choix du niveau (une capture
+  par page : `ui-select-w<monde>`) et la carte d'intro de chaque étape de `STAGES` (lu dans `/src/core/stages.ts` ;
+  carte touchée par `pickStage`), avec `animations: 'disabled'` et le fond des menus masqué (ses
+  calques animés varient d'une unité sur quelques pixels). Il écrit `hashes.json` dans son dossier de captures.
+  Usage : une exécution avant la refonte, copier `tests/e2e/out/theme-captures/` hors de `out/` (vidé à chaque
+  passage), puis relancer après avec `XR_CAPTURES_REF=<copie>` : il échoue sur le moindre pixel ou la moindre
+  texture différente, et sur une capture présente d'un seul côté, et écrit `diff-<capture>.png` (pixels différents
+  en rouge).
 - Scénarios des armes et des bonus (plan 02) : `weapons` (arme de la session équipée au hangar en mode test,
   gardée d'une étape à l'autre et oubliée hors mode test ; équipement de la sauvegarde : anciennes sauvegardes,
   valeurs abîmées, double saut appris ; puis pour chaque arme : projectiles par appui, vitesse, portée, son, visée,
@@ -225,6 +259,55 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   des fiches : `SPECS` en tête de `weapons.mjs` (une ligne par arme, parcourue pour les tests par arme),
   `SPEED_MUL` / `DURATION_MS` de `powerups.mjs` ; à mettre à jour avec `src/core/weapons.ts` et
   `src/game2d/constants.ts` après un réglage.
+- **Radio de LUMA (plan 04)** : `luma-radio` (full, ≈ 1 min 20) joue j1 sur une sauvegarde neuve : message de départ
+  (bulle brouillée, sans `pointer-events`, texte complet posé une fois dans le nœud `aria-live`, bips `lumaBip`
+  espacés de 125 ms au moins), première surchauffe → tutoriel (une fois, seconde surchauffe une fois la radio au
+  repos), fenêtre de la ruine sautée par téléportation et celle de la balise jouée une fois (`LevelEvents.say`
+  espionné : un appel par message, sans que la file de la radio masque un doublon), pause et page cachée qui figent
+  l'écriture, file de 2 messages (le plus ancien chassé), file vidée à la fin de l'étape et marque `tutorial-j1`
+  enregistrée ; puis tutoriel muet avec cette marque, et mise en page de 844x390 à 640x320 (3 et 5 cœurs, trois bonus,
+  messages de l'interface : un seul sous la bulle, au-dessus de Kaï, glissement de `top` quand la bulle paraît ou se
+  cache) avec captures. Repères : `__xrShell.radio()` (`phase` `idle | open | typing | hold | gap`, `current`,
+  `waiting`, `played` depuis le début de l'étape, `paused`, `typing`) ; message poussé comme le ferait un mode :
+  `__xr2d.scene.session.hooks.hud.radio(id)` (identifiants : `RADIO` de `src/core/story.ts`, lisible dans la page par
+  `import('/src/core/story.ts')`) ; fenêtres du niveau `__xr2d.scene.levelEvents.windows` (`id`, `col0`, `col1`,
+  `state` 0 en attente, 1 jouée, 2 sautée) ; bulle `.hud .xr-bubble--radio` (`data-speaker`, `data-mood` : `scrambled`
+  pour la radio brouillée, `.is-hidden`, `.is-paused`, lettres écrites `.xr-bubble-text > span.is-on`, texte complet
+  `.xr-sr`) ; messages de l'interface décalés sous la bulle, un seul à la fois : `.toasts.is-below-radio`. Les sons
+  `radioOpen` et `lumaBip` s'enregistrent en enveloppant `__xrShell.audio.sfx` dès le chargement (script d'init : le
+  message de départ s'ouvre avant `waitFor2dPlay`).
+- **Boss (plan 04)** : `boss-mini` (full, dev) joue l'arène du Blob-roi de j1 depuis `?at=boss` : renforts cachés dès
+  le chargement, barrières fermées à l'entrée (grille ET calque), sons, musique, barre de boss, caméra calée et
+  centrée sur l'arène (glissement relevé image par image sur l'événement `postrender` du jeu : pas de plus de 60 px),
+  noyau seul vulnérable (contrat `hitBy` et tirs du `ShotPool` lancés par `scene.lasers.fire`
+  avec la fiche de l'arme : pas d'attente d'un tir clavier qui raterait l'image aplatie), clignotement de dégât
+  (copie additive `boss.glow`) calé sur le boss dès le coup, rebond sur la couronne sans mode dieu (aucun cœur
+  perdu ; détecté sur `postupdate` de la scène par `stompGraceMs`), ondes au sol, phase 2 et
+  petits blobs (hors score), vie perdue (retour au K, boss à neuf), victoire puis course jusqu'à la balise, résultats
+  « Boss vaincu +2 000 » sous le score (panneau entier, sans défilement, à 844x390 et 640x320), textures libérées après
+  la session, perte du contexte en plein
+  combat. Repères : `__xr2d.boss` : `info()` (`id`, `name`, `state` `wait | fight | beaten | gone`, `life`,
+  `maxLife`, `phase`, `phases`, `x`, `y`, `beaten` (prime acquise), `arena` (`state` `open | closed | done`, `col0`,
+  `col1`, `row`, `left` / `right` : intérieur en px, `camBlend` : 1 = caméra calée), et pour le Blob-roi `act`
+  (`intro | idle | squash | leap | flat | rise | rage`), `frame`, `texture`, `facing`, `flashing`, `waves`,
+  `visible`), `enter()` (Kaï posé juste après la première borne : le combat commence à l'image suivante),
+  `hit(n)` (dégâts directs pendant le combat, renvoie la vie), `win()` (vaincu comme par les tirs : fuite,
+  barrières ouvertes, prime). Dans la scène : `arena`, `boss` (`hitBy`, `hurts`, `takeDamage` ; champs privés
+  lisibles : `waves`, `spot`), `bossBeaten`, renforts `enemies.list[i].summoned` (en fin de liste), `enemies.summon`.
+  Barre du HUD : `.hud-boss.is-on` (`data-phase`), `.boss-name`, `.boss-phase` (« Phase 1/2 »), `.boss-fill`
+  (`scaleX` = vie), `.boss-mark` (repères de phase) ; résultats : prime sous le score `.results-bonus`
+  (`.results-bonus-label`, `.results-bonus-value`). `small-screens` vérifie la barre à
+  640x320 (commandes moyennes, grandes, gaucher), `j1-ctx-fallback` l'arène et le clignotement de dégât en rendu
+  Canvas, `campaign-flow` finit j1 par le boss (prime sur les résultats), `j1-play` vérifie que `win()` passe le combat.
+- **Progression (plan 04)** : `progress-ids` (full, aussi en `--prod`, ≈ 45 s ; ≈ 30 s sans sa partie E) injecte des
+  sauvegardes (neuve, version 1 « unlocked: 3 » et « unlocked: 2 », version 2 avec ou sans `story`) et vérifie sur la
+  page : ligne sous JOUER (« Nouvelle aventure », « Continuer · … »), carte d'intro lancée par JOUER (Échap revient à
+  l'accueil avant le lancement), verrous, records et étoiles (cartes, monde, total), page ouverte, plan du
+  mitrailleur rendu à qui a fini f1 (état de l'arme au hangar), retour du hangar sur la même page, glissements (doigt
+  CDP, souris, geste vif, petit glissement qui revient) sans lancer la carte, souris relâchée hors de la zone des
+  pages puis survol sans bouton (bande immobile), Entrée sur une carte après un glissement au doigt (carte lancée),
+  flèches du clavier, sauvegarde réécrite (histoire relue sans doublon, plan, `unlocked` gardé). Partie E (aides DEV, sautée en `--prod`) : f1 gagné →
+  « Plan : mitrailleur » sur les résultats et « Atterrir » vers la Lune au hangar ; rejoué et gagné → plus de ligne.
 - **Scénario du hangar (plan 03)** : `hangar` (full, ≈ 1 min 15) enchaîne A. lecture de la sauvegarde (version
   inconnue, JSON illisible, version 2 abîmée, migration d'une version 1), B. gain de cristaux de j1 (score et étoiles
   finaux notés), C. hangar entre j1 et f1 (équipement, achat avec confirmation, refus, retour Android vers les

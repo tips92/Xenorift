@@ -93,7 +93,7 @@ export class Doors {
   }
 
   /**
-   * À chaque image. active : partie en cours (faux pendant la mort et le décollage : flèche effacée,
+   * À chaque image. active : partie en cours (faux pendant la mort et la sortie : flèche effacée,
    * portes refermées).
    */
   update(dtMs: number, active: boolean): void {

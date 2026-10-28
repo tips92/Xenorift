@@ -94,6 +94,8 @@ export const SCORE_ENEMY = 100;
 export const SCORE_LIFE = 500;
 export const TIME_BONUS_REF_S = 240;
 export const TIME_BONUS_PER_S = 10;
+/** Prime d'un mini-boss vaincu (pas celle d'un combat passé par l'aide de test). */
+export const SCORE_BOSS = 2000;
 
 /** Couleur de fond (fondus au noir). */
 export const BG_RGB = { r: 5, g: 1, b: 15 } as const;

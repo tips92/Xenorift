@@ -1,8 +1,9 @@
 import { BASE_HEARTS, BASE_SHIELDS } from '../core/hangar';
-import type { FlightHud, HudApi, PlatformHud, PowerUpKind, ToastKind, WeaponId } from '../core/types';
+import type { AudioApi, BossHud, FlightHud, HudApi, PlatformHud, PowerUpKind, RadioId, ToastKind, WeaponId } from '../core/types';
 import { WEAPONS, isWeaponId } from '../core/weapons';
 import { clamp, div, el, icon, play } from './dom';
 import { ICONS, ensureSvgDefs, powerIcon, powerLabel, weaponIcon } from './icons';
+import { createRadio, type RadioInfo } from './radio';
 
 // HUD en DOM, partagé par les modes 2D et 3D.
 // Règle de performance : le DOM n'est touché que lorsqu'une valeur affichée change réellement
@@ -16,6 +17,7 @@ const POWER_STEPS = 50;
 const HEAT_STEPS = 50;
 const BOOST_STEPS = 50;
 const PROGRESS_STEPS = 400;
+const BOSS_STEPS = 200;
 const MAX_TOASTS = 3;
 const TOAST_MS = 1400;
 const TOAST_OUT_MS = 320;
@@ -46,6 +48,8 @@ const POWER_IN: Keyframe[] = [
   { transform: 'scale(1)', opacity: 1 },
 ];
 const POWER_IN_OPTS: KeyframeAnimationOptions = { duration: 300, easing: 'ease-out' };
+const FLASH: Keyframe[] = [{ opacity: 0.9 }, { opacity: 0 }];
+const FLASH_OPTS: KeyframeAnimationOptions = { duration: 240, easing: 'ease-out' };
 
 /** Anneau d'un bonus du HUD plateforme (vitesse, cadence : temps restant ; bouclier : anneau fixe). */
 interface PowerSlot {
@@ -89,8 +93,15 @@ function num01(v: number): number {
   return Number.isFinite(v) ? clamp(v, 0, 1) : 0;
 }
 
-/** `onPauseClick` est appelé par le bouton pause du HUD. */
-export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi {
+/** HUD de la coquille : celui des modes, plus ce que seule l'interface pilote (radio en pause, état pour les tests). */
+export interface ShellHud extends HudApi {
+  /** Partie en pause ou non : la radio fige son écriture. */
+  setPaused(on: boolean): void;
+  radioInfo(): RadioInfo;
+}
+
+/** `onPauseClick` est appelé par le bouton pause du HUD ; `audio` : bips de la radio. */
+export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: AudioApi): ShellHud {
   ensureSvgDefs();
 
   const root = div('hud is-hidden');
@@ -190,7 +201,22 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
   });
   // Appui avec un deuxième doigt (l'autre tient la croix) : voir enableSecondFingerTaps (dom.ts).
 
-  root.append(plat, fl, pauseBtn);
+  // ---------------------------------------------------------------- Barre de boss (2D et vol), en bas au centre
+
+  const bossEl = div('hud-boss');
+  bossEl.setAttribute('role', 'img');
+  const bossName = el('span', 'boss-name', '');
+  const bossPhase = el('span', 'boss-phase', '');
+  const bossHead = div('boss-head');
+  bossHead.append(bossName, bossPhase);
+  const bossTrack = div('boss-track');
+  const bossFill = div('boss-fill');
+  const bossMarks = div('boss-marks');
+  const bossFlash = div('boss-flash');
+  bossTrack.append(bossFill, bossMarks, bossFlash);
+  bossEl.append(bossHead, bossTrack);
+
+  root.append(plat, fl, bossEl, pauseBtn);
 
   // Messages : couche indépendante du HUD (utilisable aussi dans les menus).
   const toasts = div('toasts');
@@ -198,6 +224,16 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
   toasts.setAttribute('aria-live', 'polite');
 
   uiRoot.append(root, toasts);
+
+  // Radio de LUMA : bulle dans le HUD (masquée avec lui), sous les stats ; les messages passent sous la bulle, un
+  // seul à la fois (plus nombreux, ils descendraient jusqu'à Kaï).
+  const radio = createRadio(root, audio, (h) => {
+    toasts.classList.toggle('is-below-radio', h > 0);
+    if (h > 0) {
+      toasts.style.setProperty('--radio-h', `${h}px`);
+      trimToasts();
+    }
+  });
 
   // ---------------------------------------------------------------- Plateforme : état affiché
 
@@ -507,6 +543,74 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
     flLeft.classList.remove('is-critical');
   }
 
+  // ---------------------------------------------------------------- Boss : état affiché
+
+  let bOn = false;
+  let bName = '';
+  let bLifeQ = -1;
+  let bPhase = -1;
+  let bPhases = -1;
+
+  function setBoss(s: BossHud | null): void {
+    if (!s) {
+      if (!bOn) return;
+      bOn = false;
+      bossEl.classList.remove('is-on');
+      return;
+    }
+    const shown = bOn;
+    if (!bOn) {
+      bOn = true;
+      bossEl.classList.add('is-on');
+    }
+    const name = String(s.name ?? '');
+    if (name !== bName) {
+      bName = name;
+      bossName.textContent = name;
+    }
+    const phases = intOr(s.phases, 1, 1, 9);
+    if (phases !== bPhases) {
+      bPhases = phases;
+      bossMarks.textContent = '';
+      // Repère de changement de phase : la barre est partagée en parts égales.
+      for (let k = 1; k < phases; k++) {
+        const m = div('boss-mark');
+        m.style.left = `${(k * 100) / phases}%`;
+        bossMarks.append(m);
+      }
+      bPhase = -1;
+    }
+    const phase = intOr(s.phase, 1, 1, phases);
+    if (phase !== bPhase) {
+      const prev = bPhase;
+      bPhase = phase;
+      bossPhase.textContent = phases > 1 ? `Phase ${phase}/${phases}` : '';
+      bossEl.dataset.phase = String(phase);
+      if (shown && prev > 0 && phase > prev) play(bossEl, BUMP, BUMP_OPTS);
+    }
+    const q = Math.round(num01(s.life) * BOSS_STEPS);
+    if (q !== bLifeQ) {
+      const prev = bLifeQ;
+      bLifeQ = q;
+      bossFill.style.transform = `scaleX(${q / BOSS_STEPS})`;
+      bossEl.setAttribute('aria-label', `${name} : ${Math.round((q * 100) / BOSS_STEPS)} %`);
+      if (shown && prev >= 0 && q < prev) play(bossFlash, FLASH, FLASH_OPTS);
+    }
+  }
+
+  function resetBoss(): void {
+    bOn = false;
+    bName = '';
+    bLifeQ = -1;
+    bPhase = -1;
+    bPhases = -1;
+    bossEl.classList.remove('is-on');
+    bossName.textContent = '';
+    bossPhase.textContent = '';
+    bossMarks.textContent = '';
+    delete bossEl.dataset.phase;
+  }
+
   // ---------------------------------------------------------------- Messages
 
   const toastTimers = new Map<HTMLElement, number>();
@@ -516,6 +620,16 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
     if (id !== undefined) window.clearTimeout(id);
     toastTimers.delete(t);
     t.remove();
+  }
+
+  /** Au plus MAX_TOASTS messages (les plus anciens partent) ; un seul sous la bulle de la radio. */
+  function trimToasts(): void {
+    const max = toasts.classList.contains('is-below-radio') ? 1 : MAX_TOASTS;
+    while (toasts.childElementCount > max) {
+      const first = toasts.firstElementChild as HTMLElement | null;
+      if (!first) break;
+      dropToast(first);
+    }
   }
 
   function scheduleToast(t: HTMLElement): void {
@@ -557,6 +671,7 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
   return {
     showPlatform(): void {
       show('platform');
+      radio.prepare();
     },
 
     showFlight(): void {
@@ -568,10 +683,12 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
       root.classList.add('is-hidden');
       delete root.dataset.mode;
       clearToasts();
+      radio.clear();
       // Remise à zéro pendant que le HUD est masqué : l'étape suivante part d'un état propre,
       // et les valeurs envoyées avant le prochain show*() sont conservées.
       resetPlatform();
       resetFlight();
+      resetBoss();
     },
 
     updatePlatform(s: Partial<PlatformHud>): void {
@@ -615,12 +732,22 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void): HudApi
       t.dataset.text = msg;
       t.dataset.kind = k;
       toasts.append(t);
-      while (toasts.childElementCount > MAX_TOASTS) {
-        const first = toasts.firstElementChild as HTMLElement | null;
-        if (!first) break;
-        dropToast(first);
-      }
+      trimToasts();
       scheduleToast(t);
     },
+
+    radio(id: RadioId): void {
+      radio.say(id);
+    },
+
+    updateBoss(s: BossHud | null): void {
+      setBoss(s);
+    },
+
+    setPaused(on: boolean): void {
+      radio.setPaused(on);
+    },
+
+    radioInfo: () => radio.info(),
   };
 }
