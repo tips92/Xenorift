@@ -1488,6 +1488,11 @@ export class EnemyField {
     return out;
   }
 
+  /** Retire les orbes en vol (aide DEV : essais reproductibles). */
+  clearOrbs(): void {
+    this.orbCount = 0;
+  }
+
   /** Libère ce qui n'est pas dans le Bin de la partie (tampons d'instances) et vide les pools. */
   dispose(): void {
     if (this.disposed) return;

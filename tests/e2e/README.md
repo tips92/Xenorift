@@ -168,12 +168,16 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   destruction), `rocksDestroyed`, `points` (rochers, ennemis, cristaux), `drawCalls` (`renderer.info.render.calls`
   de la dernière image), `geometries` / `textures` / `programs` (`renderer.info`) ; `autopilot` (tire toujours en
   automatique, même en tir manuel), `win`, `fail`, `advance(s)` (s secondes de jeu simulées dans la même tâche,
-  renvoie `info()` ; `advance(1 / 60)` : un sous-pas, voir `__xrTrace` de `flight-combat`), `timeScale`, `bench`,
+  renvoie `info()` ; `advance(1 / 60)` : un sous-pas, voir `__xrTrace` de `flight-combat`), `timeScale` (0 à 8 ; 0 :
+  jeu figé, image toujours dessinée, `advance` avance encore : captures sans que le vol continue), `bench`,
   `spawn(type, distance = 60, variant)` (chasseur, mine ou essaim de 6 posé devant la Comète, sur sa ligne ; renvoie
   le nombre placé ; un chasseur se tient à max(30, distance) et tire après 42 u de trajet ; `variant` 0..1, au
   hasard sans lui : orientation de l'essaim et phase de son ondulation comptée depuis la pose, côté du virage du
   chasseur, clignotement de la mine : à fixer dans un test), `fire(on = true)` (tir forcé, en tir automatique comme
-  manuel)), `window.__xrShell` (`info` : `phase`, `screen` (écran affiché), `loadout` (`equipped`, `owned`,
+  manuel), `settle()` (Comète remise sur la trajectoire idéale à son z, sans vitesse latérale, canon froid, turbo
+  plein, orbes ennemies retirées : à appeler dans la même tâche que `spawn` et la trace, après une trace jusqu'à un
+  avancement fixé (`i.progress >= …`), sinon l'issue dépend du vol en temps réel qui précède, plus lent à froid :
+  endroit du parcours, rochers, chauffe)), `window.__xrShell` (`info` : `phase`, `screen` (écran affiché), `loadout` (`equipped`, `owned`,
   `skills`), `play` (équipement effectif complet : améliorations `mods` par arme, `maxHearts`, `ship` :
   `maxShields`, `boostDrainMul`, `boostFillMul`, `gunLevel`), `crystals` (réserve), `weapon` (l'arme de la
   session) ; `cap` ; `addCrystals(n)` : ajoute des cristaux à la réserve, enregistrée, sans redessiner l'écran
@@ -292,8 +296,9 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   `SHIP_GUN_MULS`, coups pour abattre un chasseur), `POINTS` / `DROPS` (`ROCK_POINTS`, `CRYSTAL_POINTS` de
   `src/game3d/flight.ts`, `ENEMY_DEFS`, `SWARM_WAVE_CRYSTALS` de `src/game3d/enemies.ts`), `SCORE` (`startWarp`),
   `CRUISE` (`COURSES`), `WAVES` et `CRYSTALS_TOTAL` (vagues obtenues, plan 03), `GATE_ZONE` / `WAVE_WINDOW`
-  (`genWaves`), `COURSE_FP`, `VARIANT` / `SWARM_AT` (variantes mesurées : à remesurer si le pilote automatique,
-  la visée ou l'essaim changent). Le tir manuel apparaît aussi dans `touch-options` (TIR à gauche en mode gaucher,
+  (`genWaves`), `COURSE_FP`, `VARIANT` / `SWARM_AT` / `TRIAL_AT` (avancements fixes des essais, variantes mesurées
+  après `__xr3d.settle()`, une partie neuve par variante essayée : à remesurer si le pilote automatique, la visée,
+  l'essaim ou les vagues de f1 changent). Le tir manuel apparaît aussi dans `touch-options` (TIR à gauche en mode gaucher,
   aux crans Grands et Discrète : taille du TIR de la plateforme au même cran, opacité de la couche du vol, tir avec
   le joystick à droite) et `small-screens` (HUD du combat et TIR de 844x390 à 568x320, aussi en surchauffe, ligne
   « Tir manuel » de la Pause) ; `touch-controls` vérifie qu'il n'y a pas de TIR en tir automatique ;

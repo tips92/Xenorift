@@ -84,16 +84,34 @@ const COURSE_FP = {
 };
 /**
  * Variantes de spawn (0..1 : orientation et phase de l'essaim, côté du virage du chasseur, clignotement de la mine)
- * et avancement du vol (progress) où les essaims de B sont posés, mesurés le 28/10/2026 (mêmes résultats sur 3 à 8
- * passages ; le pilote automatique suit la trajectoire, l'issue dépend de l'endroit) : swarmFull à 6 % du parcours
- * est abattu en entier par la mitrailleuse et le pilote automatique ; swarmLeak à 13 % laisse filer un membre (5 sur
- * 6) ; swarmHit à 25 u percute la Comète qui vole droit (toutes les variantes le font). Vagues de f1 à éviter : la
+ * et avancement du vol (progress) où les essaims de B sont posés. Chaque essai part d'un état fixé par
+ * __xr3d.settle() (Comète sur la trajectoire, canon froid, turbo plein) : sans lui, la chauffe et l'écart latéral
+ * laissés par le vol en temps réel (images plus lentes à froid) changeaient parfois l'issue. Remesuré le 28/10/2026
+ * avec settle (10 variantes de 0,05 à 0,95, une partie neuve chacune ; issue identique d'un passage à l'autre) :
+ * à 6 % du parcours, l'essaim est abattu en entier pour 0,55 à 0,75 et 0,95 (en 0,72 s de jeu), pas pour les
+ * autres ; à 13 %, un membre file (5 sur 6) pour toutes sauf 0,15. swarmFull (0,65, milieu de la plage) est donc
+ * abattu en entier par la mitrailleuse et le pilote automatique, swarmLeak laisse filer un membre ; swarmHit à 25 u
+ * percute la Comète qui vole droit (toutes les variantes le font) ; swarmShot : essaim des gros plans (orientation
+ * des captures relues à la revue visuelle de 3b). À remesurer si la visée, l'essaim, le pilote
+ * automatique ou les vagues de f1 changent. Vagues de f1 à éviter : la
  * première mine (z ≈ −849, avancement 0,198) est à portée vers 0,176, le premier essaim (z ≈ −1567) entre en scène à
  * 0,221 : l'essai à orientation libre est posé une fois la mine passée ou abattue (dès 0,18), et n'est que
  * journalisé si une vague s'en mêle.
  */
-const VARIANT = { fighter: 0.25, mine: 0.5, swarmFull: 0.3, swarmLeak: 0.4, swarmHit: 0 };
+const VARIANT = { fighter: 0.25, mine: 0.5, swarmFull: 0.65, swarmLeak: 0.4, swarmHit: 0, swarmShot: 0.3 };
 const SWARM_AT = { full: 0.06, leak: 0.13, free: 'i.enemies.mine === 0 && i.progress >= 0.18' };
+/**
+ * Avancements fixes des essais de A et du premier chasseur de B : posés au même endroit du parcours (rochers,
+ * courbe de la trajectoire) quel qu'ait été le vol en temps réel avant (départ des essais vers 0,005 à 0,02 ; la mine
+ * de A, à 0,04, échappait parfois au tir quand elle était posée plus loin). La mine de A doit être abattue avant que
+ * la première mine du parcours n'entre en scène (0,053).
+ */
+const TRIAL_AT = { fighter: 0.025, mine: 0.04, fighter2: 0.07 };
+
+/** L'essai a bien démarré avant l'avancement visé (sinon il est posé plus loin, à un endroit non mesuré). */
+function assertTrialStart(from, at, label) {
+  assert(from <= at, `${label} : vol déjà à ${from} avant l'essai, au-delà de l'avancement fixé ${at} (temps réel trop long avant ?)`);
+}
 
 const SAVE_KEY = 'xeno-rift-save-v1';
 
@@ -159,6 +177,7 @@ async function installTrace(t) {
   await t.page.addInitScript(() => {
     const pick = (i) => ({
       phase: i.phase,
+      progress: i.progress,
       shield: i.shield,
       orbs: i.orbsActive,
       fighter: i.enemies.fighter,
@@ -248,18 +267,21 @@ function killSteps(rows) {
 }
 
 /**
- * Chasseur posé à 60 u (variante fixée), abattu par le tir automatique (pilote automatique) : coups « touché »
- * comptés par le son (volume des ennemis), 2 cristaux lâchés au pas de sa mort, 150 points. Fait au départ du vol :
- * la première vague (mine à ~230 u) est encore hors de portée. Renvoie les relevés.
+ * Chasseur posé à 60 u (variante fixée) à l'avancement TRIAL_AT.fighter, abattu par le tir automatique (pilote
+ * automatique) : coups « touché » comptés par le son (volume des ennemis), 2 cristaux lâchés au pas de sa mort, 150
+ * points. Fait au départ du vol : la première vague (mine à ~230 u) est encore hors de portée. Renvoie les relevés.
  */
 async function fighterHits(t, label, gun, acc) {
-  const r = await t.ev((v) => {
+  const r = await t.ev(([v, at]) => {
     window.__xr3d.autopilot(true);
+    const pre = window.__xrTrace(60 * 30, `i.progress >= ${at}`);
+    window.__xr3d.settle();
     const n0 = window.__sfxLog.length;
     const placed = window.__xr3d.spawn('fighter', 60, v);
     const rows = window.__xrTrace(240, 'i.enemies.killed > i0.enemies.killed');
-    return { placed, rows, log: window.__sfxLog.slice(n0), vol: window.__sfxVol.slice(n0) };
-  }, VARIANT.fighter);
+    return { placed, rows, from: pre[0].progress, log: window.__sfxLog.slice(n0), vol: window.__sfxVol.slice(n0) };
+  }, [VARIANT.fighter, TRIAL_AT.fighter]);
+  assertTrialStart(r.from, TRIAL_AT.fighter, label);
   assertEq(r.placed, 1, `${label} : spawn(fighter) place un chasseur`);
   const rows = r.rows;
   const a = rows[0];
@@ -374,15 +396,32 @@ async function closeups(t, tag, cruise) {
     await trace(t, 600, 'i.nextGate > i0.nextGate');
     await t.ev(() => window.__xr3d.autopilot(false));
     await trace(t, 20);
-    await t.ev(([k, dd, v]) => window.__xr3d.spawn(k, dd, v), [kind, d, kind === 'swarm' ? VARIANT.swarmFull : VARIANT[kind]]);
-    await trace(t, APPEAR_STEPS);
-    await slowShot(t, `${tag}-near-${kind}`, 30);
+    // Pose et apparition depuis un état fixé (settle), dans la même tâche, puis jeu figé (timeScale 0) pendant les
+    // captures : même gros plan et même suite quelle qu'ait été la cadence des images (au ralenti, un chasseur
+    // capturé lentement virait hors du cône avant le tir forcé)
+    await t.ev(([k, dd, v, n]) => {
+      window.__xr3d.settle();
+      window.__xr3d.spawn(k, dd, v);
+      window.__xrTrace(n);
+      window.__xr3d.timeScale(0);
+    }, [kind, d, kind === 'swarm' ? VARIANT.swarmShot : VARIANT[kind], APPEAR_STEPS]);
+    await t.wait(60);
+    await nearShot(t, `${tag}-near-${kind}`, 30);
     if (kind === 'fighter') {
-      const k0 = (await info(t)).enemies.killed;
-      await t.ev(() => window.__xr3d.fire(true));
-      await waitFor(t, (k) => window.__xr3d.info().enemies.killed > k, { timeout: 20000, label: `${tag} : chasseur abattu au ralenti`, arg: k0 });
-      await t.ev(() => window.__xr3d.fire(false));
+      // Tir forcé en sous-pas simulés (temps de jeu exact) depuis l'image capturée, puis 2 sous-pas d'explosion
+      const rows = await t.ev(() => {
+        window.__xr3d.fire(true);
+        const r = window.__xrTrace(60 * 4, 'i.enemies.killed > i0.enemies.killed');
+        window.__xr3d.fire(false);
+        window.__xrTrace(2);
+        return r;
+      });
+      const a = rows[0];
+      const b = rows[rows.length - 1];
+      assert(b.killed > a.killed, `${tag} : chasseur abattu au tir forcé en 4 s de jeu (${fmt({ a, b })})`);
+      await t.wait(60);
       await nearShot(t, `${tag}-explosion`, 30);
+      await t.ev(() => window.__xr3d.timeScale(0.1));
       await t.wait(500);
       await nearShot(t, `${tag}-crystal`, 28);
     }
@@ -505,6 +544,9 @@ async function swarmTrial(t, label, v, at, acc, strict = true) {
     ([vv, p]) => {
       window.__xr3d.autopilot(true);
       window.__xrTrace(60 * 60, typeof p === 'string' ? p : `i.progress >= ${p}`);
+      // Même départ quel qu'ait été le vol en temps réel avant (cadence des images à froid) : Comète sur la
+      // trajectoire, sans vitesse latérale, canon froid, turbo plein
+      window.__xr3d.settle();
       const placed = vv === null ? window.__xr3d.spawn('swarm', 95) : window.__xr3d.spawn('swarm', 95, vv);
       return { placed, rows: window.__xrTrace(240, 'i.enemies.swarm === 0') };
     },
@@ -611,14 +653,21 @@ async function partA(t) {
   // Tir automatique : comptes de toutes les traces (aucun tir sans cible atteignable)
   const acc = { steps: 0, noTarget: 0, notHit: 0, shots: 0 };
 
-  // --- Chasseur posé tout de suite (la première vague, à z −229, est encore hors de portée) : 3 coups
+  // --- Chasseur posé au départ (TRIAL_AT.fighter ; la première vague, à z −229, est encore hors de portée) : 3 coups
   await fighterHits(t, 'A : canon léger', 'light', acc);
 
-  // --- Mine posée à 60 u devant : abattue à distance, sans bouclier perdu
-  let rows = await t.ev((v) => {
+  // --- Mine posée à 60 u devant : abattue à distance, sans bouclier perdu. Chaque essai part d'un endroit et d'un
+  // état fixés (TRIAL_AT, settle : ni turbo ni orbe laissés par le vol en temps réel) et se trace, ramassage
+  // compris, dans la même tâche
+  let rows = await t.ev(([v, at]) => {
+    const pre = window.__xrTrace(60 * 30, `i.progress >= ${at}`);
+    window.__xr3d.settle();
     const placed = window.__xr3d.spawn('mine', 60, v);
-    return { placed, rows: window.__xrTrace(120, 'i.enemies.killed > i0.enemies.killed && i.enemies.mine === 0') };
-  }, VARIANT.mine);
+    const tr = window.__xrTrace(120, 'i.enemies.killed > i0.enemies.killed && i.enemies.mine === 0');
+    const c = tr[tr.length - 1].crystals;
+    return { placed, from: pre[0].progress, rows: tr, pick: window.__xrTrace(150, `i.crystals >= ${c + 1}`) };
+  }, [VARIANT.mine, TRIAL_AT.mine]);
+  assertTrialStart(rows.from, TRIAL_AT.mine, 'A : mine');
   assertEq(rows.placed, 1, 'A : spawn(mine) place une mine');
   let r = rows.rows;
   let a = r[0];
@@ -634,15 +683,20 @@ async function partA(t) {
   checkAutoFire(r, 'A : mine', acc);
   // Son cristal ramassé dans les 2,5 s de jeu suivantes (lâché sur la ligne de la Comète)
   const c0 = b.crystals;
-  r = await trace(t, 150, `i.crystals >= ${c0 + 1}`);
+  r = rows.pick;
   assert(r[r.length - 1].crystals >= c0 + 1, `A : cristal de la mine ramassé (${c0} -> ${r[r.length - 1].crystals})`);
   checkAutoFire(r, 'A : ramassage', acc);
 
   // --- Chasseur posé à 60 u : abattu (150 points), ses 2 cristaux lâchés à sa mort puis ramassés
-  rows = await t.ev((v) => {
+  rows = await t.ev(([v, at]) => {
+    const pre = window.__xrTrace(60 * 30, `i.progress >= ${at}`);
+    window.__xr3d.settle();
     const placed = window.__xr3d.spawn('fighter', 60, v);
-    return { placed, rows: window.__xrTrace(240, 'i.enemies.killed > i0.enemies.killed && i.enemies.fighter === 0') };
-  }, VARIANT.fighter);
+    const tr = window.__xrTrace(240, 'i.enemies.killed > i0.enemies.killed && i.enemies.fighter === 0');
+    const c = tr[tr.length - 1].crystals;
+    return { placed, from: pre[0].progress, rows: tr, pick: window.__xrTrace(240, `i.crystals >= ${c + 2}`) };
+  }, [VARIANT.fighter, TRIAL_AT.fighter2]);
+  assertTrialStart(rows.from, TRIAL_AT.fighter2, 'A : chasseur');
   assertEq(rows.placed, 1, 'A : spawn(fighter) place un chasseur');
   r = rows.rows;
   a = r[0];
@@ -652,9 +706,9 @@ async function partA(t) {
   assertEq(b.points - a.points - otherPoints(a, b), POINTS.fighter, 'A : points du chasseur');
   assertDrops(r, killSteps(r).at(-1), DROPS.fighter, 'A : 2 cristaux du chasseur, lâchés au pas de sa mort');
   checkAutoFire(r, 'A : chasseur', acc);
-  r = await trace(t, 240, `i.crystals >= ${b.crystals + 2}`);
+  r = rows.pick;
   assert(r[r.length - 1].crystals >= b.crystals + 2, `A : 2 cristaux du chasseur ramassés (${b.crystals} -> ${r[r.length - 1].crystals})`);
-  assert(r.every((x) => x.shield === 3), 'A : aucun bouclier perdu (chasseur et son orbe)');
+  assert(rows.rows.concat(r).every((x) => x.shield === 3), 'A : aucun bouclier perdu (chasseur et son orbe)');
   checkAutoFire(r, 'A : ramassage', acc);
   await t.wait(300);
   await waitFor(t, () => Number(document.querySelector('.fl-crystals .hud-num').textContent) === window.__xr3d.info().crystals, {

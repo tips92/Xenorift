@@ -475,7 +475,12 @@ Un monde complet rapportera environ 150 cristaux (3 niveaux de ~50) plus ceux de
     (blanc et violet, éclair de 0,18 s, onde de choc) ; coques roses de près (liseré froid propre, fresnel discret) ;
     essaim illisible de loin (lueurs plus grosses et plus vives) — voir « Choix de réalisation de 3b », C, D et F ;
   - `__xr3d.spawn(type, distance, variant)` déterministe (l'essaim tiré au hasard faisait échouer `flight-combat`
-    environ une fois sur huit) et `info().crystalsDropped` ;
+    environ une fois sur huit) et `info().crystalsDropped` ; puis `__xr3d.settle()` (Comète sur la trajectoire,
+    canon froid, turbo plein, orbes retirées) avant chaque essai, posé à un avancement fixé et tracé dans la même
+    tâche (`TRIAL_AT`, `SWARM_AT` de `flight-combat`) : l'état laissé par le vol en temps réel, plus lent à froid,
+    faisait encore échouer un essai sur quatre environ (essaim « abattu en entier », mine de A, orbe d'un chasseur,
+    chasseur des gros plans attendu au ralenti en temps réel) ; variantes remesurées (`swarmFull` 0,3 → 0,65 ;
+    `swarmShot` 0,3 garde les gros plans) ; 5 passages à froid identiques au pas près ;
   - `flight-combat` : parcours (fenêtres des vagues contre les zones des portails ; hachage de tous les champs des
     rochers, de la trajectoire et de la distorsion, relevé dans Chrome sur f4275db) ; score du vol = base d'avant 3b
     + points du combat, étoiles inchangées, score affiché = record ; tir automatique jamais sans cible atteignable

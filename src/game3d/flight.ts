@@ -100,6 +100,7 @@ interface DevApi {
   autopilot(on?: boolean): void;
   win(): void;
   fail(): void;
+  /** Facteur de temps de la boucle (0 à 8 ; 0 : jeu figé, image toujours dessinée). */
   timeScale(s: number): void;
   info(): Record<string, unknown>;
   /** Avance la simulation de `seconds` d'un coup (tests rapides), puis dessine une image. */
@@ -114,6 +115,12 @@ interface DevApi {
   spawn(type: string, distance?: number, variant?: number): number;
   /** Force le tir (tests), en tir automatique comme en tir manuel. */
   fire(on?: boolean): void;
+  /**
+   * Remet la Comète sur la trajectoire idéale à son z, sans vitesse latérale ni inclinaison, canon froid,
+   * turbo plein et sans orbe ennemie en vol (tests : même état de départ quel qu'ait été le vol en temps réel
+   * avant).
+   */
+  settle(): void;
 }
 
 export class FlightRun implements ModeHandle {
@@ -1299,7 +1306,9 @@ export class FlightRun implements ModeHandle {
       win: () => this.devWin(),
       fail: () => this.devFail(),
       timeScale: (s: number) => {
-        this.timeScale = clamp(Number(s) || 1, 0.1, 8);
+        // 0 : jeu figé, image toujours dessinée (captures ; advance() fait encore avancer la simulation)
+        const v = Number(s);
+        this.timeScale = Number.isFinite(v) ? clamp(v, 0, 8) : 1;
       },
       info: () => {
         const ec = this.enemies.counts(this.enemyCounts);
@@ -1379,6 +1388,18 @@ export class FlightRun implements ModeHandle {
       },
       fire: (on = true) => {
         this.devFire = !!on;
+      },
+      settle: () => {
+        pathAt(this.course.path, this.z, _path);
+        this.x = _path.x;
+        this.y = _path.y;
+        this.vx = this.vy = 0;
+        this.roll = this.pitch = this.yaw = 0;
+        this.gun.cool();
+        this.fireQueue = 0;
+        this.boostGauge = 1;
+        this.boosting = this.boostLocked = this.apBoost = false;
+        this.enemies.clearOrbs();
       },
     };
     this.devApi = api;

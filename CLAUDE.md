@@ -354,7 +354,10 @@ géante au loin, 4 ennemis par monde).
   automatique toujours), `spawn(type, distance = 60, variant)` (ennemi devant la Comète, essaim = formation entière ;
   renvoie le nombre placé ; chasseur tenu à max(30, distance), tire après 42 u ; `variant` 0..1 fixe orientation,
   ondulation, virage : tests reproductibles),
-  `fire(on = true)` (tir forcé), `win()`, `fail()`, `advance(s)`, `timeScale(s)`, `bench(n)` ; disparaît avec la
+  `fire(on = true)` (tir forcé), `settle()` (Comète remise sur la trajectoire, sans vitesse latérale, canon froid,
+  turbo plein, orbes ennemies retirées : un essai part du même état quel qu'ait été le vol en temps réel avant, plus
+  lent à froid ; le poser aussi à un avancement fixé, trace comprise, dans la même tâche),
+  `win()`, `fail()`, `advance(s)`, `timeScale(s)` (0 à 8 ; 0 : jeu figé pour une capture), `bench(n)` ; disparaît avec la
   partie : tester sa présence),
   `window.__xrShell` (`info()` : dont `loadout` = { `equipped`, `owned`, `skills` } de la partie en cours,
   sinon du prochain lancement, `play` = `PlayLoadout` complet (`mods`, `maxHearts`, `ship`), `crystals` =

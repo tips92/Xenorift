@@ -206,6 +206,16 @@ export class ShipGun {
     resolveShipGun(level, cruiseSpeed, this.stats);
   }
 
+  /** Canon froid, prêt à tirer, première bouche (aide DEV : essais reproductibles). */
+  cool(): void {
+    this.heat = 0;
+    this.overheated = false;
+    this.justOverheated = false;
+    this.muzzle = 0;
+    this.cooldownMs = 0;
+    this.sinceShotMs = 1e6;
+  }
+
   /** Bouche du prochain tir (vérification du tir automatique avant step). */
   get nextMuzzle(): number {
     return this.muzzle;
