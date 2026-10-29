@@ -21,8 +21,8 @@
 //     bouclier niveau 2 (Max, plus de prix), turbo niveau 1 ; Échap ferme la confirmation, ◀ et Retour arrière
 //     ramènent aux Niveaux.
 //  E. Effets en jeu hors mode test : laser à dégâts ×1,25 (fiche et projectile tiré), cadence et refroidissement
-//     d'origine, 3 cœurs ; vol à 5 boucliers (jeu et HUD), turbo ×1,25 (jauge vidée de 0,32 et rechargée de 0,25 par
-//     seconde de jeu, contre 0,4 et 0,2).
+//     d'origine, 3 cœurs ; vol à 5 boucliers (jeu et HUD), turbo ×1,25 (énergie partagée avec le canon : chauffée
+//     de 0,32 par seconde de turbo et refroidie de 0,625 par seconde, contre 0,4 et 0,5).
 //  F. Mode test : réserve insuffisante toujours refusée (les prix restent) ; conditions levées (note « Mode test » ;
 //     Dégâts niveau 2 sans elle, Tess étant à bord depuis j2) ;
 //     pompe (non possédée) équipée pour la session puis achetée (rangée dans l'ordre des armes, devient l'arme
@@ -37,8 +37,9 @@
 //  Captures : résultats « +N », hangar (Établi, confirmation, verrous, Comète, Kaï, mode test), aperçu (Kaï et 3 armes,
 //  Comète sans puis avec mitrailleuse et bouclier), vol à 4 et 5 boucliers, Kaï à 5 cœurs.
 //  Valeurs recopiées (à mettre à jour après un réglage) : prix (PRICES de src/core/hangar.ts), multiplicateurs
-//  (UPGRADE_MULS, BOOST_MULS), fiches du laser et du fusil (src/core/weapons.ts), BOOST_DRAIN / BOOST_FILL
-//  (src/game3d/flight.ts). Voir tests/e2e/README.md, « Scénario du hangar ».
+//  (UPGRADE_MULS, BOOST_MULS), fiches du laser et du fusil (src/core/weapons.ts), énergie de la Comète
+//  (SHIP_ENERGY.boostHeat et coolRate du canon léger, src/core/shipGuns.ts). Voir tests/e2e/README.md, « Scénario du
+//  hangar ».
 import { assert, assertEq, assertNear, fmt, readSave, screenText, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
 import { hudFlight, pickStage, press, pressPause, recordToasts, resultDetails, waitPause } from '../lib/core.mjs';
 import { pressBack, waitIntroCard } from '../lib/shell.mjs';
@@ -54,21 +55,29 @@ const SAVE_KEY = 'xeno-rift-save-v1';
 const HG = '.screens [data-screen="hangar"].is-active';
 const RES = '.screens [data-screen="results"].is-active';
 const SETTINGS = { music: true, sfx: true, haptics: false, tilt: false, unlockAll: false, touchSize: 2, touchOpacity: 0, leftHanded: true };
-/** Réglages relus par le jeu : le tir manuel (3b), absent des sauvegardes écrites ici, prend sa valeur par défaut. */
-const SETTINGS_READ = { ...SETTINGS, manualFire: false };
+/**
+ * Réglages relus par le jeu. La sauvegarde v1 contient en plus l'ancien réglage « tir manuel » (retiré le
+ * 29/10/2026) : ignoré au chargement, oublié à la réécriture.
+ */
+const SETTINGS_READ = SETTINGS;
 const RECORD = { score: 99999, stars: 2 };
 const V1 = {
   version: 1,
   unlocked: 1,
   best: { j1: RECORD },
-  settings: SETTINGS,
+  settings: { ...SETTINGS, manualFire: true },
   loadout: { equipped: 'rifle', owned: ['laser', 'rifle'], skills: { doubleJump: true } },
 };
 const ZERO = { damage: 0, fireRate: 0, range: 0, cooling: 0 };
 const ZERO_UPGRADES = Object.fromEntries(['laser', 'machinegun', 'shotgun', 'rifle'].map((w) => [w, { ...ZERO }]));
-/** Turbo de la Comète (game3d/flight.ts) : jauge vidée en 2,5 s, rechargée en 5 s. */
-const BOOST_DRAIN = 0.4;
-const BOOST_FILL = 0.2;
+/**
+ * Énergie de la Comète (core/shipGuns.ts), partagée par le tir et le turbo : chauffe du turbo par seconde
+ * (SHIP_ENERGY.boostHeat : 2,5 s depuis une jauge froide), refroidissement par seconde du canon léger (coolRate) et
+ * pause sans tirer ni pousser avant de refroidir (coolDelayMs, s).
+ */
+const BOOST_HEAT = 0.4;
+const COOL_RATE = 0.5;
+const COOL_DELAY = 0.4;
 /** Fiche du laser (core/weapons.ts) : délai entre tirs (ms), refroidissement par seconde. */
 const LASER_COOLDOWN_MS = 160;
 const LASER_COOL_RATE = 0.45;
@@ -578,7 +587,7 @@ export default async function (t) {
   assert(intro.includes("Nébuleuse d'Azur"), `Décoller : carte d'intro du Vol 1 (${intro.slice(0, 120)})`);
   await waitFor3dPhase(t, 'fly', { timeout: 60000 });
   let fl = await t.ev(() => window.__xr3d.info());
-  assert(fl.maxShields === 4 && fl.shield === 4 && fl.boostDrain === BOOST_DRAIN && fl.boostFill === BOOST_FILL, `vol : 4 boucliers, turbo d'origine (${fmt(fl)})`);
+  assert(fl.maxShields === 4 && fl.shield === 4 && fl.boostHeat === BOOST_HEAT && fl.coolRate === COOL_RATE, `vol : 4 boucliers, turbo et refroidissement d'origine (${fmt(fl)})`);
   let hud = await hudFlight(t);
   const pips = () => t.ev(() => document.querySelectorAll('.fl-pips .fl-pip').length);
   assert(hud.shield === 4 && (await pips()) === 4, `HUD du vol : 4 boucliers (${fmt(hud)})`);
@@ -600,7 +609,8 @@ export default async function (t) {
   st = await buy(t, 'ship.shield', 140, 'Renforcer encore le bouclier (5 boucliers)', 2);
   assert(st.items['ship.shield'].max && st.items['ship.shield'].price === null && st.slots === 5, `bouclier niveau 2 : Max, plus de prix, 5 boucliers (${fmt({ item: st.items['ship.shield'], slots: st.slots })})`);
   assert(!(await t.ev((s) => !!document.querySelector(`${s} [data-buy="ship.shield"]`), HG)), 'bouclier au niveau max : plus de bouton d’achat');
-  st = await buy(t, 'ship.boost', 80, 'Améliorer le turbo (durée et recharge ×1,25)', 1);
+  st = await buy(t, 'ship.boost', 80, 'Améliorer le turbo (durée du turbo et refroidissement ×1,25)', 1);
+  assertEq(st.items['ship.boost'].line, 'Durée du turbo et refroidissement ×1,25 → ×1,5', 'turbo niveau 1 : ligne d’effet de la carte');
   await previewShot(t, 'preview-ship-shield');
   save = await readSave(t);
   assertEq({ ship: save.ship, crystals: save.crystals }, { ship: { gun: 0, shield: 2, boost: 1 }, crystals: 90 }, 'modules de la Comète enregistrés');
@@ -631,29 +641,36 @@ export default async function (t) {
   await waitFor3dPhase(t, 'fly', { timeout: 60000 });
   fl = await t.ev(() => window.__xr3d.info());
   assert(fl.maxShields === 5 && fl.shield === 5, `vol : 5 boucliers (${fmt(fl)})`);
-  assertNear(fl.boostDrain, BOOST_DRAIN / 1.25, 1e-9, 'turbo niveau 1 : vidange');
-  assertNear(fl.boostFill, BOOST_FILL * 1.25, 1e-9, 'turbo niveau 1 : recharge');
+  assertNear(fl.boostHeat, BOOST_HEAT / 1.25, 1e-9, 'turbo niveau 1 : chauffe du turbo');
+  assertNear(fl.coolRate, COOL_RATE * 1.25, 1e-9, 'turbo niveau 1 : refroidissement de l’énergie');
   hud = await hudFlight(t);
   assert(hud.shield === 5 && (await pips()) === 5, `HUD du vol : 5 boucliers (${fmt(hud)})`);
   await t.shot('flight-5-shields');
-  // Jauge sur une seconde de jeu simulée (__xr3d.advance, dans une seule tâche) : turbo tenu, puis relâché.
+  // Énergie sur du temps de jeu simulé (__xr3d.advance, dans une seule tâche ; aucun tir sans appui) : 1 s de turbo
+  // tenu mesurée (puis 0,8 s de plus : jauge assez chaude), puis relâché : pause de refroidissement, puis 0,3 s de
+  // refroidissement mesurées.
   await t.page.keyboard.down('Space');
   try {
     await waitFor(t, () => window.__xrShell.info().input.boost, { timeout: 2000, interval: 20, label: 'turbo tenu' });
-    const drain = await t.ev(() => {
-      const a = window.__xr3d.info().boost;
-      return a - window.__xr3d.advance(1).boost;
+    const heat = await t.ev(() => {
+      const a = window.__xr3d.info().heat;
+      const b = window.__xr3d.advance(1);
+      window.__xr3d.advance(0.8);
+      return { up: b.heat - a, boosting: b.boosting, over: b.overheated };
     });
-    assertNear(drain, BOOST_DRAIN / 1.25, 0.0015, 'jauge vidée en 1 s de turbo');
+    assert(heat.boosting && !heat.over, `turbo tenu 1 s : il pousse, sans surchauffe (${fmt(heat)})`);
+    assertNear(heat.up, BOOST_HEAT / 1.25, 0.0015, 'énergie chauffée en 1 s de turbo');
   } finally {
     await t.page.keyboard.up('Space');
   }
   await waitFor(t, () => !window.__xrShell.info().input.boost, { timeout: 2000, interval: 20, label: 'turbo relâché' });
-  const fill = await t.ev(() => {
-    const a = window.__xr3d.info().boost;
-    return window.__xr3d.advance(1).boost - a;
-  });
-  assertNear(fill, BOOST_FILL * 1.25, 0.0015, 'jauge rechargée en 1 s sans turbo');
+  const cool = await t.ev((d) => {
+    window.__xr3d.advance(d + 0.05);
+    const a = window.__xr3d.info().heat;
+    return { a, down: a - window.__xr3d.advance(0.3).heat };
+  }, COOL_DELAY);
+  assert(cool.a > 0.2, `énergie encore chaude avant la mesure du refroidissement (${fmt(cool)})`);
+  assertNear(cool.down, COOL_RATE * 1.25 * 0.3, 0.0015, 'énergie refroidie en 0,3 s sans tir ni turbo');
 
   // ---------------------------------------------------------------- F. Mode test : conditions levées, prix gardés
   await t.goto('?touch=0&unlock=1');

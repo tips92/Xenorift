@@ -110,8 +110,6 @@ export class TouchControls {
   private size: 0 | 1 | 2 = 1;
   private opacity: 0 | 1 | 2 = 1;
   private lefty = false;
-  /** Tir manuel en vol : bouton TIR affiché à côté de TURBO. */
-  private manual = false;
   private readonly onPress: (a: TouchPress) => void;
   private readonly onChange: () => void;
 
@@ -140,8 +138,9 @@ export class TouchControls {
   // Boutons
   private readonly fireBtn: HoldButton;
   private readonly jumpBtn: HoldButton;
+  /** TURBO du vol, au-dessus de TIR. */
   private readonly boostBtn: HoldButton;
-  /** TIR du vol (tir manuel seulement) : même action que le TIR de la plateforme. */
+  /** TIR du vol (pouce droit, tir tant qu'il est tenu) : même action que le TIR de la plateforme. */
   private readonly shootBtn: HoldButton;
   private readonly buttons: HoldButton[];
 
@@ -186,9 +185,10 @@ export class TouchControls {
     this.stickZone = div('xr-ctl xr-stick-zone', this.flightLayer);
     this.stickBase = div('xr-glass xr-stick-base is-idle', this.stickZone);
     this.stickKnob = div('xr-stick-knob', this.stickBase);
+    // Gros TIR sous le pouce droit, TURBO au-dessus (énergie partagée : voir game3d/shots.ts, ShipGun). TIR créé
+    // après TURBO : entre les deux, là où leurs zones de toucher élargies se recouvrent, TIR l'emporte.
     this.boostBtn = this.makeButton(this.flightLayer, 'xr-boost', 'TURBO', ICON_TURBO, 'boost');
     this.shootBtn = this.makeButton(this.flightLayer, 'xr-shoot', 'TIR', ICON_SHOT, 'fire');
-    this.shootBtn.el.hidden = true;
 
     this.buttons = [this.fireBtn, this.jumpBtn, this.boostBtn, this.shootBtn];
 
@@ -235,20 +235,13 @@ export class TouchControls {
   }
 
   /**
-   * Taille (×0,85 / ×1 / ×1,2), opacité (0,45 / 0,75 / 0,95) et côté des commandes, bouton TIR du vol (tir
-   * manuel). Effet immédiat, sans recréer les éléments ; si une commande change de place, les doigts posés sont
-   * relâchés (TIR masqué : le sien aussi).
+   * Taille (×0,85 / ×1 / ×1,2), opacité (0,45 / 0,75 / 0,95) et côté des commandes. Effet immédiat, sans
+   * recréer les éléments ; si une commande change de place, les doigts posés sont relâchés.
    */
   setOptions(opts: TouchOptions): void {
     const size = touchStep(opts.touchSize);
     const opacity = touchStep(opts.touchOpacity);
     const lefty = opts.leftHanded === true;
-    const manual = opts.manualFire === true;
-    if (manual !== this.manual) {
-      this.manual = manual;
-      this.shootBtn.el.hidden = !manual;
-      if (!manual) this.releaseButton(this.shootBtn);
-    }
     if (size === this.size && opacity === this.opacity && lefty === this.lefty) return;
     const moved = size !== this.size || lefty !== this.lefty;
     this.size = size;
@@ -262,7 +255,7 @@ export class TouchControls {
     if (moved) this.releaseAll();
   }
 
-  /** Masque le joystick (pilotage par inclinaison) ; le bouton TURBO reste visible. */
+  /** Masque le joystick (pilotage par inclinaison) ; TIR et TURBO restent visibles. */
   setStickHidden(hidden: boolean): void {
     if (hidden === this.stickHidden) return;
     this.stickHidden = hidden;
@@ -365,16 +358,6 @@ export class TouchControls {
 
   private releaseButtonPointer(b: HoldButton, id: number): void {
     if (!b.ids.delete(id) || b.ids.size > 0 || !b.down) return;
-    b.down = false;
-    b.el.classList.remove('is-down');
-    this.syncButtons();
-  }
-
-  /** Relâche tous les doigts d'un bouton (bouton masqué). */
-  private releaseButton(b: HoldButton): void {
-    for (const id of b.ids) uncapture(b.el, id);
-    b.ids.clear();
-    if (!b.down) return;
     b.down = false;
     b.el.classList.remove('is-down');
     this.syncButtons();

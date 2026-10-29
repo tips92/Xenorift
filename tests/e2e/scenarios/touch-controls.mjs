@@ -7,16 +7,19 @@
 // hors de SAUT et reste attaché à SAUT jusqu'au lever, doigt posé sur une zone vide (et qui glisse) sans effet
 // ni annulation des autres doigts, PAUSE du HUD touchée par un 2e doigt pendant que le 1er tient le stick,
 // REPRENDRE au 2e doigt (sans commande collée ensuite).
-// Vol (f1) : pas de bouton TIR en tir automatique (réglage par défaut ; le tir manuel est testé par flight-combat),
-// joystick (le vaisseau se déplace) + TURBO (vitesse), doigt vide sans effet, touchcancel et passage en
+// Vol (f1) : gros TIR sous le pouce droit et TURBO au-dessus (un peu plus petit), aucun tir sans appui (même avec
+// une cible atteignable devant la Comète : pas de tir automatique) ;
+// joystick (le vaisseau se déplace) + TURBO (vitesse) + TIR (la Comète tire, énergie qui chauffe) tenus ensemble,
+// TIR levé seul (le tir s'arrête, joystick et TURBO tenus), doigt vide sans effet, touchcancel et passage en
 // arrière-plan qui relâchent tout.
 import { assert, center, info3d, lasers2d, player2d, waitFor, waitFor2dPlay, waitFor3dPhase } from '../lib/helpers.mjs';
 import { touches } from '../lib/touch.mjs';
 import { instrument, setHidden, uiState } from '../lib/shell.mjs';
 import { input, rects, shipPos, trackThreeScenes, waitInput, waitInputIdle, waitPause } from '../lib/core.mjs';
+import { assertNoAutoFire } from '../lib/game3d.mjs';
 
 export const meta = {
-  title: 'Tactile : stick 8 directions, SAUT + TIR, doigts multiples, pause au 2e doigt, joystick + TURBO',
+  title: 'Tactile : stick 8 directions, SAUT + TIR, doigts multiples, pause au 2e doigt, joystick + TURBO + TIR',
   suites: ['smoke', 'full'],
   dev: true,
   timeoutMs: 120000,
@@ -355,14 +358,24 @@ async function flight(t, f) {
   await t.goto('?touch=1&unlock=1&stage=f1');
   await waitFor3dPhase(t, 'fly', { timeout: 60000 });
   assert((await uiState(t)).touch === '01', `couche tactile « vol » seule visible (${(await uiState(t)).touch})`);
-  const shoot = await rects(t, '.xr-shoot');
-  assert(shoot.length === 0, `tir automatique (par défaut) : pas de bouton TIR en vol (${JSON.stringify(shoot)})`);
+  // TIR (gros, en bas à droite) et TURBO (au-dessus, un peu plus petit), sans chevauchement
+  const [shoot] = await rects(t, '.xr-shoot');
+  const [boost] = await rects(t, '.xr-boost');
+  assert(shoot && boost && /TIR/.test(shoot.text) && /TURBO/.test(boost.text), `vol : boutons TIR et TURBO visibles (${JSON.stringify({ shoot, boost })})`);
   const W = await t.ev(() => window.innerWidth);
   const H = await t.ev(() => window.innerHeight);
+  const cx = (r) => r.x + r.w / 2;
+  assert(
+    shoot.x + shoot.w > W - 60 && shoot.y + shoot.h > H - 60 && shoot.w > boost.w && boost.y + boost.h <= shoot.y && Math.abs(cx(boost) - cx(shoot)) < shoot.w / 2,
+    `vol : gros TIR en bas à droite, TURBO plus petit juste au-dessus (${JSON.stringify({ shoot, boost, W, H })})`,
+  );
   const S = [Math.round(W * 0.2), Math.round(H * 0.65)];
   const T = await center(t, '.xr-boost');
+  const P = await center(t, '.xr-shoot');
   const E = [Math.round(W * 0.68), Math.round(H * 0.4)];
   await assertBlank(t, ...E);
+  // Mine atteignable posée devant la Comète, sous-pas simulés sans appui : aucun tir (ni tir automatique)
+  await assertNoAutoFire(t, 'vol');
 
   // --- Joystick vers le haut à droite : commandes analogiques, le vaisseau se déplace
   await t.wait(400);
@@ -379,17 +392,34 @@ async function flight(t, f) {
   const v0 = (await info3d(t)).speed;
   await f.start([[S[0] + 70, S[1] - 60, 1], [...T, 2]]);
   await waitInput(t, (i) => i.boost && i.stickX > 0.5, 'joystick + TURBO');
-  await t.wait(800);
+  await t.wait(500); // pas plus : turbo puis TIR chauffent la même énergie (pas de surchauffe avant la mesure du TIR)
   const v1 = (await info3d(t)).speed;
   await t.shot('stick-turbo');
   t.log(`TURBO : vitesse ${v0} -> ${v1}`);
   assert(v1 >= v0 * 1.2, `TURBO tenu : la vitesse doit augmenter nettement (${v0} -> ${v1})`);
 
-  // --- 3e doigt sur une zone vide qui glisse : rien ne change
-  await f.start([[S[0] + 70, S[1] - 60, 1], [...T, 2], [...E, 3]]);
-  await f.move([[S[0] + 70, S[1] - 60, 1], [...T, 2], [E[0] + 40, E[1] - 20, 3]]);
+  // --- TIR au 3e doigt, joystick et TURBO toujours tenus : la Comète tire
+  const a = await info3d(t);
+  await f.start([[S[0] + 70, S[1] - 60, 1], [...T, 2], [...P, 3]]);
+  await waitInput(t, (i) => i.fire && i.boost && i.stickX > 0.5, 'joystick + TURBO + TIR');
+  await t.wait(500);
+  const b = await info3d(t);
+  await t.shot('stick-turbo-fire');
+  t.log(`TIR : ${b.shotsFired - a.shotsFired} tirs en 500 ms, énergie ${a.heat} -> ${b.heat}, turbo ${b.boosting}`);
+  assert(b.shotsFired >= a.shotsFired + 2 && b.boosting, `joystick + TURBO + TIR : la Comète tire en turbo (${JSON.stringify({ a: a.shotsFired, b: b.shotsFired, boosting: b.boosting })})`);
+  // TIR levé seul : le tir s'arrête, joystick et TURBO restent tenus
+  await f.up(3);
+  await waitInput(t, (i) => !i.fire && i.boost && i.stickX > 0.5, 'TIR levé, joystick et TURBO tenus');
   await t.wait(150);
-  await waitInput(t, (i) => i.boost && i.stickX > 0.5 && i.stickY > 0.4, 'doigt vide : joystick et TURBO inchangés', { timeout: 300 });
+  const c = (await info3d(t)).shotsFired;
+  await t.wait(400);
+  assert((await info3d(t)).shotsFired === c, 'TIR levé : plus aucun tir');
+
+  // --- 3e doigt sur une zone vide qui glisse : rien ne change
+  await f.start([[S[0] + 70, S[1] - 60, 1], [...T, 2], [...E, 4]]);
+  await f.move([[S[0] + 70, S[1] - 60, 1], [...T, 2], [E[0] + 40, E[1] - 20, 4]]);
+  await t.wait(150);
+  await waitInput(t, (i) => i.boost && !i.fire && i.stickX > 0.5 && i.stickY > 0.4, 'doigt vide : joystick et TURBO inchangés', { timeout: 300 });
 
   // --- touchcancel : tout est relâché
   await f.cancel();

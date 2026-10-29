@@ -618,7 +618,7 @@ export const RECIPES: Record<SfxId, Recipe> = {
 
   // --- Combat en vol (3b)
 
-  // Canon léger de la Comète : « piou » électrique bref (4 par seconde, tir auto continu : ≤ 110 ms, sans écho)
+  // Canon léger de la Comète : « piou » électrique bref (4 par seconde, tir continu : ≤ 110 ms, sans écho)
   shipGun(v, t, p) {
     const lp = v.filter('lowpass', 5200, 1.6);
     lp.frequency.setValueAtTime(5200 * p, t);

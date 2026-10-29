@@ -1,6 +1,8 @@
 // Vol 1 (f1) lancé par ?stage=f1, au clavier : compte à rebours 3, 2, 1, Go ! (~3 s) puis vol qui progresse,
-// pilotage (gauche, droite, haut déplacent le vaisseau), turbo (Espace : vitesse en hausse, jauge qui se vide),
-// portails comptés dans le HUD, pause par le bouton du HUD (vol figé) puis REPRENDRE,
+// pilotage (gauche, droite, haut déplacent le vaisseau), turbo (Espace : vitesse en hausse, jauge d'énergie qui
+// chauffe), tir seulement quand J est tenu (aucun tir sans appui, même avec une mine atteignable devant la Comète),
+// portails comptés dans le HUD, pause par le bouton du HUD (vol figé)
+// puis REPRENDRE,
 // victoire (__xr3d.win) → écran « VOL RÉUSSI » avec le décompte des portails, progression sauvegardée.
 import { assert, assertEq, info3d, readSave, screenText, waitFor, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
 import {
@@ -13,9 +15,10 @@ import {
   trackThreeScenes,
   waitPause,
 } from '../lib/core.mjs';
+import { assertNoAutoFire } from '../lib/game3d.mjs';
 
 export const meta = {
-  title: 'Vol 1 : compte à rebours, pilotage, turbo, portails, pause, victoire',
+  title: 'Vol 1 : compte à rebours, pilotage, turbo et tir (énergie), portails, pause, victoire',
   suites: ['smoke', 'full'],
   dev: true,
   timeoutMs: 120000,
@@ -80,25 +83,41 @@ export default async function (t) {
   assert(down.b.y < down.a.y - 2, `flèche bas : y doit baisser d'au moins 2 (${r2(down.a.y)} -> ${r2(down.b.y)})`);
   await t.shot('steer');
 
-  // --- Turbo (Espace) : vitesse nettement plus haute, jauge du HUD qui se vide, retour à la normale ensuite
+  // --- Turbo (Espace) : vitesse nettement plus haute, jauge d'énergie du HUD qui chauffe (repère du turbo
+  // allumé), retour à la normale ensuite
   await waitFor(t, () => window.__xr3d.info().speed > 50, { timeout: 5000, label: 'vitesse de croisière' });
   const cruise = (await info3d(t)).speed;
-  const g0 = (await hudFlight(t)).boost;
+  const e0 = (await hudFlight(t)).energy;
   await t.page.keyboard.down('Space');
   await t.wait(1000);
   const fast = (await info3d(t)).speed;
-  const g1 = (await hudFlight(t)).boost;
+  const h1 = await hudFlight(t);
   await t.shot('boost');
   await t.page.keyboard.up('Space');
-  t.log(`turbo : vitesse ${cruise} -> ${fast}, jauge ${g0} -> ${g1}`);
+  t.log(`turbo : vitesse ${cruise} -> ${fast}, énergie ${e0} -> ${h1.energy}, repère du turbo ${h1.boosting}`);
   assert(fast >= cruise * 1.25, `Espace : vitesse attendue >= ${Math.round(cruise * 1.25)}, obtenu ${fast} (croisière ${cruise})`);
-  assert(g1 <= g0 - 0.2, `Espace : la jauge de turbo du HUD doit se vider (${g0} -> ${g1})`);
+  assert(h1.energy >= e0 + 0.2 && h1.boosting && !h1.over, `Espace : la jauge d'énergie du HUD doit chauffer, repère du turbo allumé (${e0} -> ${JSON.stringify(h1)})`);
   // Espace relâché : la vitesse redescend (au moins 60 % du gain perdu).
   await waitFor(t, (lim) => window.__xr3d.info().speed <= lim, {
     timeout: 5000,
     label: 'retour vers la vitesse de croisière après le turbo',
     arg: cruise + (fast - cruise) * 0.4,
   });
+  assert(!(await hudFlight(t)).boosting, 'Espace relâché : repère du turbo éteint');
+
+  // --- Tir (J tenu) : la Comète ne tire que sur appui, tant que la touche est tenue ; aucun tir sans appui,
+  // même avec une cible atteignable devant elle (mine posée, sous-pas simulés : pas de tir automatique)
+  await assertNoAutoFire(t, 'clavier');
+  const n1 = (await info3d(t)).shotsFired;
+  await t.page.keyboard.down('KeyJ');
+  await t.wait(700);
+  const n2 = (await info3d(t)).shotsFired;
+  await t.page.keyboard.up('KeyJ');
+  await t.wait(300);
+  const n3 = (await info3d(t)).shotsFired;
+  t.log(`tir : J tenu 700 ms : ${n2 - n1} tirs, ${n3 - n2} après le relâcher`);
+  assert(n2 >= n1 + 2, `J tenu : la Comète tire (${n1} -> ${n2})`);
+  assert(n3 - n2 <= 1, `J relâché : le tir s'arrête (${n2} -> ${n3})`);
 
   // --- Portails : pilote automatique jusqu'à 2 portails, le HUD suit le compte du jeu
   await t.ev(() => window.__xr3d.autopilot(true));

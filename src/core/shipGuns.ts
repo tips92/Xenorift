@@ -7,6 +7,14 @@ import type { SfxId } from './types';
 /** Canon léger (de série, sous le nez) ou mitrailleuse (achetée au hangar : deux canons sous les ailes). */
 export type ShipGunId = 'light' | 'machinegun';
 
+/**
+ * Jauge d'énergie de la Comète (décision du 29/10/2026) : la même jauge que la chauffe du canon. Chaque tir
+ * (heatPerShot) et chaque seconde de turbo (boostHeat) la font chauffer ; elle refroidit (coolRate du canon)
+ * après coolDelayMs sans tirer ni pousser. Surchauffe à 1 : ni tir ni turbo jusqu'à OVERHEAT_RECOVER_AT (30 %,
+ * core/weapons.ts). Turbo de série : 2,5 s d'affilée depuis une jauge froide (module Turbo : ÷1,25 / ÷1,5).
+ */
+export const SHIP_ENERGY: Readonly<{ boostHeat: number }> = { boostHeat: 1 / 2.5 };
+
 /** Fiche d'un canon. Points de vie en vol : astéroïdes 1 à 5, chasseur 3, mine 2, essaim 1. */
 export interface ShipGunDef {
   readonly id: ShipGunId;
@@ -18,11 +26,14 @@ export interface ShipGunDef {
   readonly muzzles: number;
   /** Dégâts par projectile. */
   readonly damage: number;
-  /** Chauffe ajoutée par tir, jauge de 0 à 1 (tir continu : 1 / heatPerShot tirs avant la surchauffe). */
+  /** Chauffe ajoutée par tir, jauge d'énergie de 0 à 1 (tir continu : 1 / heatPerShot tirs avant la surchauffe). */
   readonly heatPerShot: number;
-  /** Refroidissement, par seconde. */
+  /** Refroidissement de la jauge d'énergie, par seconde. */
   readonly coolRate: number;
-  /** Hors surchauffe, refroidit seulement après cette pause sans tirer (ms ; > cooldownMs : le tir continu ne refroidit pas). */
+  /**
+   * Hors surchauffe, refroidit seulement après cette pause sans tirer ni pousser (ms ; > cooldownMs : le tir
+   * continu ne refroidit pas).
+   */
   readonly coolDelayMs: number;
   /** Vitesse du projectile RELATIVE à la Comète (u/s) : sa vitesse absolue = vitesse d'avance + speed. */
   readonly speed: number;
@@ -110,8 +121,11 @@ export interface ShipGunStats {
   /** Dégâts par projectile, non arrondis. */
   damage: number;
   heatPerShot: number;
+  /** Refroidissement de la jauge d'énergie (/s) ; ShipGun le multiplie par le module Turbo. */
   coolRate: number;
   coolDelayMs: number;
+  /** Chauffe du turbo, par seconde (SHIP_ENERGY.boostHeat ; ShipGun la multiplie par le module Turbo). */
+  boostHeat: number;
   /** Vitesse relative à la Comète (u/s). */
   speed: number;
   /** Portée (u) : rangeSec × vitesse de croisière du parcours. */
@@ -136,6 +150,7 @@ export function createShipGunStats(): ShipGunStats {
     heatPerShot: 0,
     coolRate: 0,
     coolDelayMs: 0,
+    boostHeat: 0,
     speed: 0,
     range: 0,
     life: 0,
@@ -168,6 +183,7 @@ export function resolveShipGun(level: number, cruiseSpeed: number, out?: ShipGun
   o.heatPerShot = def.heatPerShot / rate;
   o.coolRate = def.coolRate;
   o.coolDelayMs = def.coolDelayMs;
+  o.boostHeat = SHIP_ENERGY.boostHeat;
   o.speed = def.speed;
   o.range = def.rangeSec * cruise;
   o.life = o.range / def.speed;

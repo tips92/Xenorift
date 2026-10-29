@@ -7,7 +7,8 @@
 // Réglages des commandes posés dans la sauvegarde avant le chargement (640x320 puis 740x360) : mode gaucher, cran
 // « grand », et les deux : le stick rond (border-radius 50 %) ne chevauche rien, il passe à droite en mode
 // gaucher (Saut et Tir à gauche) et grandit de 20 % au cran « grand » ; en vol, gaucher et grand : joystick à
-// droite, TURBO et TIR (tir manuel) à gauche, sans chevauchement avec le HUD de vol ni le bouton pause.
+// droite, TIR et TURBO à gauche (gros TIR en bas, TURBO au-dessus), sans chevauchement avec le HUD de vol ni le
+// bouton pause.
 // Plan 02 : en jeu, avec les trois bonus actifs (vitesse, cadence, bouclier), jauge de chauffe, anneaux et bouton
 // pause ne se chevauchent pas (aides DEV : sautés avec --prod).
 // Plan 04 : barre de boss à 640x320 (?at=boss, Kaï posé dans l'arène de j1 ; commandes moyennes, grandes, grandes en
@@ -22,10 +23,11 @@
 // en-tête, aperçu (zone de dessin d'au moins 100x60 px, canvas à sa taille, dans la baie), onglets, chaque carte de
 // la liste (amenée à l'écran, la liste défile) entière et sans chevauchement, sur l'Établi une première amélioration
 // entière sans défiler, cibles tactiles d'au moins 40 px, boîte de confirmation ; captures aux 4 tailles.
-// Plan 03 (3b, combat en vol), de 844x390 à 568x320 : vol à 5 boucliers, mitrailleuse et tir manuel : jauge du canon
-// (.fl-heat), cristaux du vol (.fl-crystals), bouton TIR, TURBO, joystick, PAUSE et HUD sans chevauchement, aussi en
-// surchauffe (J tenue au clavier : libellé SURCHAUFFE sous la jauge) ; ligne « Tir manuel » des Options de la Pause
-// amenée à l'écran, entière.
+// Plan 03 (3b, combat en vol ; TIR et énergie du 29/10/2026), de 844x390 à 568x320 : vol à 5 boucliers et
+// mitrailleuse : jauge d'énergie (.fl-energy : libellé et repère du turbo entiers), cristaux du vol (.fl-crystals),
+// TIR (gros, en bas à droite), TURBO (au-dessus), joystick, PAUSE et HUD sans chevauchement, aussi turbo en marche
+// (Maj tenue : repère allumé) et en surchauffe (Maj et J tenues : libellé SURCHAUFFE sous la jauge, turbo coupé) ;
+// Options de la Pause sans la ligne « Tir manuel », dernière ligne de la rubrique Commandes amenée à l'écran, entière.
 // N'utilise pas les aides DEV (sauf les bonus, la victoire et les cristaux de j1) : passe aussi sur le build de
 // production (--prod).
 import { assert, assertEq, clickText, fmt, waitFor, waitFor2dPlay, waitForScreen } from '../lib/helpers.mjs';
@@ -392,77 +394,87 @@ async function checkTouchVariants(t, w, h) {
 }
 
 /**
- * Vol en mode gaucher, cran « grand », tir manuel : joystick (au repos) à droite, TURBO et TIR à gauche, rien ne
- * chevauche le HUD.
+ * Vol en mode gaucher, cran « grand » : joystick (au repos) à droite, TIR et TURBO à gauche (gros TIR en bas,
+ * TURBO au-dessus), rien ne chevauche le HUD.
  */
 async function checkFlightLefty(t, w, h) {
   const tag = `vol lefty-big ${w}x${h}`;
-  await patchSavedSettings(t, { manualFire: true });
   await t.goto('?touch=1&unlock=1&stage=f1');
   await waitHud(t, 'flight', { timeout: 60000 });
   await assertNoPageScroll(t, tag);
-  const list = await checkFlightHud(t, tag, true);
-  const [boost, base] = list.map((c) => c.r);
-  const shoot = list.find((c) => c.name === 'TIR').r;
+  const list = await checkFlightHud(t, tag);
+  const by = Object.fromEntries(list.map((c) => [c.name, c.r]));
+  const [shoot, boost, base] = [by.TIR, by.TURBO, by.joystick];
   const cx = (r) => r.x + r.w / 2;
   assert(cx(base) > w / 2 && cx(boost) < w / 2 && cx(shoot) < w / 2, `${tag} : joystick à droite, TURBO et TIR à gauche (${JSON.stringify({ boost, base, shoot })})`);
-  // Miroir du droitier : TIR à droite de TURBO (vers le centre), un peu plus haut
-  assert(shoot.x >= boost.x + boost.w - 1 && cx(shoot) > cx(boost) && shoot.y + shoot.h / 2 < boost.y + boost.h / 2, `${tag} : TIR à droite de TURBO, plus haut (${JSON.stringify({ boost, shoot })})`);
+  // Miroir du droitier : gros TIR en bas à gauche, TURBO plus petit juste au-dessus
+  assert(shoot.x < 60 && shoot.w > boost.w && boost.y + boost.h <= shoot.y && Math.abs(cx(boost) - cx(shoot)) < shoot.w / 2, `${tag} : TIR en bas à gauche, TURBO au-dessus (${JSON.stringify({ boost, shoot })})`);
   await t.shot(`flight-lefty-big-${w}x${h}`);
-  await patchSavedSettings(t, { manualFire: false });
 }
 
 /**
- * HUD du vol et commandes tactiles dans l'écran, sans chevauchement (TURBO, joystick, PAUSE, HUD gauche et centre,
- * jauge du canon, cristaux du vol ; TIR en tir manuel).
+ * HUD du vol et commandes tactiles dans l'écran, sans chevauchement (TIR, TURBO, joystick, PAUSE, HUD gauche et
+ * centre, jauge d'énergie avec son libellé et le repère du turbo, cristaux du vol).
  */
-async function checkFlightHud(t, tag, manual = false) {
+async function checkFlightHud(t, tag) {
   const sels = [
+    ['TIR', '.xr-shoot'],
     ['TURBO', '.xr-boost'],
     ['joystick', '.xr-stick-base'],
     ['PAUSE', '.hud-pause'],
     ['HUD gauche', '.fl-left'],
     ['HUD centre', '.fl-center'],
-    ['chauffe du canon', '.fl-heat'],
+    ['énergie', '.fl-energy'],
     ['cristaux du vol', '.fl-crystals'],
   ];
-  if (manual) sels.push(['TIR', '.xr-shoot']);
-  else assertEq((await rects(t, '.xr-shoot')).length, 0, `${tag} : pas de bouton TIR en tir automatique`);
-  await assertLayout(t, [...sels.map((s) => s[1]), '.fl-pips', '.fl-pip', '.fl-heat .heat-track', '.fl-crystals .hud-num'], tag);
+  await assertLayout(
+    t,
+    [...sels.map((s) => s[1]), '.fl-pips', '.fl-pip', '.fl-energy .heat-track', '.fl-energy .heat-head', '.fl-energy .fl-label', '.fl-energy .fl-turbo', '.fl-crystals .hud-num'],
+    tag,
+  );
   return assertParts(t, sels, tag);
 }
 
 /**
- * Vol à 5 boucliers, mitrailleuse améliorée et tir manuel (HUD le plus chargé, bouton TIR), puis la ligne « Tir
- * manuel » des Options de la Pause, amenée à l'écran dans la zone qui défile : entière et lisible.
+ * Vol à 5 boucliers et mitrailleuse améliorée (HUD le plus chargé) : TIR et TURBO, jauge d'énergie (turbo en
+ * marche, puis surchauffe), puis la rubrique Commandes des Options de la Pause (sans la ligne « Tir manuel »,
+ * retirée), sa dernière ligne amenée à l'écran dans la zone qui défile : entière et lisible.
  */
 async function checkFlightCombatHud(t, w, h) {
-  const tag = `vol ${w}x${h}, 5 boucliers, tir manuel`;
+  const tag = `vol ${w}x${h}, 5 boucliers`;
   await t.page.setViewportSize({ width: w, height: h });
-  await patchSave(t, { ...RICH, settings: { manualFire: true, leftHanded: false, touchSize: 1 } });
+  await patchSave(t, { ...RICH, settings: { leftHanded: false, touchSize: 1 } });
   await t.goto('?touch=1&unlock=1&stage=f1');
   await waitHud(t, 'flight', { timeout: 60000 });
   await waitFor(t, () => document.querySelectorAll('.fl-pips .fl-pip:not(.is-empty)').length === 5, { timeout: 3000, label: `${tag} : 5 boucliers au HUD` });
-  const gun = await t.ev(() => document.querySelector('.fl-heat').dataset.gun);
-  assertEq(gun, 'machinegun', `${tag} : jauge de la mitrailleuse`);
+  const gun = await t.ev(() => document.querySelector('.fl-energy').dataset.gun);
+  assertEq(gun, 'machinegun', `${tag} : jauge d'énergie de la mitrailleuse`);
   await assertNoPageScroll(t, tag);
-  const list = await checkFlightHud(t, tag, true);
+  const list = await checkFlightHud(t, tag);
   const by = Object.fromEntries(list.map((c) => [c.name, c.r]));
   const cx = (r) => r.x + r.w / 2;
-  assert(cx(by.TIR) < cx(by.TURBO) && cx(by.TIR) > w / 2, `${tag} : TIR à gauche de TURBO, côté droit (${JSON.stringify({ tir: by.TIR, turbo: by.TURBO })})`);
+  assert(
+    cx(by.TIR) > w / 2 && by.TIR.w > by.TURBO.w && by.TURBO.y + by.TURBO.h <= by.TIR.y && Math.abs(cx(by.TURBO) - cx(by.TIR)) < by.TIR.w / 2,
+    `${tag} : gros TIR côté droit, TURBO au-dessus (${JSON.stringify({ tir: by.TIR, turbo: by.TURBO })})`,
+  );
   await t.shot(`flight-combat-hud-${w}x${h}`);
 
-  // --- Surchauffe : libellé SURCHAUFFE sous la jauge (qui clignote, jauge qui tremble) ; J tenue au clavier (tir
-  // manuel, mitrailleuse niveau 3 : 39 tirs en ~2,9 s), sans aide DEV
-  await t.page.keyboard.down('KeyJ');
+  // --- Turbo (Maj tenue) : repère du turbo allumé sur la jauge ; puis J tenue en plus (mitrailleuse niveau 3) :
+  // surchauffe, libellé SURCHAUFFE sous la jauge (qui clignote, jauge qui tremble), turbo coupé ; sans aide DEV
+  await t.page.keyboard.down('Shift');
   try {
-    await waitFor(t, () => !!document.querySelector('.fl-heat.is-over'), { timeout: 8000, label: `${tag} : surchauffe (J tenue)` });
+    await waitFor(t, () => !!document.querySelector('.fl-energy.is-boost'), { timeout: 3000, label: `${tag} : repère du turbo allumé (Maj tenue)` });
+    await assertLayout(t, ['.fl-energy.is-boost', '.fl-energy.is-boost .heat-head'], `${tag}, turbo`);
+    await t.shot(`flight-turbo-${w}x${h}`);
+    await t.page.keyboard.down('KeyJ');
+    await waitFor(t, () => !!document.querySelector('.fl-energy.is-over'), { timeout: 8000, label: `${tag} : surchauffe (Maj et J tenues)` });
     await t.wait(120);
-    await assertLayout(t, ['.fl-heat.is-over', '.fl-heat.is-over .heat-label'], `${tag}, surchauffe`);
+    assert(!(await t.ev(() => document.querySelector('.fl-energy').classList.contains('is-boost'))), `${tag} : surchauffe : turbo coupé (repère éteint)`);
+    await assertLayout(t, ['.fl-energy.is-over', '.fl-energy.is-over .heat-label'], `${tag}, surchauffe`);
     await assertParts(
       t,
       [
-        ['SURCHAUFFE', '.fl-heat.is-over .heat-label'],
+        ['SURCHAUFFE', '.fl-energy.is-over .heat-label'],
         ['PAUSE', '.hud-pause'],
         ['HUD centre', '.fl-center'],
         ['HUD gauche', '.fl-left'],
@@ -475,30 +487,32 @@ async function checkFlightCombatHud(t, w, h) {
     await t.shot(`flight-overheat-${w}x${h}`);
   } finally {
     await t.page.keyboard.up('KeyJ');
+    await t.page.keyboard.up('Shift');
   }
 
-  // --- Pause → Options : ligne « Tir manuel » (rubrique Commandes) amenée à l'écran, entière
+  // --- Pause → Options : plus de ligne « Tir manuel » ; dernière ligne de la rubrique Commandes amenée à l'écran,
+  // entière
   await t.key('Escape', 60);
   await waitPause(t, true);
   await pressPause(t, 'Options');
   await waitFor(t, () => document.querySelector('.overlay.pause').dataset.view === 'options', { timeout: 3000, label: `${tag} : Pause, vue Options` });
   await t.wait(350); // animation d'ouverture du panneau
   const PO = '.overlay.pause.is-open';
-  await t.ev((s) => document.querySelector(`${s} .toggle--manualFire`).scrollIntoView({ block: 'nearest' }), PO);
+  assertEq(await t.ev((s) => document.querySelectorAll(`${s} .toggle--manualFire`).length, PO), 0, `${tag} : Pause, plus de ligne Tir manuel`);
+  await t.ev((s) => document.querySelector(`${s} .toggle--tilt`).scrollIntoView({ block: 'nearest' }), PO);
   await t.wait(250);
-  await assertLayout(t, [`${PO} .toggle--manualFire`, `${PO} .toggle--manualFire .toggle-label`, `${PO} .toggle--manualFire .toggle-desc`], `${tag} : Pause, ligne Tir manuel`);
+  await assertLayout(t, [`${PO} .toggle--tilt`, `${PO} .toggle--tilt .toggle-label`, `${PO} .toggle--tilt .toggle-desc`], `${tag} : Pause, ligne Inclinaison`);
   const row = await t.ev((s) => {
-    const e = document.querySelector(`${s} .toggle--manualFire`);
+    const e = document.querySelector(`${s} .toggle--tilt`);
     const r = e.getBoundingClientRect();
-    return { on: e.getAttribute('aria-checked'), h: Math.round(r.height), label: e.querySelector('.toggle-label').textContent };
+    return { h: Math.round(r.height), label: e.querySelector('.toggle-label').textContent };
   }, PO);
-  assert(row.on === 'true' && row.label === 'Tir manuel' && row.h >= 40, `${tag} : ligne Tir manuel cochée, cible tactile ≥ 40 px (${JSON.stringify(row)})`);
-  await t.shot(`pause-manual-fire-${w}x${h}`);
+  assert(row.label === 'Pilotage par inclinaison' && row.h >= 40, `${tag} : ligne Inclinaison, cible tactile ≥ 40 px (${JSON.stringify(row)})`);
+  await t.shot(`pause-controls-${w}x${h}`);
   await t.page.locator(`${PO} .pause-opt-head .btn-round`).first().click({ timeout: 5000 });
   await waitFor(t, () => document.querySelector('.overlay.pause').dataset.view === 'menu', { timeout: 2000, label: `${tag} : Pause, retour au menu` });
   await pressPause(t, 'Reprendre');
   await waitPause(t, false);
-  await patchSavedSettings(t, { manualFire: false });
 }
 
 // ---------------------------------------------------------------- Plan 03 : HUD à 5 cœurs et 5 boucliers, résultats
@@ -823,7 +837,7 @@ export default async function (t) {
 
   // --- Plan 03 : HUD à 5 cœurs et 5 boucliers, ligne Réserve des résultats, hangar
   for (const [w, h] of SIZES.slice().reverse()) await checkRichHud(t, w, h);
-  // Plan 03, 3b : HUD du combat en vol (jauge du canon, cristaux, TIR) et ligne « Tir manuel » de la Pause
+  // Plan 03, 3b : HUD du combat en vol (énergie, cristaux, TIR, TURBO) et rubrique Commandes de la Pause
   for (const [w, h] of HANGAR_SIZES) await checkFlightCombatHud(t, w, h);
   for (const [w, h] of HANGAR_SIZES) await checkHangar(t, w, h);
 }

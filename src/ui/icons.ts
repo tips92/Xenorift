@@ -55,7 +55,7 @@ export const ICONS = {
   shipGun: `<svg ${V24}><path d="M2 6.5h10l1.6 1.6H20v2.3h-6.4L12 12H2zM2 13.5h10l1.6 1.6H20v2.3h-6.4L12 19H2z" fill="currentColor"/><circle cx="22" cy="9.25" r="1.3" fill="currentColor" opacity=".55"/><circle cx="22" cy="16.25" r="1.3" fill="currentColor" opacity=".55"/><path d="M4 9.2h6M4 16.2h6" stroke="#05010f" stroke-width="1" stroke-linecap="round" opacity=".55"/></svg>`,
   /** Canon léger de la Comète (de série, un seul canon sous le nez) : jauge de chauffe du vol. */
   shipLightGun: `<svg ${V24}><path d="M2.5 8.2c0-.9.7-1.6 1.6-1.6h6.4l2.2 3.1H20v3.6h-7.3l-2.2 3.1H4.1c-.9 0-1.6-.7-1.6-1.6z" fill="currentColor"/><circle cx="22" cy="11.5" r="1.5" fill="currentColor" opacity=".55"/><path d="M4.6 11.5h5.6" stroke="#05010f" stroke-width="1.1" stroke-linecap="round" opacity=".55"/></svg>`,
-  /** Option du tir manuel en vol : viseur. */
+  /** Viseur : bouton « Réessayer le combat » de l'écran d'échec. */
   aim: `<svg ${V24}><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v5.2M12 16.8V22M2 12h5.2M16.8 12H22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/></svg>`,
   drone: `<svg ${V24}><path d="M3.5 6h6M14.5 6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6.5 6v3.4M17.5 6v3.4" stroke="currentColor" stroke-width="1.8"/><path d="M5 11.6c0-1.4 1.1-2.3 2.5-2.3h9c1.4 0 2.5.9 2.5 2.3v1.2c0 3.5-3.1 6.4-7 6.4s-7-2.9-7-6.4z" fill="currentColor"/><circle cx="12" cy="13.3" r="2.4" fill="#05010f"/><circle cx="12" cy="13.3" r="1" fill="currentColor"/></svg>`,
   /** La Comète vue de dessus, nez vers la droite (64 x 32). */

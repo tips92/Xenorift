@@ -4,7 +4,8 @@
 
 Démo de jeu mobile (Android via Capacitor 8, iOS plus tard avec le même code) : plateforme 2D « à la Mario »
 avec 4 armes à surchauffe (Phaser 3.90), entrecoupée de vols spatiaux 3D à travers des portails, avec tir
-automatique et ennemis (Three.js 0.186) ; hangar entre deux étapes (cristaux-monnaie).
+(bouton TIR tenu), turbo, une jauge d'énergie commune et des ennemis (Three.js 0.186) ; hangar entre deux étapes
+(cristaux-monnaie).
 Héros : Kaï ; vaisseau : la Comète ; ordinateur de bord : LUMA (radio en bulle). Campagne tirée de la table des
 mondes (`core/worlds.ts`), 6 étapes (18 étoiles) : monde 1, Jungle de Xéna : `j1` « Lisière de Xéna », `j2`
 « Canopée des spores », `j3` « Sanctuaire du gardien » (2D) → Nébuleuse d'Azur `f1` (vol, 16 portails) ; monde 2 :
@@ -68,7 +69,8 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   `WeaponStats`, sans allocation), `isWeaponId` ; `hangar.ts` : catalogue des achats, prix, conditions, effets
   et calculs purs du hangar (`itemState`, `applyPurchase`, `buildPlayLoadout`) ; `shipGuns.ts` :
   canons de la Comète (`SHIP_GUNS` canon léger / mitrailleuse, `SHIP_GUN_MULS` par niveau, `SHIP_AIM` cône et
-  guidage, `resolveShipGun(niveau, vitesse de croisière, out)` sans allocation) ; `ids.ts` : listes
+  guidage, `SHIP_ENERGY` chauffe du turbo par seconde (jauge d'énergie partagée par le tir et le turbo),
+  `resolveShipGun(niveau, vitesse de croisière, out)` sans allocation) ; `ids.ts` : listes
   `THEME_IDS`, `COURSE_IDS`, `MUSIC_IDS`, `BOSS_IDS` (`as const`, d'où découlent les unions de `types.ts` ; lues
   par check-levels) ; `worlds.ts` : `WORLDS`, table des mondes (nom, thème, gardien, naufragé, boss du vol, étapes
   `WorldStage` : `id`, `part` 1..3 ou 4 = vol, `levelId`, `rewards`, `boss`, `before` / `after` pour 4c) ;
@@ -90,9 +92,10 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   `.boss-mark.is-step` par touche (`BossHud.steps`) ; en 2D : jauge de chauffe
   avec l'icône de l'arme et une graduation par tir, anneaux des bonus vitesse, cadence et bouclier ; 4 ou 5
   cœurs : classe `has-extra-hearts`, la jauge passe à droite sous 960 px ; en vol, 4 ou 5 boucliers :
-  `has-extra-shields`, pastilles resserrées ; jauge du canon `.fl-heat` (mêmes classes internes que la jauge 2D,
-  `createHeatGauge`, `data-gun`, graduation = 1 s de tir continu) entre le chrono et la pause, cristaux du vol
-  `.fl-crystals` sous le bouclier).
+  `has-extra-shields`, pastilles resserrées ; jauge « Énergie » `.fl-energy` chauffée par le tir et le turbo (mêmes
+  classes internes que la jauge 2D, `createHeatGauge` avec un titre : libellé et repère du turbo `.fl-turbo` au-dessus
+  de la barre, `data-gun`, graduation = 1 s de tir continu, `.is-boost` turbo en marche) entre le chrono et la
+  pause, cristaux du vol `.fl-crystals` sous le bouclier).
   `screens/` : `title`, `select` (une page `.select-page[data-world]` par monde : barre ◀ nom et étoiles du monde
   ▶, glissement au doigt ou à la souris, ← → ; ouverte sur le monde de l'étape à jouer ; cartes `data-stage` ;
   bouton « Hangar » avec la réserve), `options` (rubriques Général et Commandes
@@ -118,7 +121,8 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   dessins purs.
 - `src/input` — `InputApi`. `keyboard.ts` (par `event.code` : AZERTY = QWERTY), `touch.ts` (pointer events, un doigt
   = un pointerId capturé ; `?touch=` ; en 2D stick rond fixe à 8 directions `.xr-dpad`, en vol joystick flottant ;
-  `setOptions` : taille, opacité, mode gaucher, bouton TIR du vol `.xr-shoot` affiché en tir manuel seulement ;
+  `setOptions` : taille, opacité, mode gaucher ; en vol, gros TIR `.xr-shoot` sous le pouce (taille de SAUT) et
+  TURBO `.xr-boost` au-dessus (taille du TIR 2D), TIR prioritaire là où leurs zones de toucher se recouvrent ;
   `fire` = TIR 2D ou TIR du vol), `stick.ts` (lecture pure du stick 2D par secteurs d'angle,
   `STICK_SECTORS` à régler sur téléphone), `tilt.ts` (inclinaison, en vol seulement), `styles.ts` (CSS injecté des
   commandes, variables `--xr-scale` / `--xr-tc-opacity`), `index.ts` (fusion dans un état unique modifié sur place ;
@@ -194,15 +198,17 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   (`joinSegments`), registre `index.ts`.
 - `src/game3d` — `index.ts` : `startFlight` (construction impossible → `onFail` différé). `flight.ts` : `FlightRun`,
   machine à états `intro → fly → warp | dead | timeout → done`, pilotage, portails (+2 s / −5 s), collisions,
-  caméra, perte de contexte, `__xr3d` ; boucliers max, taux du turbo et niveau du canon lus une fois dans
-  `hooks.loadout.ship` ; combat : `simFly` = commandes → turbo → portails → rochers → ennemis (`live`) → visée
-  et tir (`updateGun` : ennemis d'abord, puis rocher du couloir ; tir automatique seulement si le tir guidé peut
-  toucher ; un tir qui doit toucher réserve ses dégâts sur sa cible, `ShotPool.claim` / `pending`, et la visée
-  ignore une cible déjà condamnée), puis, dans toutes les phases, projectiles et cristaux. `renderer.ts` :
+  caméra, perte de contexte, `__xr3d` ; boucliers max, module Turbo et niveau du canon lus une fois dans
+  `hooks.loadout.ship` ; combat : `simFly` = commandes → turbo (`ShipGun.boost`, énergie) → portails → rochers
+  → ennemis (`live`) → visée et tir (`updateGun` : tir seulement quand TIR est tenu ; visée : ennemis d'abord,
+  puis rocher du couloir, elle oriente les tirs sans jamais les déclencher ; un tir qui peut toucher réserve ses
+  dégâts sur sa cible, `ShotPool.claim` / `pending`, et la visée ignore une cible déjà condamnée), puis, dans
+  toutes les phases, projectiles et cristaux. `renderer.ts` :
   renderer partagé.
   `courses.ts` : `COURSES` (générés depuis une graine fixe ; vagues d'ennemis `Course.waves` par `genWaves`, générateur
-  à part). `shots.ts` (canon `ShipGun` : cadence, chauffe, surchauffe ; visée `AimTarget`, `aimDirection`,
-  `shotMiss` ; projectiles `ShotPool`), `pickups.ts` (cristaux du vol `CrystalPickups` : couleurs fixes de l'icône, halo, aimant), `enemies.ts`
+  à part). `shots.ts` (canon et énergie `ShipGun` : cadence, chauffe par tir et par seconde de turbo (`boost`, appelé en
+  premier à chaque sous-pas), surchauffe (ni tir ni turbo) ; visée `AimTarget`, `aimDirection`, `shotMiss` ;
+  projectiles `ShotPool`), `pickups.ts` (cristaux du vol `CrystalPickups` : couleurs fixes de l'icône, halo, aimant), `enemies.ts`
   (`EnemyField` : chasseur, mine, essaim, orbes ; IA, `avoid` du pilote automatique ; prévient `FlightRun` par
   `EnemyEvents`). `sky.ts` (nébuleuse cuite en cubemap + PMREM), `glsl.ts` (bruit), `environment.ts` (planètes
   et créature selon le parcours), `creatures`, `planets`, `gates`, `asteroids` (PV `rockHp`, cristal
@@ -213,9 +219,9 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   balise et son faisceau, le tileset et ses 25 tuiles ; `weapons` : les 4 bras
   à 2x avec bouche du canon et pivot, Kaï dans 6 visées, stand de tir à la vraie cadence et vitesse, icônes
   de bonus et projectiles, `&bg=0` sans le décor ; loupe `&z=2.5&cx=…&cy=…`),
-  `/preview/flight.html?stage=f1|f2&autopilot=1&gun=0..3&shield=0..2&boost=0..2&manual=1` (vol avec des hooks
-  simulés et `defaultPlayLoadout()` ; `gun` / `shield` / `boost` : modules de la Comète ; `manual` : tir manuel ;
-  J / X / F tir, G gagner, L échouer, 1 / 2 / 3 : chasseur, mine, essaim devant la Comète). Monde 1 :
+  `/preview/flight.html?stage=f1|f2&autopilot=1&gun=0..3&shield=0..2&boost=0..2` (vol avec des hooks
+  simulés et `defaultPlayLoadout()` ; `gun` / `shield` / `boost` : modules de la Comète ; J / X / F tir tenu,
+  Espace / Maj turbo, G gagner, L échouer, 1 / 2 / 3 : chasseur, mine, essaim devant la Comète). Monde 1 :
   `/preview/audio.html` (sons et musiques du monde 1, intensités ; `?analyse=1` : mesures hors temps réel),
   `/preview/story.html?cut=prologue|liberation&t=<s>&hold=1&ui=0&sound=1` (cinématiques, curseur, Passer),
   `/preview/bosses.html?view=blob|beetle|whale|whale-sheet&grey=0..1&boxes=1` (boss à l'échelle du jeu, boîtes),
@@ -236,12 +242,11 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   l'interface), `onFail(reason, retry?: StartAt)` : point de reprise d'un échec en plein combat de boss) /
   `ModeHandle` / `StartMode`,
   `HudApi` (`PlatformHud` : `weapon`, `heat`, `speedLeft`, `rapidLeft`, `shield`… ; `FlightHud` : dont `gunLevel`,
-  `heat`, `overheated`, `crystals` ; `radio(id: RadioId)` ; `updateBoss(s: BossHud | null)` : barre de boss commune
-  au 2D et au vol, `BossHud.steps?` = touches du boss), `InputApi` /
-  `InputState` / `InputAction` (dont `interact`), `TouchOptions` (dont `manualFire`), `AudioApi` (dont
-  `musicLevel(n)`), `Settings`
-  (dont `manualFire` : tir manuel en vol), `SaveData` (version 2, recette Sauvegarde ; `story` : `StoryProgress`),
-  `Loadout`
+  `heat` / `overheated` (énergie), `boosting`, `crystals` ; `radio(id: RadioId)` ; `updateBoss(s: BossHud | null)` :
+  barre de boss commune au 2D et au vol, `BossHud.steps?` = touches du boss), `InputApi` /
+  `InputState` / `InputAction` (dont `interact`), `TouchOptions`, `AudioApi` (dont `musicLevel(n)`), `Settings`
+  (plus de `manualFire` depuis le 29/10/2026 : ignoré à la lecture), `SaveData` (version 2, recette Sauvegarde ;
+  `story` : `StoryProgress`), `Loadout`
   (`equipped` ∈ `owned`, `owned` dans l'ordre de `WEAPON_IDS` et toujours avec `'laser'`, `skills.doubleJump`),
   `PlayLoadout` (`ModeHooks.loadout` = `Loadout` + `mods` de chaque arme + `maxHearts` + `ship` : `ShipLoadout` +
   `crew` : équipage à bord, un naufragé déjà secouru n'attend plus dans son niveau),
@@ -455,8 +460,8 @@ avant).
 interrupteur dans `TOGGLES` (champ `group` : rubrique `'general'` ou `'controls'`) ou sélecteur à 3 crans dans
 `CHOICES` (`ui/screens/options.ts`, aussi affiché dans Pause, zone défilante `.pause-opt-body`) + effet immédiat
 dans `setSettings()` et application au démarrage dans `App.ts` ; les modes lisent `hooks.settings`. Les réglages
-des commandes tactiles passent par `input.setTouchOptions` (`TouchOptions`, dont `manualFire` : bouton TIR du
-vol ; crans `TOUCH_SIZE_STEPS` / `TOUCH_OPACITY_STEPS` de
+des commandes tactiles passent par `input.setTouchOptions` (`TouchOptions` ; crans `TOUCH_SIZE_STEPS` /
+`TOUCH_OPACITY_STEPS` de
 `input/touch.ts`, repris par l'aperçu du panneau) ; `load()` ne valide pas les valeurs : `touchStep` les borne.
 
 **Son / musique** : effet = `SfxId` + recette dans `RECIPES` (`audio/sfx.ts` ; monde 1 : `WORLD1_SFX_IDS` et
@@ -601,16 +606,20 @@ géante au loin, 4 ennemis par monde).
   `scene.parsed.doors` ; `scene.exit`, `arrival`, `glyphs`, `levelEvents.windows` / `events`, `arena`, `boss`,
   `bossBeaten`, `mushrooms`, `trunks`, `sporeRain`, `spores`, `shadowPasses`, `npc`, `fightSnap`, `fightRetry` ;
   détail dans `tests/e2e/README.md`), `window.__xr3d` (`info()` → `phase`, `gates`, `nextGate`…, `shield`, `maxShields`,
-  `boost` (jauge 0..1), `boosting`, `boostDrain` / `boostFill` (par seconde) ; combat : `gunLevel`, `heat`,
-  `overheated`, `manualFire`, `range`, `shotsActive`, `shotsFired` / `lastMuzzle` (tirs partis, bouche du dernier),
+  `boosting`, `boostHeat` / `coolRate` (énergie par seconde, module Turbo compris) ; combat : `gunLevel`, `heat` /
+  `overheated` (énergie partagée par le tir et le turbo), `range`, `shotsActive`, `shotsFired` / `lastMuzzle` (tirs partis, bouche du dernier),
   `target` ({ `type` : `'rock'` ou type d'ennemi, `dist`, `hit` :
   le tir guidé peut toucher } ou null), `enemies` ({ `fighter`, `mine`, `swarm` vivants, `killed` abattus par les
   tirs }), `orbsActive`, `waves`, `crystals` / `crystalsTotal` / `crystalsActive`, `rocksDestroyed`, `points`,
-  `crystalsDropped` (lâchés), `drawCalls`, `geometries` / `textures` / `programs`), `autopilot(on)` (tir
-  automatique toujours), `spawn(type, distance = 60, variant)` (ennemi devant la Comète, essaim = formation entière ;
+  `crystalsDropped` (lâchés), `drawCalls`, `geometries` / `textures` / `programs`), `autopilot(on)` (tient TIR
+  quand la cible visée peut être touchée, turbo loin des portails sur une énergie froide), `spawn(type, distance =
+  60, variant)` (ennemi devant la Comète, essaim = formation entière ;
   renvoie le nombre placé ; chasseur tenu à max(30, distance), tire après 42 u ; `variant` 0..1 fixe orientation,
   ondulation, virage : tests reproductibles),
-  `fire(on = true)` (tir forcé), `win()`, `fail()`, `advance(s)`, `timeScale(s)`, `bench(n)` ; disparaît avec la
+  `fire(on = true)` (TIR tenu), `settle()` (Comète remise sur la trajectoire, sans vitesse latérale, énergie froide,
+  turbo coupé, orbes ennemies retirées : un essai part du même état quel qu'ait été le vol en temps réel avant, plus
+  lent à froid ; le poser aussi à un avancement fixé, trace comprise, dans la même tâche),
+  `win()`, `fail()`, `advance(s)`, `timeScale(s)` (0 à 8 ; 0 : jeu figé pour une capture), `bench(n)` ; disparaît avec la
   partie : tester sa présence),
   `window.__xrShell` (`info()` : dont `loadout` = { `equipped`, `owned`, `skills` } de la partie en cours,
   sinon du prochain lancement, `play` = `PlayLoadout` complet (`mods`, `maxHearts`, `ship`, `crew`), `crystals` =
@@ -625,7 +634,7 @@ géante au loin, 4 ennemis par monde).
   part du point de contrôle d'avant son arène, sans arrivée ; ignoré sans arène).
 - Clavier : flèches / WASD (ZQSD en AZERTY) ; Espace = saut en 2D et turbo en vol ; K = saut ; Haut/W = haut
   (visée, portes, monter en vol), ne fait PAS sauter ; Bas/S = accroupi (puis ← → : reptation ; + saut :
-  descente d'étage) ; J/X/F = tir (en vol aussi, en tir automatique comme manuel) ; Maj = turbo ; Échap/P =
+  descente d'étage) ; J/X/F = tir (en vol : tant que la touche est tenue) ; Maj = turbo ; Échap/P =
   pause et reprise ; Entrée/Espace passent l'intro ;
   hors partie, Échap et Retour arrière = retour (comme le bouton retour Android, sans quitter l'appli ; au
   hangar, ferme d'abord la confirmation d'achat).
@@ -653,11 +662,14 @@ géante au loin, 4 ennemis par monde).
   recopiées listées dans `tests/e2e/README.md`, « Scénario du hangar »). Entre deux
   étapes, « Suivant » ouvre le hangar : `nextViaHangar` (`core.mjs`) clique « Suivant » puis le bouton de départ
   (`.hg-depart` : « Atterrir », « Redescendre » ou « Décoller »). Un bouton `aria-disabled` (prix verrouillé) ne se clique avec Playwright qu'avec `force: true`.
-- Combat en vol (étape 3b) : `flight-combat` (parcours inchangés, tir automatique et manuel, cadence et
-  surchauffe de chaque canon, rochers, cristaux, chasseur, mine, essaim, orbes, score, appels de dessin ; mesures
-  par sous-pas `__xr3d.advance(1 / 60)` dans la même tâche, ennemis posés par `spawn` à variante fixée) ; aussi
-  `flight-autopilot` (au moins 1 bouclier, < 150 appels de dessin), `small-screens` (HUD du vol, TIR),
-  `touch-options` et `touch-controls` (TIR), `f1-ctx-loss` (combat après une restauration). Valeurs recopiées
+- Combat en vol (étape 3b, TIR et énergie du 29/10/2026) : `flight-combat` (parcours inchangés, tirs du pilote
+  automatique, aucun tir sans appui, cadence et surchauffe de chaque canon, énergie partagée par le tir et le turbo,
+  rochers, cristaux, chasseur, mine, essaim, orbes, score, appels de dessin ; mesures par sous-pas
+  `__xr3d.advance(1 / 60)` dans la même tâche, ennemis posés par `spawn` à variante fixée) ; aussi
+  `flight-autopilot` (au moins 1 bouclier, < 150 appels de dessin), `small-screens` (HUD du vol, jauge d'énergie,
+  TIR et TURBO), `touch-options` (gaucher) et `touch-controls` (joystick + TURBO + TIR), `f1-play` (turbo et
+  tir au clavier), `background-3d` (commandes relâchées en arrière-plan), `hangar` (module Turbo), `f1-ctx-loss`
+  (combat après une restauration). Valeurs recopiées
   (canons, points, vagues, hachage des parcours) : `tests/e2e/README.md`, « Scénario du combat en vol » ; toute
   retouche du vol, des canons ou des vagues doit les garder verts.
 - Monde 1, partie 4a : `progress-ids` (full, aussi en `--prod` : sauvegardes v1 et v2, verrous, JOUER, pages des
@@ -713,8 +725,9 @@ géante au loin, 4 ennemis par monde).
   (records, tests). Un tirage de plus dans le générateur des portails et des rochers change tout le parcours :
   les vagues ont le leur (recette Parcours de vol). Le hachage `COURSE_FP` de `flight-combat` se relève dans
   Chrome : sous Node, les fonctions `Math.*` d'une autre version de V8 donnent d'autres valeurs.
-- Combat en vol : le pilote automatique (`__xr3d.autopilot`) tire toujours en automatique et s'écarte des
-  mines, de l'essaim et des orbes ; sans `variant`, `__xr3d.spawn` tire au hasard l'orientation de l'essaim et
+- Combat en vol : le pilote automatique (`__xr3d.autopilot`) tient TIR quand la cible visée peut être touchée,
+  prend le turbo loin des portails sur une énergie froide (relâché à 60 %) et s'écarte des mines, de l'essaim et des
+  orbes ; sans lui, rien ne tire sans TIR tenu (`fire`, J / X / F, bouton) ; sans `variant`, `__xr3d.spawn` tire au hasard l'orientation de l'essaim et
   le virage du chasseur (un test le fixe). Hors de la phase `fly`, ni chocs, ni visée, ni ramassage des
   cristaux (`damageShip`, `live`, `updateGun`, `pickups.update`).
 - **Moteur 2D, monde 1** : les textures Phaser sont globales : planches de boss, barrières et objets du niveau se

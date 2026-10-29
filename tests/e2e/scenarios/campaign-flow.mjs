@@ -138,8 +138,8 @@ async function bossWin(t, label) {
 
 /** Vol jusqu'à la phase 'fly' puis victoire (__xr3d.win) → écran « VOL RÉUSSI ». */
 /**
- * Vol gagné dès le départ (__xr3d.win) → « VOL RÉUSSI ». Renvoie les cristaux ramassés avant la victoire (le tir
- * automatique a pu faire éclater un rocher qui en lâche un ; plus aucun ramassage hors de la phase de vol).
+ * Vol gagné dès le départ (__xr3d.win) → « VOL RÉUSSI ». Renvoie les cristaux ramassés avant la victoire (0 : rien ne
+ * tire sans TIR tenu ; plus aucun ramassage hors de la phase de vol).
  */
 async function fly(t, label) {
   await waitFor3dPhase(t, 'fly', { timeout: 60000 });
@@ -275,7 +275,7 @@ export default async function (t) {
 
   // ---------------------------------------------------------------- Vol 1 (f1)
   await waitIntro(t, "Nébuleuse d'Azur");
-  // Vol gagné aussitôt : 0 cristal en général, sinon ceux que le tir automatique a fait tomber avant win()
+  // Vol gagné aussitôt, sans tirer : 0 cristal (compté quand même : ceux du vol iraient à la réserve)
   const f1Got = await fly(t, 'f1');
   t.log(`f1 : ${f1Got} cristal(aux) ramassé(s) avant la victoire`);
   assertEq(await resultsBank(t), { gain: gainText(f1Got), bank: 3 + f1Got }, 'f1 : réserve = 3 + cristaux du vol');

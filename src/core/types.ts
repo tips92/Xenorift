@@ -118,9 +118,12 @@ export interface ShipLoadout {
   maxShields: number;
   /** Niveau du turbo, 0 à 2. */
   boostLevel: number;
-  /** Multiplie la vidange de la jauge (BOOST_DRAIN de game3d/flight.ts) : 1, 0,8, 0,667 (jauge qui dure ×1,25, ×1,5). */
+  /**
+   * Multiplie la chauffe du turbo (SHIP_ENERGY.boostHeat de core/shipGuns.ts, jauge d'énergie partagée avec le
+   * canon) : 1, 0,8, 0,667 (turbo qui dure ×1,25, ×1,5 depuis une jauge froide).
+   */
   boostDrainMul: number;
-  /** Multiplie la recharge de la jauge (BOOST_FILL) : 1, 1,25, 1,5. */
+  /** Multiplie le refroidissement de la jauge d'énergie (coolRate du canon) : 1, 1,25, 1,5. */
   boostFillMul: number;
 }
 
@@ -166,15 +169,16 @@ export interface FlightHud {
   gatesTotal: number;
   shield: number;
   maxShield: number;
-  /** Jauge de turbo, 0..1. */
-  boost: number;
   /** Avancement dans le parcours, 0..1. */
   progress: number;
-  /** Canon de la Comète (icône et graduations de la jauge) : 0 canon léger, 1 à 3 mitrailleuse. */
+  /** Canon de la Comète (icône et graduations de la jauge d'énergie) : 0 canon léger, 1 à 3 mitrailleuse. */
   gunLevel: number;
-  /** Chauffe du canon, 0..1. */
+  /** Jauge d'énergie de la Comète, 0..1 : chauffée par les tirs et le turbo. */
   heat: number;
+  /** Surchauffe : ni tir ni turbo jusqu'au seuil de reprise. */
   overheated: boolean;
+  /** Turbo en marche (repère allumé sur la jauge d'énergie). */
+  boosting: boolean;
   /** Cristaux ramassés pendant ce vol. */
   crystals: number;
 }
@@ -381,18 +385,10 @@ export interface Settings {
   touchOpacity: 0 | 1 | 2;
   /** Mode gaucher : stick à droite, boutons à gauche (en 2D comme en vol). */
   leftHanded: boolean;
-  /**
-   * Tir manuel en vol : bouton TIR à côté de TURBO, la Comète ne tire que sur appui. Sinon (par défaut), tir
-   * automatique sur la cible devant elle. Le clavier (J, X, F) tire dans les deux modes.
-   */
-  manualFire: boolean;
 }
 
-/**
- * Réglages des commandes tactiles passés aux entrées (un Settings complet convient aussi). manualFire : bouton
- * TIR affiché en vol.
- */
-export type TouchOptions = Pick<Settings, 'touchSize' | 'touchOpacity' | 'leftHanded' | 'manualFire'>;
+/** Réglages des commandes tactiles passés aux entrées (un Settings complet convient aussi). */
+export type TouchOptions = Pick<Settings, 'touchSize' | 'touchOpacity' | 'leftHanded'>;
 
 export interface ModeHooks {
   hud: HudApi;

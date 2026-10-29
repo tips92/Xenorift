@@ -3,7 +3,7 @@
 > **État au 29/10/2026 : 4a et 4b faites** (étapes 1 à 12 de l'ordre de réalisation), vérifiées par typecheck,
 > check-levels, build, la suite e2e complète (39/39) et le diag (7/7) ; 4a essayée sur téléphone le 29/10
 > (décisions 20 et 21) ; essai sur téléphone de 4b à faire. **Prochaine action : 4c, étape 13.** 3b est fusionnée
-> dans la branche ; le tir au bouton du vol (décision 21) se fait à part et n'y est pas encore.
+> dans la branche, puis le tir au bouton du vol (décision 21, fait à part sur `claude/vol-tir-bouton`).
 >
 > Écarts de 4a au plan, tous dans le sens des décisions :
 > - Blob-roi complet dès l'étape 5, puis réglé à l'étape 6 (52 PV) ; converti en 4b en **4 touches** (décision 20) ;

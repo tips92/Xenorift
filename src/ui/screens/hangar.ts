@@ -111,7 +111,9 @@ function effectLine(st: ItemState): string {
       return st.maxed ? (st.effect ?? '') : arrow(formatMul(m[l]), formatMul(m[l + 1] ?? m[l]));
     }
     case 'shipBoost':
-      return `Durée et recharge ${arrow(formatMul(BOOST_MULS[l]), formatMul(BOOST_MULS[l + 1] ?? BOOST_MULS[l]))}`;
+      // Énergie partagée par le tir et le turbo : turbo qui dure plus longtemps, jauge qui refroidit plus vite
+      // (aussi après les tirs)
+      return `Durée du turbo et refroidissement ${arrow(formatMul(BOOST_MULS[l]), formatMul(BOOST_MULS[l + 1] ?? BOOST_MULS[l]))}`;
     case 'shipShield':
       return `${arrow(String(maxShieldsFor(l)), String(maxShieldsFor(l + 1)))} boucliers`;
     case 'heart':
@@ -144,7 +146,7 @@ function buyPhrase(st: ItemState): string {
     case 'shipShield':
       return `${l === 0 ? 'Installer le bouclier renforcé' : 'Renforcer encore le bouclier'} (${maxShieldsFor(l + 1)} boucliers)`;
     case 'shipBoost':
-      return `${l === 0 ? 'Améliorer' : 'Améliorer encore'} le turbo (durée et recharge ${formatMul(BOOST_MULS[l + 1] ?? BOOST_MULS[l])})`;
+      return `${l === 0 ? 'Améliorer' : 'Améliorer encore'} le turbo (durée du turbo et refroidissement ${formatMul(BOOST_MULS[l + 1] ?? BOOST_MULS[l])})`;
     case 'heart':
       return `Acheter un cœur supplémentaire (${maxHeartsFor(l + 1)} cœurs)`;
   }

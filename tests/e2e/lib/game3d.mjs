@@ -125,6 +125,48 @@ export async function assertFlying(t, label, ms = 1500) {
   return { p0: a.progress, p1: b.progress };
 }
 
+/**
+ * Aucun tir automatique (décision du 29/10/2026 : la Comète ne tire que TIR tenu ; l'ancien tir automatique partait
+ * dès qu'une cible visée pouvait être touchée, `target.hit`). Tout se fait dans une seule tâche de la page (aucune
+ * image du jeu entre les étapes) : Comète remise sur sa trajectoire (`settle`), mine posée à `dist` u devant elle
+ * (variante fixée), `steps` sous-pas de 1/60 s simulés sans appui (`advance`) : une cible doit être atteignable à un
+ * pas au moins (la mine visée), sans aucun tir. Nettoyage : TIR forcé (`fire`) jusqu'à ce que les mines reviennent
+ * à leur nombre d'avant la pose (2 s de jeu au plus), puis Comète remise en place, énergie froide : la suite du
+ * scénario repart d'un état neutre. À appeler en vol, sans doigt ni touche sur TIR. Renvoie le relevé.
+ */
+export async function assertNoAutoFire(t, label, { dist = 70, steps = 24 } = {}) {
+  const r = await t.ev(
+    ([d, n]) => {
+      const a = window.__xr3d;
+      if (!a) return null;
+      a.settle();
+      const i0 = a.info();
+      const placed = a.spawn('mine', d, 0.5);
+      let aimed = 0;
+      let hit = 0;
+      let i = i0;
+      for (let k = 0; k < n; k++) {
+        i = a.advance(1 / 60);
+        if (i.target && i.target.type === 'mine') aimed++;
+        if (i.target && i.target.hit) hit++;
+      }
+      const res = { phase: i.phase, placed, aimed, hit, fired: i.shotsFired - i0.shotsFired, autopilot: i.autopilot };
+      a.fire(true);
+      let j = i;
+      for (let k = 0; k < 120 && j.enemies.mine > i0.enemies.mine && j.shield === i.shield; k++) j = a.advance(1 / 60);
+      a.fire(false);
+      a.settle();
+      return { ...res, cleanup: { killed: j.enemies.killed - i.enemies.killed, minesLeft: j.enemies.mine - i0.enemies.mine, shieldLost: i.shield - j.shield } };
+    },
+    [dist, steps],
+  );
+  t.log(`${label} : ${fmt(r)}`);
+  assert(r && r.placed === 1 && r.phase === 'fly' && !r.autopilot, `${label} : mine posée en vol, pilote automatique coupé (${fmt(r)})`);
+  assert(r.aimed > 0 && r.hit > 0, `${label} : mine visée et cible atteignable (target.hit : condition de l'ancien tir automatique) en ${steps} sous-pas (${fmt(r)})`);
+  assert(r.fired === 0, `${label} : aucun tir sans appui sur TIR, cible atteignable devant la Comète (${fmt(r)})`);
+  return r;
+}
+
 // ---------------------------------------------------------------- Contexte WebGL du vol
 
 /**

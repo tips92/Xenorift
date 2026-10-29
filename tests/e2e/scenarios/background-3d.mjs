@@ -3,9 +3,9 @@
 //     masqué derrière l'écran de résultats ; SUIVANT → hangar →
 //     DÉCOLLER → carte d'intro du Vol 1, page cachée 3,5 s : aucune étape lancée ; au retour, le vol démarre EN PAUSE (un seul
 //     menu, un seul canvas visible, compte à rebours et chrono figés) ; REPRENDRE → le vol démarre.
-//  B. En vol, joystick + TURBO tenus puis page cachée : menu Pause, AudioContext suspendu, joystick et TURBO
-//     relâchés, progression et chrono figés, aucune source audio démarrée ; au retour, toujours en pause et figé ;
-//     REPRENDRE → la progression avance de nouveau, sans commande collée.
+//  B. En vol, joystick + TURBO + TIR tenus puis page cachée : menu Pause, AudioContext suspendu, joystick, TURBO et
+//     TIR relâchés, progression, chrono et tirs figés, aucune source audio démarrée ; au retour, toujours en pause et
+//     figé ; REPRENDRE → la progression avance de nouveau, sans commande collée.
 //  C. Pause Capacitor seule : progression figée ; après « resume », toujours en pause ; REPRENDRE → ça repart.
 import { assert, assertEq, center, fmt, info3d, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
 import { canvases } from '../lib/gl.mjs';
@@ -39,7 +39,7 @@ async function assertFlightFrozen(t, ms, label) {
   await t.wait(ms);
   const b = await info3d(t);
   assert(a && b, `${label} : vol introuvable (__xr3d absent)`);
-  const pick = (i) => ({ phase: i.phase, progress: i.progress, timeLeft: i.timeLeft, gates: i.gates });
+  const pick = (i) => ({ phase: i.phase, progress: i.progress, timeLeft: i.timeLeft, gates: i.gates, shots: i.shotsFired });
   assert(
     JSON.stringify(pick(a)) === JSON.stringify(pick(b)),
     `${label} : le vol doit rester figé pendant ${ms} ms (${fmt(pick(a))} -> ${fmt(pick(b))})`,
@@ -104,20 +104,21 @@ export default async function (t) {
   const pA = (await info3d(t)).progress;
   await waitProgress(t, pA, 'A : la progression avance après REPRENDRE');
 
-  // ---------------------------------------------------------------- B. Joystick + TURBO tenus, page cachée
+  // ---------------------------------------------------------------- B. Joystick + TURBO + TIR tenus, page cachée
   const f = touches(t);
   const W = await t.ev(() => window.innerWidth);
   const H = await t.ev(() => window.innerHeight);
   const S = [Math.round(W * 0.2), Math.round(H * 0.65)];
   const T = await center(t, '.xr-boost');
+  const P = await center(t, '.xr-shoot');
   await f.start([[...S, 1]]);
   await f.move([[S[0] + 70, S[1] - 60, 1]]);
-  await f.start([[S[0] + 70, S[1] - 60, 1], [...T, 2]]);
+  await f.start([[S[0] + 70, S[1] - 60, 1], [...T, 2], [...P, 3]]);
   await waitFor(t, () => {
     const i = window.__xrShell.info().input;
-    return i.boost && i.stickX > 0.5;
-  }, { timeout: 3000, label: 'B : joystick + TURBO lus par le jeu' });
-  await t.shot('B-stick-turbo');
+    return i.boost && i.fire && i.stickX > 0.5;
+  }, { timeout: 3000, label: 'B : joystick + TURBO + TIR lus par le jeu' });
+  await t.shot('B-stick-turbo-fire');
   const startsAtHide = await t.ev(() => {
     window.__setHidden(true);
     return window.__starts;
@@ -125,7 +126,7 @@ export default async function (t) {
   await waitPaused(t, 'B : page cachée → menu Pause');
   await waitAudio(t, 'suspended', 'B : page cachée → AudioContext suspendu');
   const iB = await inputState(t);
-  assert(!iB.boost && iB.stickX === 0 && iB.stickY === 0, `B : joystick et TURBO relâchés (${fmt(iB)})`);
+  assert(!iB.boost && !iB.fire && iB.stickX === 0 && iB.stickY === 0, `B : joystick, TURBO et TIR relâchés (${fmt(iB)})`);
   const fB = await assertFlightFrozen(t, 1500, 'B : page cachée');
   assertEq((await sourceStarts(t)) - startsAtHide, 0, 'B : sources audio démarrées pendant que la page est cachée');
   await setHidden(t, false);
@@ -139,7 +140,7 @@ export default async function (t) {
   await clickResume(t);
   await waitResumed(t, 'B : REPRENDRE');
   const iB2 = await inputState(t);
-  assert(!iB2.boost && iB2.stickX === 0, `B : aucune commande collée après REPRENDRE (${fmt(iB2)})`);
+  assert(!iB2.boost && !iB2.fire && iB2.stickX === 0, `B : aucune commande collée après REPRENDRE (${fmt(iB2)})`);
   await waitProgress(t, fB2.progress, 'B : la progression avance après REPRENDRE');
 
   // ---------------------------------------------------------------- C. Pause Capacitor seule

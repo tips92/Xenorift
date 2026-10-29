@@ -157,6 +157,8 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
     « Réessayer le combat » : `loseFight` (vies épuisées en plein combat, voir plus bas), `progress2d`, `snapFields`
     / `snapOf`.
   - `game3d.mjs` (vol ; idem) : `recordUi` / `uiLog`, `runId` / `waitNewRun` / `waitFlying`, `assertFlying`,
+    `assertNoAutoFire` (pas de tir automatique : mine posée devant la Comète, sous-pas simulés sans appui, cible
+    atteignable `target.hit` exigée et aucun tir ; mine abattue ensuite, énergie froide),
     `loseFlight`, `threeCanvases` / `tagCanvas` / `assertOneLiveCanvas`, `frameLuma`, `failReason`,
     `armBootLoss` / `bootInfo` (perte du contexte au démarrage).
 
@@ -188,24 +190,30 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   4b (voir « Niveau 2 du monde 1 », « Gardienne du monde 1 » et « Réessayer le combat ») : `mushrooms`, `trunks`,
   `sporeRain`, `spores`, `shadowPasses`, `levelEvents.events`, `npc`, `fightSnap`, `fightRetry`),
   `window.__xr3d` (`info` : dont `shield` / `maxShields` (3 + bouclier renforcé),
-  `boost` (jauge), `boostDrain` / `boostFill` (vidange et recharge par seconde, module Turbo compris), et pour le
-  combat (plan 03, 3b) `gunLevel` (0 canon léger, 1 à 3 mitrailleuse), `heat`, `overheated`, `manualFire`, `range`
+  `boosting` (turbo en marche), `boostHeat` / `coolRate` (chauffe du turbo et refroidissement de l'énergie par
+  seconde, module Turbo compris), et pour le combat (plan 03, 3b) `gunLevel` (0 canon léger, 1 à 3 mitrailleuse),
+  `heat` / `overheated` (jauge d'énergie, chauffée par le tir et le turbo), `range`
   (portée, u), `shotsActive` (tirs en vol), `shotsFired` (tirs partis depuis le départ), `lastMuzzle` (bouche du
   dernier tir : 0, ou 0 / 1 en alternance pour la mitrailleuse), `target` (`{ type: 'rock' | 'fighter' | 'mine' |
   'swarm', dist, hit }` ou null), `enemies` (`fighter`, `mine`, `swarm` vivants, `killed` : abattus par les tirs),
   `orbsActive`, `waves`, `crystals` (ramassés pendant ce vol) / `crystalsTotal` / `crystalsActive` (en vol, pas encore
   ramassés), `crystalsDropped` (cristaux lâchés depuis le départ : ils apparaissent au sous-pas même de la
   destruction), `rocksDestroyed`, `points` (rochers, ennemis, cristaux), `drawCalls` (`renderer.info.render.calls`
-  de la dernière image), `geometries` / `textures` / `programs` (`renderer.info`) ; `autopilot` (tire toujours en
-  automatique, même en tir manuel), `win`, `fail`, `advance(s)` (s secondes de jeu simulées dans la même tâche,
-  renvoie `info()` ; `advance(1 / 60)` : un sous-pas, voir `__xrTrace` de `flight-combat`), `timeScale`, `bench`,
+  de la dernière image), `geometries` / `textures` / `programs` (`renderer.info`) ; `autopilot` (tient TIR quand la cible
+  visée peut être touchée ; turbo loin des portails, lancé sous 5 % d'énergie et relâché à 60 %), `win`, `fail`, `advance(s)` (s secondes de jeu simulées dans la même tâche,
+  renvoie `info()` ; `advance(1 / 60)` : un sous-pas, voir `__xrTrace` de `flight-combat`), `timeScale` (0 à 8 ; 0 :
+  jeu figé, image toujours dessinée, `advance` avance encore : captures sans que le vol continue), `bench`,
   `spawn(type, distance = 60, variant)` (chasseur, mine ou essaim de 6 posé devant la Comète, sur sa ligne ; renvoie
   le nombre placé ; un chasseur se tient à max(30, distance) et tire après 42 u de trajet ; `variant` 0..1, au
   hasard sans lui : orientation de l'essaim et phase de son ondulation comptée depuis la pose, côté du virage du
-  chasseur, clignotement de la mine : à fixer dans un test), `fire(on = true)` (tir forcé, en tir automatique comme
-  manuel)), `window.__xrShell` (`info` : `phase`, `screen` (écran affiché), `loadout` (`equipped`, `owned`,
+  chasseur, clignotement de la mine : à fixer dans un test), `fire(on = true)` (TIR tenu : sans lui, ni touche ni
+  bouton, rien ne tire), `settle()` (Comète remise sur la trajectoire idéale à son z, sans vitesse latérale, énergie
+  froide, turbo coupé, orbes ennemies retirées : à appeler dans la même tâche que `spawn` et la trace, après une trace jusqu'à un
+  avancement fixé (`i.progress >= …`), sinon l'issue dépend du vol en temps réel qui précède, plus lent à froid :
+  endroit du parcours, rochers, chauffe)), `window.__xrShell` (`info` : `phase`, `screen` (écran affiché), `loadout` (`equipped`, `owned`,
   `skills`), `play` (équipement effectif complet : améliorations `mods` par arme, `maxHearts`, `ship` :
-  `maxShields`, `boostDrainMul`, `boostFillMul`, `gunLevel`, `crew` : équipage à bord), `stages` (chaque étape de `STAGES`, dans l'ordre :
+  `maxShields`, `boostDrainMul` (chauffe du turbo), `boostFillMul` (refroidissement de l'énergie), `gunLevel`,
+  `crew` : équipage à bord), `stages` (chaque étape de `STAGES`, dans l'ordre :
   `id`, `kind`, `world`, `cleared` (réussie), `unlocked` (ouverte, mode test compris)), `crystals` (réserve), `weapon`
   (l'arme de la session) ; `cap` ; `addCrystals(n)` : ajoute des cristaux à la réserve, enregistrée, sans redessiner l'écran
   affiché : l'appeler avant d'ouvrir le hangar ; `radio()` : radio de LUMA, voir plus bas). `__xr3d` disparaît quand la
@@ -235,9 +243,10 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   `.overlay.pause.is-open`, bouton `.btn-primary` (REPRENDRE) ; HUD : `.hud-pause`, jauge `.hud-heat[data-weapon]`
   (`--heat-step` : graduations, `.is-over` : SURCHAUFFE), anneaux `.hud-powers .hud-power.is-on[data-kind=speed|
   rapid|shield]` (`.is-ending` : fin proche), cœurs `.hud-hearts .hud-heart` (`.is-empty`), boucliers du vol
-  `.fl-pips .fl-pip` (`.is-empty`), jauge du canon de la Comète `.fl-heat` (mêmes classes internes que `.hud-heat` :
-  `data-level` cool | warm | hot, `data-gun` light | machinegun, `--heat-step` = 1 s de tir continu, `.is-over`,
-  part vide `--heat-off` de `.heat-grad`), cristaux du vol `.fl-crystals .hud-num`. Résultats : ligne `.detail--bank` (« Réserve », gain `.detail-gain` « +N
+  `.fl-pips .fl-pip` (`.is-empty`), jauge d'énergie de la Comète `.fl-energy` (mêmes classes internes que
+  `.hud-heat` : `data-level` cool | warm | hot, `data-gun` light | machinegun, `--heat-step` = 1 s de tir continu,
+  `.is-over`, part vide `--heat-off` de `.heat-grad` ; en plus libellé `.fl-label` et repère du turbo `.fl-turbo`
+  dans `.heat-head`, `.is-boost` turbo en marche ; `hudFlight` de `core.mjs` : `energy`, `boosting`, `over`), cristaux du vol `.fl-crystals .hud-num`. Résultats : ligne `.detail--bank` (« Réserve », gain `.detail-gain` « +N
   cristaux », total `.detail-value`), récompenses nouvelles `.detail--reward[data-reward="<kind>:<id>"]` (libellé
   « Plan », « Compétence », « Équipière »). Niveaux : bouton `.select-hangar` (réserve en sous-titre), total
   `.select-total-n`, une page par monde `.select-page[data-world]` (`.is-current` : affichée ; les autres masquées
@@ -257,19 +266,19 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
 - Contrôles tactiles : `.xr-dpad` = stick rond fixe à 8 directions (secteurs d'angle autour de son centre,
   `src/input/stick.ts` : ← → jusqu'à 30° de l'horizontale, diagonales jusqu'à 65°, ↑ ↓ au-delà ; viser avec
   `center(t, '.xr-dpad', fx, fy)`, ex. 0.8, 0.5 = →, 0.5, 0.12 = ↑, 0.78, 0.78 = ↘), `.xr-jump`, `.xr-fire` ; en
-  vol : joystick flottant sur la moitié gauche (`.xr-stick-zone`) + `.xr-boost` (TURBO), et `.xr-shoot`
-  (TIR, à gauche de TURBO et un peu plus haut) en tir manuel seulement (réglage `manualFire`, interrupteur
-  `.toggle--manualFire` de la rubrique Commandes). Couches :
+  vol : joystick flottant sur la moitié gauche (`.xr-stick-zone`), gros `.xr-shoot` (TIR, en bas à droite, taille
+  de SAUT) et `.xr-boost` (TURBO, juste au-dessus, taille du TIR 2D) ; plus de réglage « Tir manuel » (retiré le
+  29/10/2026 : un ancien `manualFire` de la sauvegarde est ignoré). Couches :
   `#touch-root .xr-tc-layer`. Réglages (rubrique Commandes des Options) : `--xr-scale` et `--xr-tc-opacity`
   sur `#touch-root`, classe `xr-touch--lefty` en mode gaucher (stick et joystick à droite, boutons à gauche) ;
   pour les poser avant le chargement, modifier `settings` de la sauvegarde (`touchSize`, `touchOpacity` :
   0..2, `leftHanded`) puis `t.goto` (voir `small-screens`).
 - Scénarios des contrôles 2D (à lire avant d'en écrire un du même genre) : `touch-controls` (smoke : stick
-  8 directions, glissements, doigts multiples, joystick + TURBO), `aim-crouch-drop` (visée haute et
+  8 directions, glissements, doigts multiples, joystick + TURBO + TIR), `aim-crouch-drop` (visée haute et
   diagonale, éventail de la pompe, accroupi, reptation, plafond bas posé par le test, descente d'une plateforme `=`
   puis de la plateforme mobile de la Lune, portes de la Jungle (128, 5) ↔ (144, 9), au clavier et au stick),
   `touch-options` (rubrique Commandes : anciennes sauvegardes, réglages abîmés, persistance, Pause, gaucher en
-  2D et en vol), `small-screens` (place du stick et des boutons selon les réglages, carte d'intro, HUD avec trois
+  2D et en vol, ancien réglage « tir manuel » ignoré), `small-screens` (place du stick et des boutons selon les réglages, carte d'intro, HUD avec trois
   bonus, HUD à 5 cœurs et 5 boucliers, ligne Réserve des résultats, hangar de 844x390 à 568x320 : chaque carte
   amenée à l'écran, aperçu d'au moins 100x60 px, première amélioration de l'Établi entière sans défiler, cibles
   tactiles, confirmation, mention « Tess à l’établi » en mode test (équipage posé dans la sauvegarde), captures aux 4
@@ -555,51 +564,62 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   attendue après chaque achat et avant une capture). Valeurs **recopiées en dur**, à mettre à jour après un réglage : prix 30 / 60 / 80 / 100 /
   140 / 150 / 250 et réserves attendues qui en découlent (`PRICES` de `src/core/hangar.ts`), multiplicateurs ×1,25 /
   ×1,15 (`UPGRADE_MULS`, `BOOST_MULS`), fiches du laser (`LASER_COOLDOWN_MS`, `LASER_COOL_RATE`) et du fusil
-  (`RIFLE_RANGE_PX`, portée 13,8 tuiles) de `src/core/weapons.ts`, `BOOST_DRAIN` / `BOOST_FILL` de
-  `src/game3d/flight.ts`, et les phrases de la confirmation (`buyPhrase` de `src/ui/screens/hangar.ts`).
+  (`RIFLE_RANGE_PX`, portée 13,8 tuiles) de `src/core/weapons.ts`, `BOOST_HEAT` / `COOL_RATE` / `COOL_DELAY`
+  (énergie : `SHIP_ENERGY` et canon léger de `src/core/shipGuns.ts`), et les phrases de la confirmation (`buyPhrase` de `src/ui/screens/hangar.ts`).
   `small-screens` recopie aussi la réserve 12 398 (12 345 + 53) et le prix de Dégâts du laser ; `campaign-flow`
-  compte les cristaux ramassés (3 en j1, 2 en m1 après RÉESSAYER ; en f1, gagné aussitôt, ceux que le tir
-  automatique a pu faire tomber avant `win()`, 0 en général).
-- **Scénario du combat en vol (plan 03, 3b)** : `flight-combat` (full, ≈ 1 min 45) : 0. parcours construits dans la
-  page (`import('/src/game3d/courses.ts')`) : vagues déterministes et attendues, hors des portails et de leur ligne
-  d'approche (fenêtres de `genWaves` recopiées), portails, rochers (tous les champs), trajectoire et distorsion
-  identiques à ceux d'avant 3b (hachage `COURSE_FP` relevé dans Chrome sur f4275db) ; A. f1, canon léger, pilote
-  automatique (tir automatique) : chasseur abattu en 3 coups (sons « touché » des ennemis, volume 0,8), mine
-  `spawn('mine', 60)` abattue en < 0,9 s, points exacts, cristaux lâchés au pas même de la mort (`crystalsDropped` :
-  1 mine, 2 chasseur) puis ramassés (HUD), rochers détruits sans bouclier perdu, aucun tir automatique sans cible
-  atteignable (`checkAutoFire`, toutes les traces), un son par tir, captures de près au ralenti, victoire (score =
-  base d'avant 3b + points du combat, étoiles des portails seulement, score affiché = record, « +N cristaux »,
-  réserve) ; B. f1, mitrailleuse : chasseur en 3 coups, essaims de 6 posés à un avancement fixé du vol (vol ralenti à
-  `timeScale(0.1)` entre deux relevés : cet avancement ne doit pas être dépassé au départ de l'essai) avec une
-  variante fixée (`VARIANT`, `SWARM_AT` : l'un abattu en entier, cristal de la vague lâché à la mort du dernier
-  membre et à aucune autre ; l'autre laisse filer un membre, aucun cristal), un essaim à orientation libre
-  (journalisé), cadence, bouches alternées, surchauffe et jauge rallumée ; B3. mitrailleuse niveau 3 : chasseur en 2
-  coups, membre d'essaim percuté (un bouclier, ni points ni cristal) puis mine percutée pendant l'invulnérabilité
-  (bouclier gardé, choc léger), 13 tirs/s, surchauffe après 39 tirs ; C. f1, tir manuel, 5 boucliers : TIR placé,
-  aucun tir sans appui, mine frôlée et orbe reçue (un bouclier chacune, au même pas que la disparition de la mine ou
-  de l'orbe, sans cristal), TIR tactile, joystick + TURBO + TIR, J / X / F, canon léger (cadence, surchauffe,
-  reprise), HUD à 844x390 et 640x320, option coupée depuis la Pause (tir automatique revenu, J tire aussi sans
-  cible) ; D. f2 : captures de près dans la ceinture, vol au pilote automatique (x2,5) avec les appels de dessin
-  relevés. Les mesures fines passent par `window.__xrTrace(max, until)` (posé par `installTrace` avant `t.goto`) :
+  compte les cristaux ramassés (3 en j1, 2 en m1 après RÉESSAYER ; en f1, gagné aussitôt sans tirer, 0).
+- **Scénario du combat en vol (plan 03, 3b ; TIR et énergie du 29/10/2026)** : `flight-combat` (full, ≈ 1 min 45) :
+  0. parcours construits dans la page (`import('/src/game3d/courses.ts')`) : vagues déterministes et attendues, hors
+  des portails et de leur ligne d'approche (fenêtres de `genWaves` recopiées), portails, rochers (tous les champs),
+  trajectoire et distorsion identiques à ceux d'avant 3b (hachage `COURSE_FP` relevé dans Chrome sur f4275db) ;
+  A. f1, canon léger, pilote automatique (il tient TIR sur les cibles atteignables) : aucun tir au départ sans appui,
+  chasseur abattu en 3 coups (sons « touché » des ennemis, volume 0,8), mine `spawn('mine', 60)` abattue en < 0,9 s,
+  points exacts, cristaux lâchés au pas même de la mort (`crystalsDropped` : 1 mine, 2 chasseur) puis ramassés (HUD),
+  rochers détruits sans bouclier perdu, aucun tir du pilote sans cible atteignable (`checkPilotFire`, toutes les
+  traces), un son par tir, captures de près au ralenti, victoire (score = base d'avant 3b + points du combat, étoiles
+  des portails seulement, score affiché = record, « +N cristaux », réserve) ; B. f1, mitrailleuse : chasseur en 3
+  coups, essaims de 6 posés à un avancement fixé du vol (vol ralenti à `timeScale(0.1)` entre deux relevés : cet
+  avancement ne doit pas être dépassé au départ de l'essai, `assertTrialStart`) avec une variante fixée (`VARIANT`,
+  `SWARM_AT` : l'un abattu en entier, cristal de la vague lâché à la mort du dernier membre et à aucune autre ;
+  l'autre laisse filer un membre, aucun cristal), un essaim à orientation libre (journalisé), cadence, bouches alternées, surchauffe et
+  jauge rallumée ; B3. mitrailleuse niveau 3 : chasseur en 2 coups, membre d'essaim percuté (un bouclier, ni points ni
+  cristal) puis mine percutée pendant l'invulnérabilité (bouclier gardé, choc léger), 13 tirs/s, surchauffe après 39
+  tirs ; C. f1, 5 boucliers : gros TIR en bas à droite et TURBO au-dessus, aucun tir sans appui (mine frôlée visée et
+  atteignable, `target.hit`), mine frôlée et orbe
+  reçue (un bouclier chacune, au même pas que la disparition de la mine ou de l'orbe, sans cristal), TIR tactile,
+  joystick + TURBO + TIR, J / X / F, canon léger (cadence, surchauffe, reprise), énergie (`energyTrial` : turbo seul
+  qui chauffe de 0,4 par seconde et surchauffe en 2,5 s, ni turbo ni tir en surchauffe malgré Espace et TIR tenus
+  jusqu'à 30 %, puis reprise des deux ; TIR et turbo ensemble : surchauffe en ~1,5 s ; sons du turbo et de la
+  surchauffe), HUD à 844x390 (turbo en marche) et 640x320, J tire sans cible pendant que le pilote automatique vole ;
+  D. f2 : captures de près dans la ceinture, vol au pilote automatique (x2,5) avec les appels de dessin relevés. Les
+  mesures fines passent par `window.__xrTrace(max, until)` (posé par `installTrace` avant `t.goto`) :
   `__xr3d.advance(1 / 60)` répété dans la même tâche (temps de jeu exact, sans dépendre des images/s), état résumé
-  de chaque pas, arrêt sur l'expression `until` (`i`, `i0`, `rows`) ; `spawn`, `fire(true)` et une touche
-  simulée (`KeyboardEvent` sur `window`) se font dans la même tâche que la trace (aucune image du jeu entre les
-  deux). Les mesures de cadence et de surchauffe se font en tir manuel sans pilote automatique (rien d'autre ne
-  tire). Captures agrandies x3 autour du point situé `d` u devant la Comète (`clipAhead` : projection par la
-  caméra du vol, scène suivie par `trackThreeScenes`). Valeurs **recopiées en dur**, à mettre à jour après un
-  réglage : `GUNS` (cadence, tirs avant la surchauffe, refroidissement de `src/core/shipGuns.ts` et
-  `SHIP_GUN_MULS`, coups pour abattre un chasseur), `POINTS` / `DROPS` (`ROCK_POINTS`, `CRYSTAL_POINTS` de
-  `src/game3d/flight.ts`, `ENEMY_DEFS`, `SWARM_WAVE_CRYSTALS` de `src/game3d/enemies.ts`), `SCORE` (`startWarp`),
-  `CRUISE` (`COURSES`), `WAVES` et `CRYSTALS_TOTAL` (vagues obtenues, plan 03), `GATE_ZONE` / `WAVE_WINDOW`
-  (`genWaves`), `COURSE_FP`, `VARIANT` / `SWARM_AT` (variantes mesurées : à remesurer si le pilote automatique,
-  la visée ou l'essaim changent). Le tir manuel apparaît aussi dans `touch-options` (TIR à gauche en mode gaucher,
-  aux crans Grands et Discrète : taille du TIR de la plateforme au même cran, opacité de la couche du vol, tir avec
-  le joystick à droite) et `small-screens` (HUD du combat et TIR de 844x390 à 568x320, aussi en surchauffe, ligne
-  « Tir manuel » de la Pause) ; `touch-controls` vérifie qu'il n'y a pas de TIR en tir automatique ;
-  `flight-autopilot` exige au moins un bouclier, des ennemis abattus, des cristaux et moins de 150 appels de dessin,
-  une partie neuve au départ de chaque vol (rien de la précédente) et la réserve = cristaux de f1 + f2 ;
-  `f1-ctx-loss` abat une mine après chaque restauration sur place ; `stress-laps` compare géométries, textures et
-  programmes du renderer à l'entrée en vol au 1er et au dernier tour.
+  de chaque pas (dont `boosting`, `hudOver`, `hudBoost`), arrêt sur l'expression `until` (`i`, `i0`, `rows`) ;
+  `spawn`, `fire(true)` et une touche simulée (`KeyboardEvent` sur `window` : J, Espace, Maj) se font dans la même
+  tâche que la trace (aucune image du jeu entre les deux). Les mesures de cadence, de surchauffe et d'énergie se font
+  pilote coupé (rien d'autre ne tire ni ne pousse) ; le pilote automatique prend le turbo et tire : `settle()`
+  refroidit l'énergie avant un essai. Captures agrandies x3 autour du point situé `d` u devant la Comète
+  (`clipAhead` : projection par la caméra du vol, scène suivie par `trackThreeScenes`). Valeurs **recopiées en dur**,
+  à mettre à jour après un réglage : `GUNS` (cadence, tirs avant la surchauffe, refroidissement de
+  `src/core/shipGuns.ts` et `SHIP_GUN_MULS`, coups pour abattre un chasseur), `BOOST_HEAT` (`SHIP_ENERGY`),
+  `POINTS` / `DROPS` (`ROCK_POINTS`, `CRYSTAL_POINTS` de `src/game3d/flight.ts`, `ENEMY_DEFS`,
+  `SWARM_WAVE_CRYSTALS` de `src/game3d/enemies.ts`), `SCORE` (`startWarp`), `CRUISE` (`COURSES`), `WAVES` et
+  `CRYSTALS_TOTAL` (vagues obtenues, plan 03), `GATE_ZONE` / `WAVE_WINDOW` (`genWaves`), `COURSE_FP`, `VARIANT` /
+  `SWARM_AT` / `TRIAL_AT` (avancements fixes des essais, variantes mesurées après `__xr3d.settle()`, une partie
+  neuve par variante essayée : à remesurer si le pilote automatique, la visée, l'essaim ou les vagues de f1 changent ;
+  inchangées après le pilote du 29/10/2026, qui tient TIR et prend le turbo sur l'énergie). TIR et TURBO apparaissent
+  aussi dans `touch-options` (miroir en mode gaucher, aux crans Grands et Discrète : TIR de la taille de SAUT, TURBO
+  de celle du TIR de la plateforme, opacité de la couche du vol, ancien `manualFire: false` ignoré
+  (`assertNoAutoFire`), TIR et TURBO tenus avec le joystick à droite),
+  `small-screens` (HUD du combat, TIR et TURBO de 844x390 à 568x320, aussi turbo en marche et en surchauffe ;
+  rubrique Commandes de la Pause sans « Tir manuel »), `touch-controls` (pas de tir automatique : `assertNoAutoFire` ;
+  joystick + TURBO + TIR, TIR levé seul), `f1-play` (pas de tir automatique : `assertNoAutoFire` ; turbo et J au
+  clavier : énergie du HUD), `background-3d` (joystick, TURBO et TIR relâchés en
+  arrière-plan) et `hangar` (module Turbo : chauffe du turbo et refroidissement mesurés) ; `flight-autopilot` exige
+  au moins un bouclier, des ennemis abattus, des cristaux et moins de 150 appels de dessin, une partie neuve au départ
+  de chaque vol (rien de la précédente) et la réserve = cristaux de f1 + f2 ; `f1-ctx-loss` abat une mine (TIR tenu
+  par `fire`) après chaque restauration sur place ; `stress-laps` compare géométries, textures et programmes du
+  renderer à l'entrée en vol au 1er et au dernier tour.
 - Champs privés du moteur lisibles dans la page (TypeScript ne les cache pas à l'exécution) : `scene.gun`
   (`burstLeft`, `sinceShotMs`, `heat`, `overheated`), `scene.player.invulnMs`, `enemies.list[i]` (`awake`,
   `body.blocked.down`) : préférer une attente d'état (`waitFor`) à une durée fixe.

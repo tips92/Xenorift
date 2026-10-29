@@ -16,7 +16,6 @@ const RING_C = 2 * Math.PI * 20;
 /** Temps restant des bonus : pas de 2 % (comme l'envoie le moteur). */
 const POWER_STEPS = 50;
 const HEAT_STEPS = 50;
-const BOOST_STEPS = 50;
 const PROGRESS_STEPS = 400;
 const BOSS_STEPS = 200;
 const MAX_TOASTS = 3;
@@ -87,7 +86,7 @@ function heatStep(id: WeaponId): string {
 }
 
 /**
- * Graduations de la jauge du canon de la Comète : une seconde de tir continu (canon léger : 25 %, surchauffe
+ * Graduations de la jauge d'énergie de la Comète : une seconde de tir continu (canon léger : 25 %, surchauffe
  * en 4 s ; mitrailleuse : 33 %, 3 s à tous ses niveaux). Un tir (6 %, 3 %) donnerait des traits illisibles.
  */
 function shipHeatStep(level: number): string {
@@ -96,7 +95,10 @@ function shipHeatStep(level: number): string {
   return `${(clamp(perSec, 0.1, 1) * 100).toFixed(2)}%`;
 }
 
-/** Jauge de chauffe (arme de Kaï en 2D, canon de la Comète en vol) : mêmes classes internes, état quantifié. */
+/**
+ * Jauge de chauffe (arme de Kaï en 2D) ou d'énergie (canon et turbo de la Comète en vol) : mêmes classes
+ * internes, état quantifié.
+ */
 interface HeatGauge {
   readonly el: HTMLDivElement;
   readonly grad: HTMLDivElement;
@@ -108,14 +110,26 @@ interface HeatGauge {
   over: boolean;
 }
 
-function createHeatGauge(cls: string, svg: string): HeatGauge {
+/**
+ * `title` (jauge d'énergie du vol) : libellé au-dessus de la barre, suivi du repère du turbo (`.fl-turbo`,
+ * allumé par la classe `is-boost` de la jauge).
+ */
+function createHeatGauge(cls: string, svg: string, title?: string): HeatGauge {
   const box = div(cls);
   box.dataset.level = 'cool';
   const track = div('heat-track');
   const grad = div('heat-grad');
   track.append(grad, div('heat-ticks'));
   const ico = icon(svg, 'ico ico-weapon');
-  box.append(ico, track, el('span', 'heat-label', 'SURCHAUFFE'));
+  if (title) {
+    const head = div('heat-head');
+    head.append(el('span', 'fl-label', title), icon(ICONS.boost, 'fl-turbo'));
+    const body = div('heat-body');
+    body.append(head, track);
+    box.append(ico, body, el('span', 'heat-label', 'SURCHAUFFE'));
+  } else {
+    box.append(ico, track, el('span', 'heat-label', 'SURCHAUFFE'));
+  }
   return { el: box, grad, ico, q: -1, level: '', over: false };
 }
 
@@ -219,12 +233,7 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
   const pips = div('fl-pips');
   const pipEls: HTMLSpanElement[] = [];
   shieldBox.append(el('span', 'fl-label', 'Bouclier'), pips);
-  const boostBox = div('fl-boost');
-  const boostTrack = div('fl-boost-track');
-  const boostFill = div('fl-boost-fill');
-  boostTrack.append(boostFill);
-  boostBox.append(el('span', 'fl-label', 'Turbo'), boostTrack);
-  flLeft.append(shieldBox, boostBox);
+  flLeft.append(shieldBox);
 
   const flCenter = div('fl-center');
   const timer = div('fl-timer');
@@ -244,16 +253,17 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
   gatesEl.append(icon(ICONS.gate, 'ico ico-gate'), el('span', 'fl-gates-label', 'Portails'), gatesN, gatesT);
   flCenter.append(timer, gatesEl);
 
-  // Cristaux ramassés pendant le vol (sous le bouclier et le turbo).
+  // Cristaux ramassés pendant le vol (sous le bouclier).
   const flCryst = div('fl-crystals');
   const flCrystIco = icon(ICONS.crystal, 'ico ico-crystal');
   const flCrystN = el('b', 'hud-num', '0');
   flCryst.append(flCrystIco, flCrystN);
 
-  // Chauffe du canon de la Comète (à gauche du bouton pause) : l'icône montre le canon léger ou la mitrailleuse.
-  const flHeat = createHeatGauge('fl-heat', shipGunIcon(0));
+  // Énergie de la Comète, chauffée par le tir et le turbo (à gauche du bouton pause) : l'icône montre le canon
+  // léger ou la mitrailleuse, le repère du turbo s'allume quand il pousse.
+  const flEnergy = createHeatGauge('fl-energy', shipGunIcon(0), 'Énergie');
 
-  fl.append(prog, flLeft, flCryst, flCenter, flHeat.el);
+  fl.append(prog, flLeft, flCryst, flCenter, flEnergy.el);
 
   // ---------------------------------------------------------------- Bouton pause (seul élément interactif)
 
@@ -456,9 +466,7 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
   let fGatesTotal = -1;
   let fShield = -1;
   let fMaxShield = -1;
-  let fBoostQ = -1;
-  let fBoostFull = false;
-  let fBoostLow = false;
+  let fBoosting = false;
   let fProgQ = -1;
   let fGun = -1;
   let fCrystals = -1;
@@ -548,21 +556,11 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
     }
   }
 
-  function setBoost(v: number): void {
-    const q = Math.round(num01(v) * BOOST_STEPS);
-    if (q === fBoostQ) return;
-    fBoostQ = q;
-    boostFill.style.transform = `scaleX(${q / BOOST_STEPS})`;
-    const full = q >= BOOST_STEPS;
-    if (full !== fBoostFull) {
-      fBoostFull = full;
-      boostBox.classList.toggle('is-full', full);
-    }
-    const low = q < BOOST_STEPS * 0.2;
-    if (low !== fBoostLow) {
-      fBoostLow = low;
-      boostBox.classList.toggle('is-low', low);
-    }
+  /** Turbo en marche : repère du turbo allumé sur la jauge d'énergie. */
+  function setBoosting(on: boolean): void {
+    if (on === fBoosting) return;
+    fBoosting = on;
+    flEnergy.el.classList.toggle('is-boost', on);
   }
 
   function setProgress(v: number): void {
@@ -574,14 +572,14 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
     progDotWrap.style.transform = `translate3d(${r * 100}%,0,0)`;
   }
 
-  /** Canon de la Comète : icône (canon léger ou mitrailleuse) et graduations de la jauge. */
+  /** Canon de la Comète : icône (canon léger ou mitrailleuse) et graduations de la jauge d'énergie. */
   function setGunLevel(v: number): void {
     const n = intOr(v, 0, 0, MAX_SHIP_GUN_LEVEL);
     if (n === fGun) return;
     fGun = n;
-    flHeat.ico.innerHTML = shipGunIcon(n);
-    flHeat.el.dataset.gun = shipGunId(n);
-    flHeat.el.style.setProperty('--heat-step', shipHeatStep(n));
+    flEnergy.ico.innerHTML = shipGunIcon(n);
+    flEnergy.el.dataset.gun = shipGunId(n);
+    flEnergy.el.style.setProperty('--heat-step', shipHeatStep(n));
   }
 
   function setFlightCrystals(v: number, animate: boolean): void {
@@ -599,21 +597,21 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
     fGatesTotal = -1;
     fShield = -1;
     fMaxShield = -1;
-    fBoostQ = -1;
+    fBoosting = true;
     fProgQ = -1;
     fGun = -1;
     fCrystals = -1;
-    resetGauge(flHeat);
+    resetGauge(flEnergy);
     setTime(Number.NaN);
     setGatesTotal(0);
     setGates(0, false);
     setMaxShield(3);
     setShield(3, false);
-    setBoost(1);
+    setBoosting(false);
     setProgress(0);
     setGunLevel(0);
-    setGaugeHeat(flHeat, 0);
-    setGaugeOver(flHeat, false);
+    setGaugeHeat(flEnergy, 0);
+    setGaugeOver(flEnergy, false);
     setFlightCrystals(0, false);
     flLeft.classList.remove('is-critical');
   }
@@ -799,11 +797,11 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
       if (s.gates !== undefined) setGates(s.gates, true);
       if (s.maxShield !== undefined) setMaxShield(s.maxShield);
       if (s.shield !== undefined) setShield(s.shield, true);
-      if (s.boost !== undefined) setBoost(s.boost);
       if (s.progress !== undefined) setProgress(s.progress);
       if (s.gunLevel !== undefined) setGunLevel(s.gunLevel);
-      if (s.heat !== undefined) setGaugeHeat(flHeat, s.heat);
-      if (s.overheated !== undefined) setGaugeOver(flHeat, !!s.overheated);
+      if (s.heat !== undefined) setGaugeHeat(flEnergy, s.heat);
+      if (s.overheated !== undefined) setGaugeOver(flEnergy, !!s.overheated);
+      if (s.boosting !== undefined) setBoosting(!!s.boosting);
       if (s.crystals !== undefined) setFlightCrystals(s.crystals, true);
     },
 

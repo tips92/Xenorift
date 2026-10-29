@@ -192,21 +192,22 @@ const CSS = `
   bottom: calc(var(--xr-sb) + var(--xr-edge) + var(--xr-jump) * 0.4);
   font-size: calc(var(--xr-fire) * 0.13);
 }
-.xr-boost {
-  --xr-c: var(--xr-mag);
+/* Vol : gros TIR sous le pouce droit (place de SAUT en 2D), cyan comme les tirs ; tir tant qu'il est tenu. */
+.xr-shoot {
   width: var(--xr-jump);
   height: var(--xr-jump);
   right: calc(var(--xr-sr) + var(--xr-edge));
   bottom: calc(var(--xr-sb) + var(--xr-edge));
-  font-size: calc(var(--xr-jump) * 0.115);
+  font-size: calc(var(--xr-jump) * 0.12);
 }
-/* TIR du vol (tir manuel) : placé comme le TIR de la plateforme par rapport à SAUT, cyan comme les tirs. */
-.xr-shoot {
+/* TURBO au-dessus de TIR (même pouce), un peu plus petit et un peu vers le centre de l'écran, magenta. */
+.xr-boost {
+  --xr-c: var(--xr-mag);
   width: var(--xr-fire);
   height: var(--xr-fire);
-  right: calc(var(--xr-sr) + var(--xr-edge) + var(--xr-jump) + var(--xr-gap));
-  bottom: calc(var(--xr-sb) + var(--xr-edge) + var(--xr-jump) * 0.4);
-  font-size: calc(var(--xr-fire) * 0.13);
+  right: calc(var(--xr-sr) + var(--xr-edge) + var(--xr-jump) * 0.2);
+  bottom: calc(var(--xr-sb) + var(--xr-edge) + var(--xr-jump) + var(--xr-gap) * 1.4);
+  font-size: calc(var(--xr-fire) * 0.115);
 }
 
 /* ---------- Joystick flottant (moitié gauche de l'écran, droite en mode gaucher) */
@@ -261,14 +262,17 @@ const CSS = `
   right: calc(var(--xr-sr) + var(--xr-edge));
 }
 .xr-touch--lefty .xr-jump,
-.xr-touch--lefty .xr-boost {
+.xr-touch--lefty .xr-shoot {
   right: auto;
   left: calc(var(--xr-sl) + var(--xr-edge));
 }
-.xr-touch--lefty .xr-fire,
-.xr-touch--lefty .xr-shoot {
+.xr-touch--lefty .xr-fire {
   right: auto;
   left: calc(var(--xr-sl) + var(--xr-edge) + var(--xr-jump) + var(--xr-gap));
+}
+.xr-touch--lefty .xr-boost {
+  right: auto;
+  left: calc(var(--xr-sl) + var(--xr-edge) + var(--xr-jump) * 0.2);
 }
 .xr-touch--lefty .xr-stick-zone {
   left: auto;

@@ -4,7 +4,7 @@ Troisième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail), apr�
 [contrôles](01-controles.md) et les [armes](02-armes.md).
 
 **État (28/10/2026)** : **3a et 3b codées et vérifiées** sur la branche `plans-etapes-1-3` (3a commitée dans
-`f4275db`, 3b pas encore commitée).
+`f4275db`, 3b dans `223d5ec`).
 
 - **3a** (points 1 à 8, plus les effets bouclier et turbo de la Comète du point 14) : scénarios e2e adaptés,
   nouveau scénario `hangar`, hangar vérifié de 844x390 à 568x320 (`small-screens`), suite complète verte.
@@ -12,8 +12,14 @@ Troisième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail), apr�
   scénario `flight-combat`, portails et rochers de f1 / f2 identiques à ceux d'avant 3b, pilote automatique qui
   finit f1 et f2 sans perdre de bouclier, suite complète verte (32 scénarios). Tests et captures relus, défauts de
   rendu corrigés et tests complétés (« Corrigé après la relecture des tests et des captures de 3b »).
-- Reste l'essai sur téléphone des deux parties (3b : lisibilité des tirs et des ennemis, tir automatique, bouton
-  TIR, réglages ; points à trancher en fin de [Tests](#tests)).
+- Reste l'essai sur téléphone des deux parties (3b : lisibilité des tirs et des ennemis, ~~tir automatique, bouton
+  TIR, réglages~~ (remplacés par l'amendement du 29/10/2026 : TIR et TURBO, énergie partagée) ; points à trancher
+  en fin de [Tests](#tests)).
+- **29/10/2026** : premier essai sur téléphone : décision 3 amendée (bouton TIR dédié sous le pouce droit, TURBO
+  au-dessus, énergie partagée par le tir et le turbo, plus de tir automatique ni de réglage « Tir manuel ») ;
+  codée et vérifiée dans la branche `claude/vol-tir-bouton` (voir « Amendement du 29/10/2026 »), commitée dans
+  `8274dd0` puis fusionnée dans `claude/world-1-completion-866505` (décision 21 du plan 04) ; reste l'essai de
+  ces commandes sur téléphone.
 - La balise (16) est réalisée à l'étape 4 (4a), dans une autre branche (`claude/world-1-completion-866505`).
 
 ## Objectif
@@ -101,8 +107,14 @@ l'historique git de ce plan).
    sont perdus.
 2. **La Comète tire dès le départ** avec un canon léger ; la mitrailleuse est sa première amélioration.
    Sinon, les ennemis spatiaux seraient injustes avant le premier achat.
-3. **Tir automatique en vol** : la Comète tire seule quand une cible est devant elle. Le pouce droit reste
-   sur TURBO. Une option permet de passer en tir manuel, avec un bouton TIR.
+3. ~~**Tir automatique en vol** : la Comète tire seule quand une cible est devant elle. Le pouce droit reste
+   sur TURBO. Une option permet de passer en tir manuel, avec un bouton TIR.~~
+   **Amendée le 29/10/2026** (après essai sur téléphone, demande de l'utilisateur) : **bouton TIR dédié** à la
+   place de TURBO, sous le pouce droit ; la Comète tire tant qu'on le tient (plus de tir automatique, plus
+   d'option « Tir manuel ») ; **TURBO au-dessus**, un peu plus petit ; **une seule jauge d'énergie** que le tir
+   et le turbo font chauffer, et en surchauffe ni tir ni turbo jusqu'au refroidissement. L'aide à la visée vers
+   la cible devant la Comète est gardée (direction des tirs seulement, jamais le déclenchement). Réalisation :
+   « Amendement du 29/10/2026 » plus bas.
 4. **Aperçu en 2D dans le hangar** : Kaï avec son arme et la Comète de profil, dessinés avec les fonctions
    de dessin du jeu 2D. Pas de second contexte 3D sur le téléphone (lent à démarrer, risque de perte du
    contexte graphique). Un aperçu 3D pourra venir plus tard.
@@ -266,6 +278,63 @@ Données et calculs purs dans `core/hangar.ts` (catalogue `HANGAR_ITEMS`, `itemS
   `swapEnv`) ; `destroy()` : `EnemyField.dispose`, puis tampons d'instances de tous les InstancedMesh libérés.
   Appels de dessin ajoutés : ennemis 4, tirs 1, cristaux 2 (cristaux et halos), éclairs de bouche 0 à 2 (+9 au plus).
 
+### Amendement du 29/10/2026 : bouton TIR, TURBO au-dessus, énergie partagée (décision 3 amendée)
+
+Branche `claude/vol-tir-bouton` (partie de `plans-etapes-1-3` au commit `03b789e`). Remplace, en 3b, le tir
+automatique, le réglage « Tir manuel » et la jauge de turbo à part : choix A (surchauffe, devenue celle de
+l'énergie), B, G, J et K ci-dessus, points 10 et 15 des « Modifications prévues » (3b) et ce que la section
+« Tests » dit du tir automatique, du tir manuel et de la jauge du canon (relevés du 28/10/2026, gardés tels quels).
+
+- **Commandes tactiles du vol** (`input/touch.ts`, `input/styles.ts`) : gros bouton **TIR** `.xr-shoot` (cyan,
+  viseur, taille de SAUT : `--xr-jump`) à l'ancienne place de TURBO, en bas à droite ; **TURBO** `.xr-boost`
+  (magenta, taille du TIR de la plateforme : `--xr-fire`) au-dessus, un peu décalé vers le centre de l'écran
+  (`--xr-jump` × 0,2) et séparé de 1,4 × `--xr-gap` ; TIR créé après TURBO : là où leurs zones de toucher
+  élargies se recouvrent, TIR l'emporte. Miroir en mode gaucher ; taille et opacité réglées comme le reste.
+  Joystick, TIR et TURBO tenus ensemble (un doigt par commande). Clavier inchangé : J / X / F tir, Espace / Maj
+  turbo.
+- **Tir** (`game3d/flight.ts`, `updateGun`) : seulement quand TIR est tenu (bouton, J / X / F, appui bref
+  mémorisé 150 ms, `__xr3d.fire`), à la cadence du canon. L'aide à la visée (B) oriente toujours les tirs et
+  réserve les dégâts d'un tir qui peut toucher (`ShotPool.claim`), sans jamais déclencher un tir.
+- **Énergie** (`game3d/shots.ts`, `ShipGun` ; `SHIP_ENERGY` de `core/shipGuns.ts`) : la jauge de chauffe du canon
+  devient la jauge d'énergie de la Comète. `ShipGun.boost(h, wants)` est appelé en premier à chaque sous-pas de
+  vol : le turbo pousse hors surchauffe et chauffe la jauge de `boostHeat` = **0,4 par seconde** (**2,5 s** de turbo
+  d'affilée depuis une jauge froide, comme l'ancienne jauge de turbo) ; puis `step` refroidit (après `coolDelayMs`
+  sans tirer **ni pousser** : 0,4 / 0,3 s ; **0,5 / 0,55 par seconde**, immédiat en surchauffe) et tire
+  (`heatPerShot` inchangé : canon léger 1/16, surchauffe en 4 s de tir continu ; mitrailleuse 1/30, 3 s).
+  Jauge pleine (tir ou turbo) : **surchauffe**, ni tir ni turbo jusqu'à 30 % (canon léger ~1,4 s, mitrailleuse
+  ~1,3 s), son « overheat », turbo coupé dès ce sous-pas. Ensemble : canon léger + turbo surchauffent en ~1,5 s ;
+  rafales courtes (une seconde de tir = une graduation de la jauge) et turbo bref restent possibles. Valeurs de
+  départ, à régler sur téléphone.
+- **Module Turbo du hangar** : `ShipLoadout.boostDrainMul` (÷1,25 / ÷1,5) multiplie la chauffe du turbo (3,1 puis
+  3,75 s de turbo depuis une jauge froide), `boostFillMul` (×1,25 / ×1,5) le refroidissement de l'énergie (donc
+  aussi après les tirs). Carte : « Turbo moins gourmand ; l’énergie (tir et turbo) refroidit plus vite. », effet
+  « Durée du turbo et refroidissement ×1,25 », confirmation « Améliorer le turbo (durée du turbo et
+  refroidissement ×1,25) ».
+- **Réglage retiré** : `Settings.manualFire`, `TouchOptions.manualFire`, l'interrupteur « Tir manuel » des
+  Options (et son icône). Une sauvegarde qui le contient se charge sans erreur : `readSettings` ne relit que les
+  champs de `DEFAULT_SETTINGS`, le champ est oublié au prochain enregistrement (pas de nouvelle version).
+- **HUD** (`ui/hud.ts`, `styles.css`) : la jauge de turbo de la pastille du bouclier disparaît ; la jauge du canon
+  devient la jauge **« Énergie »** `.fl-energy` (même place, entre le chrono et la pause : `createHeatGauge` avec
+  un titre ; libellé « Énergie » et repère du turbo `.fl-turbo` au-dessus de la barre ; `data-level` cool / warm
+  / hot, `.is-over` + SURCHAUFFE dessous, `.is-boost` : repère et liseré magenta). Contrat `FlightHud` : `boost`
+  retiré, `boosting` ajouté ; `heat` / `overheated` = énergie. Vérifié sans chevauchement de 844x390 à 568x320,
+  5 boucliers compris (`small-screens`).
+- **Pilote automatique** (outil DEV) : tient TIR quand la cible visée peut être touchée (comme l'ancien tir
+  automatique) ; turbo loin du prochain portail (> 140 u), lancé sous 5 % d'énergie et relâché à 60 %
+  (`AP_BOOST_START` / `AP_BOOST_STOP`), pour garder de quoi tirer.
+- **Aides DEV** : `__xr3d.info()` : `heat` / `overheated` (énergie), `boosting`, `boostHeat` et `coolRate` (par
+  seconde, module Turbo compris) ; `boost`, `boostDrain`, `boostFill` et `manualFire` retirés ; `fire(on)` = TIR
+  tenu ; `settle()` : énergie froide, turbo coupé. `preview/flight.html` : `&manual=` retiré, Maj = turbo.
+- **Tests** : « aucun tir sans appui » vérifié avec une cible atteignable devant la Comète (condition de l'ancien
+  tir automatique) : `assertNoAutoFire` de `tests/e2e/lib/game3d.mjs` (mine posée, sous-pas simulés, `target.hit`
+  exigé, aucun tir) dans `touch-controls` et `f1-play` (smoke) et `touch-options` ; `flight-combat` C exige aussi
+  `target.hit` sur la mine frôlée.
+- **À juger sur téléphone** : un doigt reste au bouton où il s'est posé (glisser de TIR vers TURBO ne déclenche pas
+  TURBO). TIR et turbo ensemble (surchauffe en ~1,5 s) demandent donc deux doigts sur ces boutons, en plus du
+  joystick : au clavier, ou avec un troisième doigt (c'est ainsi que les tests le font). Pour tirer et pousser d'un
+  seul pouce : un doigt posé sur TIR qui glisse dans TURBO l'active aussi (relâché en ressortant), ou une petite
+  zone à cheval entre les deux boutons qui active les deux ; ajouter alors un scénario tactile à un seul doigt.
+
 ## Le hangar
 
 Écran HTML à onglets, avec la réserve de cristaux en haut et un aperçu à gauche.
@@ -300,7 +369,7 @@ mode 2D) : l'accueil ne le charge pas.
 |---|---|---|
 | Mitrailleuse | 1 (achat) puis 2 améliorations | remplace le canon léger ; cadence et dégâts |
 | Bouclier renforcé | 2 | 4 puis 5 boucliers au lieu de 3 |
-| Turbo | 2 | jauge plus grande, recharge plus rapide |
+| Turbo | 2 | turbo moins gourmand en énergie, énergie qui refroidit plus vite (amendement du 29/10/2026) |
 
 La mitrailleuse achetée apparaît sur le modèle 3D (deux canons sous les ailes).
 
@@ -348,8 +417,9 @@ Un monde complet rapportera environ 150 cristaux (3 niveaux de ~50) plus ceux de
 9. **Tir de la Comète** (`game3d/flight.ts`, nouveau `game3d/shots.ts`) : projectiles en `InstancedMesh`,
    canon léger ou mitrailleuse, surchauffe comme au sol, multiplicateurs du hangar.
 10. **Visée et tir automatique** : cible = astéroïde ou ennemi le plus proche dans un cône devant la
-    Comète ; tir automatique par défaut, bouton TIR à côté de TURBO en tir manuel
-    (`input/touch.ts`, option dans `ui/screens/options.ts`).
+    Comète ; ~~tir automatique par défaut, bouton TIR à côté de TURBO en tir manuel
+    (`input/touch.ts`, option dans `ui/screens/options.ts`)~~ — remplacé par l'amendement du 29/10/2026 : bouton
+    TIR dédié (tir tant qu'il est tenu, la visée oriente les tirs sans les déclencher), TURBO au-dessus.
 11. **Astéroïdes destructibles** : un tir les fait éclater (réutilise `onRockHit`, sans perte de bouclier)
     et lâche parfois un cristal.
 12. **Ennemis spatiaux** (nouveau `game3d/enemies.ts`), touchés par le Vide, un `InstancedMesh` par type :
@@ -364,7 +434,8 @@ Un monde complet rapportera environ 150 cristaux (3 niveaux de ~50) plus ceux de
     générateur dérivé de cette graine, qui laisse portails et rochers inchangés : choix E).
 14. **Modules de la Comète** : boucliers max, turbo (faits en 3a), et canons visibles sur le modèle
     (`game3d/ship.ts`).
-15. **HUD du vol** (`ui/hud.ts`) : jauge de chauffe du canon, compteur de cristaux.
+15. **HUD du vol** (`ui/hud.ts`) : jauge de chauffe du canon (jauge « Énergie » du tir et du turbo depuis
+    l'amendement du 29/10/2026), compteur de cristaux.
 
 ### Pour l'étape 4 (réalisée en 4a, branche `claude/world-1-completion-866505`)
 
@@ -475,7 +546,12 @@ Un monde complet rapportera environ 150 cristaux (3 niveaux de ~50) plus ceux de
     (blanc et violet, éclair de 0,18 s, onde de choc) ; coques roses de près (liseré froid propre, fresnel discret) ;
     essaim illisible de loin (lueurs plus grosses et plus vives) — voir « Choix de réalisation de 3b », C, D et F ;
   - `__xr3d.spawn(type, distance, variant)` déterministe (l'essaim tiré au hasard faisait échouer `flight-combat`
-    environ une fois sur huit) et `info().crystalsDropped` ;
+    environ une fois sur huit) et `info().crystalsDropped` ; puis `__xr3d.settle()` (Comète sur la trajectoire,
+    canon froid, turbo plein, orbes retirées) avant chaque essai, posé à un avancement fixé et tracé dans la même
+    tâche (`TRIAL_AT`, `SWARM_AT` de `flight-combat`) : l'état laissé par le vol en temps réel, plus lent à froid,
+    faisait encore échouer un essai sur quatre environ (essaim « abattu en entier », mine de A, orbe d'un chasseur,
+    chasseur des gros plans attendu au ralenti en temps réel) ; variantes remesurées (`swarmFull` 0,3 → 0,65 ;
+    `swarmShot` 0,3 garde les gros plans) ; 5 passages à froid identiques au pas près ;
   - `flight-combat` : parcours (fenêtres des vagues contre les zones des portails ; hachage de tous les champs des
     rochers, de la trajectoire et de la distorsion, relevé dans Chrome sur f4275db) ; score du vol = base d'avant 3b
     + points du combat, étoiles inchangées, score affiché = record ; tir automatique jamais sans cible atteignable
@@ -523,7 +599,8 @@ Un monde complet rapportera environ 150 cristaux (3 niveaux de ~50) plus ceux de
     seulement) ;
   - l'aperçu du hangar ne dessine pas le canon léger (niveau 0), le modèle 3D si ; inchangé.
 - **Vérifications habituelles** : `npm run typecheck`, `npm run check-levels`, `npm run build`, puis la
-  suite e2e complète, et un essai sur téléphone (lisibilité du hangar, tir auto, fluidité en vol).
+  suite e2e complète, et un essai sur téléphone (lisibilité du hangar, ~~tir auto~~ TIR et TURBO depuis
+  l'amendement du 29/10/2026, fluidité en vol).
 
 ## Documentation à mettre à jour
 
@@ -547,7 +624,8 @@ améliorations dans le jeu 2D (6) ; aperçu (7) ; retrait du choix provisoire (8
 
 **3b** (codée et vérifiée dans le navigateur ; reste l'essai sur téléphone) — tir de la Comète et tir automatique
 (9, 10) ; astéroïdes destructibles (11) ; ennemis et vagues (12, 13) ; canons visibles de la Comète et HUD (14, 15 ;
-boucliers et turbo du point 14 faits en 3a) ; tests et essai sur téléphone.
+boucliers et turbo du point 14 faits en 3a) ; tests et essai sur téléphone. Tir automatique remplacé par le bouton
+TIR et l'énergie partagée (amendement du 29/10/2026, branche `claude/vol-tir-bouton`).
 
 **Balise** (16) : à l'étape 4 (4a, avec les sorties communes du plan 04), dans la branche
 `claude/world-1-completion-866505`.

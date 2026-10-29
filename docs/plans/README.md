@@ -10,8 +10,8 @@ en lisant le code concerné ; l'utilisateur valide les choix proposés, qui pass
 |---|---|---|
 | 1. Contrôles 2D (stick à 8 directions, visée, accroupi, descente, portes, réglage des boutons) | [01-controles.md](01-controles.md) | codé et vérifié par la suite e2e complète (branche `plans-etapes-1-3`) ; essai sur téléphone à faire (secteurs d'angle du stick, taille) |
 | 2. Armes et nouveaux bonus | [02-armes.md](02-armes.md) | codé et vérifié par la suite e2e complète (nouveaux scénarios `weapons` / `powerups`) ; essai sur téléphone à faire (réglage des armes, sons, vitesse) |
-| 3. Hangar (3a : hangar et armes de Kaï ; 3b : combat en vol) | [03-hangar.md](03-hangar.md) | 3a et 3b codées et vérifiées par la suite e2e complète (branche `plans-etapes-1-3` ; 3a et 3b commitées ; nouveaux scénarios `hangar` et `flight-combat`, captures et tests relus) ; essai sur téléphone à faire (3b : lisibilité des tirs et des ennemis, tir automatique, bouton TIR, réglages) ; la balise (point 16) est faite à l'étape 4 |
-| 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | décisions validées le 28/10 (les 19 choix tels quels), plus 20 (boss en touches) et 21 (tir au bouton en vol) le 29/10 ; branche `claude/world-1-completion-866505` (3b y est fusionnée) ; **4a faite** (étapes 1 à 6 : tables par thème, table des mondes et progression, Niveaux en pages, balise de LUMA, radio et tutoriel, arène et Blob-roi, j1 au nouveau format), essayée sur téléphone le 29/10 ; **4b faite** (étapes 7 à 12 : champignons, créature et événements, j2 et Tess, Scarabée-titan, j3 et méduse-baleine, campagne à 6 étapes, boss en touches, « Réessayer le combat »), vérifiée par la suite e2e complète (39/39) et le diag (7/7) ; essai sur téléphone de 4b à faire ; prochaine : 4c |
+| 3. Hangar (3a : hangar et armes de Kaï ; 3b : combat en vol) | [03-hangar.md](03-hangar.md) | 3a et 3b codées et vérifiées par la suite e2e complète (branche `plans-etapes-1-3` ; 3a et 3b commitées ; nouveaux scénarios `hangar` et `flight-combat`, captures et tests relus) ; premier essai sur téléphone le 29/10/2026 : décision 3 amendée (bouton TIR dédié, TURBO au-dessus, énergie partagée ; décision 21 du plan 04 ; branche `claude/vol-tir-bouton`, commitée en `8274dd0` et fusionnée dans `claude/world-1-completion-866505`) ; à réessayer sur téléphone (lisibilité des tirs et des ennemis, TIR et TURBO, énergie, réglages) ; la balise (point 16) est faite à l'étape 4 |
+| 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | décisions validées le 28/10 (les 19 choix tels quels), plus 20 (boss en touches) et 21 (tir au bouton en vol) le 29/10 ; branche `claude/world-1-completion-866505` (3b et le tir au bouton y sont fusionnés) ; **4a faite** (étapes 1 à 6 : tables par thème, table des mondes et progression, Niveaux en pages, balise de LUMA, radio et tutoriel, arène et Blob-roi, j1 au nouveau format), essayée sur téléphone le 29/10 ; **4b faite** (étapes 7 à 12 : champignons, créature et événements, j2 et Tess, Scarabée-titan, j3 et méduse-baleine, campagne à 6 étapes, boss en touches, « Réessayer le combat »), vérifiée par la suite e2e complète (39/39) et le diag (7/7) ; essai sur téléphone de 4b à faire ; prochaine : 4c |
 | 5. Monde 2 au même format | à écrire | — |
 | 6. Carte galactique, puis Boréa, Vulkar, Cœur de la Faille | à écrire | — |
 | 7. Objets secrets et niveaux bonus | à écrire | — |
@@ -22,11 +22,9 @@ d'armes de l'étape 2.
 ## Prochaine action
 
 1. **Vérifier l'arbre Git** : les étapes 1, 2, 3a et 3b sont commitées (branche `plans-etapes-1-3`) ; l'étape 4
-   avance sur `claude/world-1-completion-866505`, où 3b est fusionnée (`b78ffd6`) et 4a commitée en partie
-   (étapes 1 à 5 : `64bd3d6`) ; l'étape 6 de 4a, toute la partie 4b et leur documentation ne sont pas encore
-   commitées (sur demande de l'utilisateur, `npm run build` devant passer avant). Le tir au bouton du vol
-   (décision 21) se fait à part, sur `claude/vol-tir-bouton`, puis sera fusionné (pas encore dans cette branche ;
-   4c touche aussi le vol). Points de rencontre avec le vol pour 4c : « Ce qui existe déjà » de
+   avance sur `claude/world-1-completion-866505`, où 3b est fusionnée (`b78ffd6`), 4a et 4b commitées (`64bd3d6`,
+   `f5e3212`). Le tir au bouton du vol (décision 21), fait à part sur `claude/vol-tir-bouton` (`8274dd0`), y est
+   fusionné (4c touche aussi le vol). Points de rencontre avec le vol pour 4c : « Ce qui existe déjà » de
    [03-hangar.md](03-hangar.md) (boss du vol : visée, impacts, orbes, phase `fly`, `COURSE_FP` de `flight-combat`).
 2. **Trancher les points relevés** par les tests de 3a et de 3b (fin de la section Tests de
    [03-hangar.md](03-hangar.md)) : 3a : cœurs au point de contrôle, musique au retour du hangar, message du
@@ -43,8 +41,10 @@ d'armes de l'étape 2.
    - hangar : lisibilité sur petit écran (cartes, message, confirmation), prix et multiplicateurs (`PRICES`,
      `UPGRADE_MULS`, `BOOST_MULS` de `src/core/hangar.ts`), gain de cristaux par niveau ;
    - combat en vol (3b ; « Choix de réalisation de 3b » de [03-hangar.md](03-hangar.md), captures de
-     `tests/e2e/out/flight-combat/` et `small-screens/`) : lisibilité des tirs, des ennemis et des orbes, tir
-     automatique (cône et guidage `SHIP_AIM`), bouton TIR et option « Tir manuel », canons (`SHIP_GUNS`,
+     `tests/e2e/out/flight-combat/` et `small-screens/`) : lisibilité des tirs, des ennemis et des orbes, aide à
+     la visée (cône et guidage `SHIP_AIM`), boutons TIR et TURBO (un doigt reste au bouton où il s'est posé : TIR
+     et turbo ensemble demandent deux doigts ; « À juger sur téléphone » de l'amendement du 29/10/2026), énergie
+     (`SHIP_ENERGY`), canons (`SHIP_GUNS`,
      `SHIP_GUN_MULS` de `src/core/shipGuns.ts`), ennemis (`ENEMY_DEFS` de `src/game3d/enemies.ts`), vagues
      (`waves` de `COURSES`), HUD du vol, fluidité (appels de dessin, images par seconde) et sons du vol.
 

@@ -18,7 +18,7 @@ import { startFlight } from '../src/game3d';
 
 // Page d'aperçu du mode vol 3D (outil de développement, hors jeu), avec des « hooks » simulés.
 // Paramètres : ?stage=f1|f2 &autopilot=1 &ts=1..8 &gun=0..3 &shield=0..2 &boost=0..2 (modules de la Comète du
-// hangar) &manual=1 (tir manuel : la Comète ne tire que sur J / X / F)
+// hangar). Tir tant que J / X / F est tenu, turbo : Espace / Maj (même jauge d'énergie).
 
 interface Dev3d {
   autopilot(on?: boolean): void;
@@ -56,11 +56,11 @@ const hudState: FlightHud = {
   gatesTotal: 0,
   shield: 0,
   maxShield: 3,
-  boost: 1,
   progress: 0,
   gunLevel: 0,
   heat: 0,
   overheated: false,
+  boosting: false,
   crystals: 0,
 };
 let hudUpdates = 0;
@@ -72,11 +72,10 @@ function renderHud(): void {
     `Temps    ${s.timeLeft.toFixed(1)} s\n` +
     `Portails ${s.gates}/${s.gatesTotal}\n` +
     `Bouclier ${'◆'.repeat(s.shield)}${'◇'.repeat(Math.max(0, s.maxShield - s.shield))}\n` +
-    `Turbo    ${bar(s.boost)}\n` +
-    `Canon    ${bar(s.heat)} ${s.gunLevel >= 1 ? `mitrailleuse ${s.gunLevel}` : 'léger'}${s.overheated ? ' SURCHAUFFE' : ''}\n` +
+    `Énergie  ${bar(s.heat)} ${s.gunLevel >= 1 ? `mitrailleuse ${s.gunLevel}` : 'canon léger'}${s.boosting ? ' TURBO' : ''}${s.overheated ? ' SURCHAUFFE' : ''}\n` +
     `Cristaux ${s.crystals}\n` +
     `Parcours ${bar(s.progress, 20)}\n` +
-    `Tir      ${settings.manualFire ? 'manuel (J / X / F)' : 'automatique'}\n` +
+    `Tir J / X / F (tenu), turbo Espace / Maj\n` +
     `(maj HUD : ${hudUpdates})`;
 }
 let toastTimer = 0;
@@ -140,7 +139,10 @@ function setKey(code: string, down: boolean): boolean {
     case 'KeyS':
       state.down = down;
       break;
+    // Turbo : Espace ou Maj (comme le jeu)
     case 'Space':
+    case 'ShiftLeft':
+    case 'ShiftRight':
       state.boost = down;
       break;
     // Tir (comme le jeu) : J, X, F
@@ -217,7 +219,6 @@ const settings: Settings = {
   touchSize: 1,
   touchOpacity: 1,
   leftHanded: false,
-  manualFire: params.get('manual') === '1',
 };
 
 // ------------------------------------------------------------------ Partie

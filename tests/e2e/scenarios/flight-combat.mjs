@@ -1,37 +1,40 @@
-// Combat en vol (plan 03, étape 3b) : tir de la Comète, visée, astéroïdes destructibles, cristaux du vol, ennemis.
+// Combat en vol (plan 03, étape 3b ; décision du 29/10/2026 : tir seulement quand TIR est tenu, énergie partagée par
+// le tir et le turbo) : tir de la Comète, visée, astéroïdes destructibles, cristaux du vol, ennemis, énergie.
 //  0. Parcours (import du module dans la page) : vagues déterministes (deux constructions identiques, types et
 //     effectifs attendus), hors des portails et de leur ligne d'approche (fenêtres de genWaves recopiées) ; portails,
 //     rochers (tous les champs), trajectoire et distorsion de f1 / f2 identiques à ceux d'avant 3b (hachage recopié).
-//  A. f1, canon léger, tir automatique (pilote automatique) : chasseur posé tout de suite, abattu en 3 coups (2 sons
-//     « touché ») ; mine posée à 60 u abattue en < 1 s sans bouclier perdu (50 points, 1 cristal lâché au pas même de
-//     sa mort, puis ramassé) ; chasseur abattu (150 points, 2 cristaux) ; rochers détruits sans bouclier perdu ; le
-//     tir automatique ne part jamais sans cible atteignable (toutes les traces) ; cristal du HUD = cristaux ramassés,
-//     un son par tir ; capture d'un chasseur sous le feu ; victoire : score = base d'avant 3b + points du combat,
-//     étoiles des portails seulement, score affiché = record, « +N cristaux », réserve et sauvegarde.
+//  A. f1, canon léger, pilote automatique (il tient TIR sur les cibles atteignables) : chasseur posé tout de suite,
+//     abattu en 3 coups (2 sons « touché ») ; mine posée à 60 u abattue en < 1 s sans bouclier perdu (50 points,
+//     1 cristal lâché au pas même de sa mort, puis ramassé) ; chasseur abattu (150 points, 2 cristaux) ; rochers
+//     détruits sans bouclier perdu ; le pilote ne tire jamais sans cible atteignable (toutes les traces) ; cristal du
+//     HUD = cristaux ramassés, un son par tir ; capture d'un chasseur sous le feu ; victoire : score = base d'avant
+//     3b + points du combat, étoiles des portails seulement, score affiché = record, « +N cristaux », réserve et
+//     sauvegarde.
 //  B. f1, mitrailleuse (ship.gun = 1) : jauge data-gun="machinegun", chasseur abattu en 3 coups ; essaim de 6
 //     (variante fixée) abattu en entier par le pilote automatique (30 points chacun), cristal de la vague lâché à la
 //     mort du dernier, aucun aux autres ; essaim à orientation libre (journalisé ; s'il est incomplet : aucun cristal) ;
-//     en tir manuel : cadence 10 tirs/s, deux bouches en alternance, surchauffe en ~2,9 s de tir continu (jauge
-//     .is-over), reprise sous 30 % (jauge rallumée) ; captures de la Comète armée (de face pendant le compte à
-//     rebours, de dos en vol, en plein tir).
+//     pilote coupé, TIR tenu (fire) : cadence 10 tirs/s, deux bouches en alternance, surchauffe en ~2,9 s de tir
+//     continu (jauge .is-over), reprise sous 30 % (jauge rallumée) ; captures de la Comète armée (de face pendant le
+//     compte à rebours, de dos en vol, en plein tir).
 //  B3. f1, mitrailleuse niveau 3 : chasseur abattu en 2 coups (dégâts 1,5), cadence 13 tirs/s, surchauffe après 39 tirs.
-//  C. f1, tir manuel (réglage), 5 boucliers : bouton TIR à gauche de TURBO ; aucun tir sans appui ; mine frôlée :
-//     un bouclier perdu, ni points ni ennemi abattu ni cristal ; orbe du chasseur reçue : un bouclier perdu ; membre
-//     d'essaim percuté : un bouclier perdu, membre détruit sans points ni cristal, puis mine percutée pendant
-//     l'invulnérabilité : détruite, bouclier gardé ; TIR tactile, joystick + TURBO + TIR tenus ensemble, clavier J / X
-//     / F ; canon léger : cadence 4 tirs/s, surchauffe en ~3,75 s, reprise ; gros plans (chasseur, mine, essaim,
-//     explosion, cristaux) ; HUD à 844x390 et 640x320 ; option coupée depuis la Pause : bouton masqué, tir automatique
-//     revenu (mine abattue), J tire aussi sans cible en tir automatique.
+//  C. f1, commandes du vol, 5 boucliers : gros TIR en bas à droite, TURBO plus petit au-dessus ; aucun tir sans
+//     appui ; mine frôlée : un bouclier perdu, ni points ni ennemi abattu ni cristal ; orbe du chasseur reçue : un
+//     bouclier perdu ; TIR tactile, joystick + TURBO + TIR tenus ensemble, clavier J / X / F ; canon léger : cadence
+//     4 tirs/s, surchauffe en ~3,75 s, reprise ; énergie : turbo seul (Espace) qui chauffe la jauge de 0,4 par
+//     seconde (surchauffe en 2,5 s, turbo coupé), puis en surchauffe ni turbo ni tir malgré Espace et TIR tenus
+//     jusqu'à 30 %, puis les deux reprennent ; TIR et turbo ensemble : chauffes additionnées (surchauffe en ~1,5 s) ;
+//     gros plans (chasseur, mine, essaim, explosion, cristaux) ; HUD à 844x390 et 640x320 ; J tire aussi sans cible
+//     pendant que le pilote automatique vole.
 //  D. f2, mitrailleuse : captures de près dans la ceinture, puis vol au pilote automatique (x2,5) : les trois types
 //     d'ennemis rencontrés, appels de dessin toujours sous 150 (relevés pendant les vagues).
 // Les mesures fines passent par __xr3d.advance(1/60) (sous-pas simulés d'affilée : temps de jeu exact). Les ennemis
 // posés par spawn ont une variante fixée (troisième argument) : même orientation et même mouvement à chaque passage.
 import { assert, assertEq, assertNear, center, fmt, readSave, waitFor, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
-import { pressPause, rects, trackThreeScenes, waitInput, waitInputIdle, waitPause } from '../lib/core.mjs';
+import { rects, trackThreeScenes, waitInput, waitInputIdle } from '../lib/core.mjs';
 import { touches } from '../lib/touch.mjs';
 
 export const meta = {
-  title: 'Combat en vol : tir auto / manuel, rochers, cristaux, chasseur, mine, essaim, surchauffe, appels de dessin',
+  title: 'Combat en vol : TIR tenu, énergie (tir et turbo), rochers, cristaux, chasseur, mine, essaim, appels de dessin',
   suites: ['full'],
   dev: true,
   timeoutMs: 600000,
@@ -49,6 +52,8 @@ const GUNS = {
   machinegun3: { rate: 13, cooldown: 1 / 13, shotsToOver: 39, coolRate: 0.55, fighterHits: 2 },
 };
 const RECOVER_AT = 0.3;
+/** Énergie (SHIP_ENERGY de src/core/shipGuns.ts) : chauffe du turbo par seconde (2,5 s depuis une jauge froide). */
+const BOOST_HEAT = 0.4;
 /** Points (src/game3d/flight.ts, enemies.ts). */
 const POINTS = { rock: 10, crystal: 50, fighter: 150, mine: 50, swarm: 30 };
 /** Cristaux lâchés (ENEMY_DEFS, SWARM_WAVE_CRYSTALS de enemies.ts). */
@@ -84,16 +89,34 @@ const COURSE_FP = {
 };
 /**
  * Variantes de spawn (0..1 : orientation et phase de l'essaim, côté du virage du chasseur, clignotement de la mine)
- * et avancement du vol (progress) où les essaims de B sont posés, mesurés le 28/10/2026 (mêmes résultats sur 3 à 8
- * passages ; le pilote automatique suit la trajectoire, l'issue dépend de l'endroit) : swarmFull à 6 % du parcours
- * est abattu en entier par la mitrailleuse et le pilote automatique ; swarmLeak à 13 % laisse filer un membre (5 sur
- * 6) ; swarmHit à 25 u percute la Comète qui vole droit (toutes les variantes le font). Vagues de f1 à éviter : la
+ * et avancement du vol (progress) où les essaims de B sont posés. Chaque essai part d'un état fixé par
+ * __xr3d.settle() (Comète sur la trajectoire, énergie froide, turbo coupé) : sans lui, la chauffe et l'écart latéral
+ * laissés par le vol en temps réel (images plus lentes à froid) changeaient parfois l'issue. Remesuré le 28/10/2026
+ * avec settle (10 variantes de 0,05 à 0,95, une partie neuve chacune ; issue identique d'un passage à l'autre) :
+ * à 6 % du parcours, l'essaim est abattu en entier pour 0,55 à 0,75 et 0,95 (en 0,72 s de jeu), pas pour les
+ * autres ; à 13 %, un membre file (5 sur 6) pour toutes sauf 0,15. swarmFull (0,65, milieu de la plage) est donc
+ * abattu en entier par la mitrailleuse et le pilote automatique, swarmLeak laisse filer un membre ; swarmHit à 25 u
+ * percute la Comète qui vole droit (toutes les variantes le font) ; swarmShot : essaim des gros plans (orientation
+ * des captures relues à la revue visuelle de 3b). À remesurer si la visée, l'essaim, le pilote
+ * automatique ou les vagues de f1 changent. Vagues de f1 à éviter : la
  * première mine (z ≈ −849, avancement 0,198) est à portée vers 0,176, le premier essaim (z ≈ −1567) entre en scène à
  * 0,221 : l'essai à orientation libre est posé une fois la mine passée ou abattue (dès 0,18), et n'est que
  * journalisé si une vague s'en mêle.
  */
-const VARIANT = { fighter: 0.25, mine: 0.5, swarmFull: 0.3, swarmLeak: 0.4, swarmHit: 0 };
+const VARIANT = { fighter: 0.25, mine: 0.5, swarmFull: 0.65, swarmLeak: 0.4, swarmHit: 0, swarmShot: 0.3 };
 const SWARM_AT = { full: 0.06, leak: 0.13, free: 'i.enemies.mine === 0 && i.progress >= 0.18' };
+/**
+ * Avancements fixes des essais de A et du premier chasseur de B : posés au même endroit du parcours (rochers,
+ * courbe de la trajectoire) quel qu'ait été le vol en temps réel avant (départ des essais vers 0,005 à 0,02 ; la mine
+ * de A, à 0,04, échappait parfois au tir quand elle était posée plus loin). La mine de A doit être abattue avant que
+ * la première mine du parcours n'entre en scène (0,053).
+ */
+const TRIAL_AT = { fighter: 0.025, mine: 0.04, fighter2: 0.07 };
+
+/** L'essai a bien démarré avant l'avancement visé (sinon il est posé plus loin, à un endroit non mesuré). */
+function assertTrialStart(from, at, label) {
+  assert(from <= at, `${label} : vol déjà à ${from} avant l'essai, au-delà de l'avancement fixé ${at} (temps réel trop long avant ?)`);
+}
 
 const SAVE_KEY = 'xeno-rift-save-v1';
 
@@ -159,6 +182,7 @@ async function installTrace(t) {
   await t.page.addInitScript(() => {
     const pick = (i) => ({
       phase: i.phase,
+      progress: i.progress,
       shield: i.shield,
       orbs: i.orbsActive,
       fighter: i.enemies.fighter,
@@ -177,9 +201,11 @@ async function installTrace(t) {
       target: i.target ? i.target.type : null,
       hit: i.target ? i.target.hit : false,
       speed: i.speed,
+      boosting: i.boosting,
       calls: i.drawCalls,
-      hudOver: !!document.querySelector('.fl-heat.is-over'),
-      hudLevel: document.querySelector('.fl-heat') ? document.querySelector('.fl-heat').dataset.level : null,
+      hudOver: !!document.querySelector('.fl-energy.is-over'),
+      hudBoost: !!document.querySelector('.fl-energy.is-boost'),
+      hudLevel: document.querySelector('.fl-energy') ? document.querySelector('.fl-energy').dataset.level : null,
     });
     window.__xrTrace = (max, until) => {
       const a = window.__xr3d;
@@ -211,16 +237,16 @@ function otherPoints(a, b) {
 }
 
 /**
- * Tir automatique (sans fire(true) ni touche) : un tir ne part qu'à un pas où une cible visée peut être touchée
- * (target et hit : la cible renvoyée par info() est celle du sous-pas où part le tir). Ajoute les comptes à `acc`
- * (pas, pas sans cible, pas avec une cible hors d'atteinte, tirs).
+ * Tirs du pilote automatique (sans fire(true) ni touche) : il ne tient TIR qu'à un pas où une cible visée peut être
+ * touchée (target et hit : la cible renvoyée par info() est celle du sous-pas où part le tir). Ajoute les comptes à
+ * `acc` (pas, pas sans cible, pas avec une cible hors d'atteinte, tirs).
  */
-function checkAutoFire(rows, label, acc) {
+function checkPilotFire(rows, label, acc) {
   assert(rows.length > 1, `${label} : trace vide`);
   for (let k = 1; k < rows.length; k++) {
     const x = rows[k];
     const shot = x.fired !== rows[k - 1].fired;
-    if (shot) assert(x.target !== null && x.hit, `${label} : tir automatique au pas ${k} sans cible atteignable (${fmt(x)})`);
+    if (shot) assert(x.target !== null && x.hit, `${label} : tir du pilote automatique au pas ${k} sans cible atteignable (${fmt(x)})`);
     if (!acc) continue;
     acc.steps++;
     if (x.target === null) acc.noTarget++;
@@ -248,18 +274,21 @@ function killSteps(rows) {
 }
 
 /**
- * Chasseur posé à 60 u (variante fixée), abattu par le tir automatique (pilote automatique) : coups « touché »
- * comptés par le son (volume des ennemis), 2 cristaux lâchés au pas de sa mort, 150 points. Fait au départ du vol :
- * la première vague (mine à ~230 u) est encore hors de portée. Renvoie les relevés.
+ * Chasseur posé à 60 u (variante fixée) à l'avancement TRIAL_AT.fighter, abattu par les tirs du pilote
+ * automatique : coups « touché » comptés par le son (volume des ennemis), 2 cristaux lâchés au pas de sa mort, 150
+ * points. Fait au départ du vol : la première vague (mine à ~230 u) est encore hors de portée. Renvoie les relevés.
  */
 async function fighterHits(t, label, gun, acc) {
-  const r = await t.ev((v) => {
+  const r = await t.ev(([v, at]) => {
     window.__xr3d.autopilot(true);
+    const pre = window.__xrTrace(60 * 30, `i.progress >= ${at}`);
+    window.__xr3d.settle();
     const n0 = window.__sfxLog.length;
     const placed = window.__xr3d.spawn('fighter', 60, v);
     const rows = window.__xrTrace(240, 'i.enemies.killed > i0.enemies.killed');
-    return { placed, rows, log: window.__sfxLog.slice(n0), vol: window.__sfxVol.slice(n0) };
-  }, VARIANT.fighter);
+    return { placed, rows, from: pre[0].progress, log: window.__sfxLog.slice(n0), vol: window.__sfxVol.slice(n0) };
+  }, [VARIANT.fighter, TRIAL_AT.fighter]);
+  assertTrialStart(r.from, TRIAL_AT.fighter, label);
   assertEq(r.placed, 1, `${label} : spawn(fighter) place un chasseur`);
   const rows = r.rows;
   const a = rows[0];
@@ -271,13 +300,13 @@ async function fighterHits(t, label, gun, acc) {
   assertEq(hits + 1, GUNS[gun].fighterHits, `${label} : coups pour abattre un chasseur (3 PV)`);
   assertEq(b.points - a.points - otherPoints(a, b), POINTS.fighter, `${label} : points du chasseur`);
   assertDrops(rows, rows.length - 1, DROPS.fighter, `${label} : cristaux du chasseur`);
-  checkAutoFire(rows, label, acc);
+  checkPilotFire(rows, label, acc);
   return rows;
 }
 
 /**
- * Ramène la Comète sur la trajectoire idéale (pilote automatique 1,5 s de jeu, qui tire en automatique), puis
- * pilote coupé et vitesse latérale retombée : la suite du tir manuel vole droit sans croiser de rocher.
+ * Ramène la Comète sur la trajectoire idéale (pilote automatique 1,5 s de jeu, qui tire sur les cibles atteignables),
+ * puis pilote coupé et vitesse latérale retombée : la suite vole droit sans tirer ni croiser de rocher.
  */
 async function recenter(t) {
   await t.ev(() => window.__xr3d.autopilot(true));
@@ -358,9 +387,9 @@ async function slowShot(t, name, d) {
 const APPEAR_STEPS = 28;
 
 /**
- * Gros plans en tir manuel (rien ne tire avant la capture), chacun juste après un portail : chaque type posé sur
+ * Gros plans pilote coupé (rien ne tire avant la capture), chacun juste après un portail : chaque type posé sur
  * la ligne de la Comète, capturé à ~30 u une fois son apparition finie, au ralenti ; chasseur abattu par un tir
- * forcé : explosion puis cristaux ; ensuite le pilote automatique (tir automatique, écarts) fait place nette.
+ * forcé : explosion puis cristaux ; ensuite le pilote automatique (tirs sur les cibles, écarts) fait place nette.
  */
 async function closeups(t, tag, cruise) {
   const ahead = (APPEAR_STEPS / 60) * cruise;
@@ -374,15 +403,32 @@ async function closeups(t, tag, cruise) {
     await trace(t, 600, 'i.nextGate > i0.nextGate');
     await t.ev(() => window.__xr3d.autopilot(false));
     await trace(t, 20);
-    await t.ev(([k, dd, v]) => window.__xr3d.spawn(k, dd, v), [kind, d, kind === 'swarm' ? VARIANT.swarmFull : VARIANT[kind]]);
-    await trace(t, APPEAR_STEPS);
-    await slowShot(t, `${tag}-near-${kind}`, 30);
+    // Pose et apparition depuis un état fixé (settle), dans la même tâche, puis jeu figé (timeScale 0) pendant les
+    // captures : même gros plan et même suite quelle qu'ait été la cadence des images (au ralenti, un chasseur
+    // capturé lentement virait hors du cône avant le tir forcé)
+    await t.ev(([k, dd, v, n]) => {
+      window.__xr3d.settle();
+      window.__xr3d.spawn(k, dd, v);
+      window.__xrTrace(n);
+      window.__xr3d.timeScale(0);
+    }, [kind, d, kind === 'swarm' ? VARIANT.swarmShot : VARIANT[kind], APPEAR_STEPS]);
+    await t.wait(60);
+    await nearShot(t, `${tag}-near-${kind}`, 30);
     if (kind === 'fighter') {
-      const k0 = (await info(t)).enemies.killed;
-      await t.ev(() => window.__xr3d.fire(true));
-      await waitFor(t, (k) => window.__xr3d.info().enemies.killed > k, { timeout: 20000, label: `${tag} : chasseur abattu au ralenti`, arg: k0 });
-      await t.ev(() => window.__xr3d.fire(false));
+      // Tir forcé en sous-pas simulés (temps de jeu exact) depuis l'image capturée, puis 2 sous-pas d'explosion
+      const rows = await t.ev(() => {
+        window.__xr3d.fire(true);
+        const r = window.__xrTrace(60 * 4, 'i.enemies.killed > i0.enemies.killed');
+        window.__xr3d.fire(false);
+        window.__xrTrace(2);
+        return r;
+      });
+      const a = rows[0];
+      const b = rows[rows.length - 1];
+      assert(b.killed > a.killed, `${tag} : chasseur abattu au tir forcé en 4 s de jeu (${fmt({ a, b })})`);
+      await t.wait(60);
       await nearShot(t, `${tag}-explosion`, 30);
+      await t.ev(() => window.__xr3d.timeScale(0.1));
       await t.wait(500);
       await nearShot(t, `${tag}-crystal`, 28);
     }
@@ -418,10 +464,10 @@ async function startFlight(t, stage, patch, touch = 1, introShot = null) {
   return info(t);
 }
 
-/** Jauge du canon et compteur de cristaux du HUD du vol. */
+/** Jauge d'énergie et compteur de cristaux du HUD du vol. */
 function hudCombat(t) {
   return t.ev(() => {
-    const h = document.querySelector('.fl-heat');
+    const h = document.querySelector('.fl-energy');
     const c = document.querySelector('.fl-crystals .hud-num');
     return {
       gun: h ? h.dataset.gun : null,
@@ -436,8 +482,8 @@ function hudCombat(t) {
 }
 
 /**
- * Tir continu forcé (__xr3d.fire) mesuré en temps de jeu, EN TIR MANUEL et sans pilote automatique (rien d'autre
- * ne tire) : canon refroidi, puis tirs de la première seconde, bouches, durée jusqu'à la surchauffe (HUD .is-over
+ * Tir continu forcé (__xr3d.fire : TIR tenu) mesuré en temps de jeu, pilote automatique coupé (rien d'autre ne tire,
+ * pas de turbo) : canon refroidi, puis tirs de la première seconde, bouches, durée jusqu'à la surchauffe (HUD .is-over
  * au même pas), reprise du tir sous 30 %. Renvoie les mesures.
  */
 async function measureGun(t, label, gun) {
@@ -448,7 +494,7 @@ async function measureGun(t, label, gun) {
     window.__xrTrace(156);
     return window.__xr3d.info();
   });
-  assert(g0.manualFire && g0.heat === 0 && !g0.overheated, `${label} : tir manuel, canon froid avant la mesure (${fmt({ manual: g0.manualFire, heat: g0.heat, over: g0.overheated })})`);
+  assert(g0.heat === 0 && !g0.overheated && !g0.boosting, `${label} : énergie froide, sans turbo avant la mesure (${fmt({ heat: g0.heat, over: g0.overheated, boosting: g0.boosting })})`);
   // Tir forcé et trace dans la même tâche (aucune image du jeu entre les deux) : jusqu'au premier tir qui suit
   // la surchauffe, puis 0,4 s de plus (jauge du HUD rallumée)
   const rows = await t.ev(() => {
@@ -494,7 +540,7 @@ async function measureGun(t, label, gun) {
 
 /**
  * Essaim de 6 posé à 95 u devant la Comète (variante `v`, au hasard si null) quand le vol atteint l'avancement
- * `at` (ou quand l'expression `at` de __xrTrace devient vraie ; pilote automatique, tir automatique) ; trace jusqu'à la fin de la formation. 30 points par membre abattu ;
+ * `at` (ou quand l'expression `at` de __xrTrace devient vraie ; pilote automatique, TIR tenu sur les cibles atteignables) ; trace jusqu'à la fin de la formation. 30 points par membre abattu ;
  * cristaux lâchés : 1 à la mort du dernier membre d'une vague abattue en entier, aucun aux autres morts ni à
  * aucune mort d'une vague incomplète (un membre a filé). Un autre ennemi abattu ou entré en scène pendant la trace
  * (vague du parcours) fausse les comptes : refusé si `strict`, sinon essai seulement journalisé. Un avancement
@@ -508,14 +554,15 @@ async function swarmTrial(t, label, v, at, acc, strict = true) {
       const p0 = window.__xr3d.info().progress;
       window.__xrTrace(60 * 60, typeof p === 'string' ? p : `i.progress >= ${p}`);
       const p1 = window.__xr3d.info().progress;
+      // Même départ quel qu'ait été le vol en temps réel avant (cadence des images à froid) : Comète sur la
+      // trajectoire, sans vitesse latérale, énergie froide, turbo coupé
+      window.__xr3d.settle();
       const placed = vv === null ? window.__xr3d.spawn('swarm', 95) : window.__xr3d.spawn('swarm', 95, vv);
       return { placed, p0, p1, rows: window.__xrTrace(240, 'i.enemies.swarm === 0') };
     },
     [v, at],
   );
-  if (typeof at === 'number') {
-    assert(r.p0 < at, `${label} : vol déjà à l'avancement ${r.p0} au départ de l'essai (essaim à poser à ${at}) : trop de temps réel écoulé`);
-  }
+  if (typeof at === 'number') assertTrialStart(r.p0, at, label);
   const rows = r.rows;
   const a = rows[0];
   const b = rows[rows.length - 1];
@@ -524,7 +571,7 @@ async function swarmTrial(t, label, v, at, acc, strict = true) {
   // Autre ennemi : un abattu sans membre d'essaim en moins, ou un essaim entré en scène
   const mixed = rows.some((x, k) => k > 0 && (x.killed - rows[k - 1].killed > rows[k - 1].swarm - x.swarm || x.swarm > rows[k - 1].swarm));
   t.log(`${label} : ${killed} abattus sur ${r.placed} en ${((rows.length - 1) / 60).toFixed(2)} s de jeu (avancement ${at}, de ${r.p0} à ${r.p1}), cristaux lâchés ${b.dropped - a.dropped}${mixed ? ', autre ennemi pendant la trace' : ''}`);
-  checkAutoFire(rows, label, acc);
+  checkPilotFire(rows, label, acc);
   assert(!(strict && mixed), `${label} : aucun autre ennemi pendant la trace (avancement ${at} à revoir si les vagues changent)`);
   if (mixed) return { placed: r.placed, killed, rows, mixed };
   assert(r.placed >= 5 && r.placed <= 7, `${label} : essaim de 5 à 7 (${r.placed})`);
@@ -601,54 +648,66 @@ async function checkCourses(t) {
   }
 }
 
-// ---------------------------------------------------------------- A. Canon léger, tir automatique
+// ---------------------------------------------------------------- A. Canon léger, pilote automatique
 
 async function partA(t) {
-  const i0 = await startFlight(t, 'f1', { ship: { gun: 0, shield: 0, boost: 0 }, settings: { manualFire: false } }, 0);
+  const i0 = await startFlight(t, 'f1', { ship: { gun: 0, shield: 0, boost: 0 } }, 0);
   assertEq(
-    { gunLevel: i0.gunLevel, manualFire: i0.manualFire, waves: i0.waves, crystalsTotal: i0.crystalsTotal, shield: i0.shield, crystals: i0.crystals },
-    { gunLevel: 0, manualFire: false, waves: 6, crystalsTotal: CRYSTALS_TOTAL.f1, shield: 3, crystals: 0 },
-    'A : départ de f1 (canon léger, tir automatique)',
+    { gunLevel: i0.gunLevel, waves: i0.waves, crystalsTotal: i0.crystalsTotal, shield: i0.shield, crystals: i0.crystals, shotsFired: i0.shotsFired },
+    { gunLevel: 0, waves: 6, crystalsTotal: CRYSTALS_TOTAL.f1, shield: 3, crystals: 0, shotsFired: 0 },
+    'A : départ de f1 (canon léger, aucun tir sans appui)',
   );
   assertNear(i0.range, CRUISE.f1 * 1.6, 0.2, 'A : portée = 1,6 s de vol à la croisière');
   const h0 = await hudCombat(t);
   assertEq({ gun: h0.gun, crystals: h0.crystals, over: h0.over }, { gun: 'light', crystals: 0, over: false }, 'A : HUD (jauge du canon léger, 0 cristal)');
   assertEq(h0.step, '25.00%', 'A : graduations de la jauge = 1 s de tir (25 %)');
-  // Tir automatique : comptes de toutes les traces (aucun tir sans cible atteignable)
+  // Tirs du pilote automatique : comptes de toutes les traces (aucun tir sans cible atteignable)
   const acc = { steps: 0, noTarget: 0, notHit: 0, shots: 0 };
 
-  // --- Chasseur posé tout de suite (la première vague, à z −229, est encore hors de portée) : 3 coups
+  // --- Chasseur posé au départ (TRIAL_AT.fighter ; la première vague, à z −229, est encore hors de portée) : 3 coups
   await fighterHits(t, 'A : canon léger', 'light', acc);
 
-  // --- Mine posée à 60 u devant : abattue à distance, sans bouclier perdu
-  let rows = await t.ev((v) => {
+  // --- Mine posée à 60 u devant : abattue à distance, sans bouclier perdu. Chaque essai part d'un endroit et d'un
+  // état fixés (TRIAL_AT, settle : ni turbo ni orbe laissés par le vol en temps réel) et se trace, ramassage
+  // compris, dans la même tâche
+  let rows = await t.ev(([v, at]) => {
+    const pre = window.__xrTrace(60 * 30, `i.progress >= ${at}`);
+    window.__xr3d.settle();
     const placed = window.__xr3d.spawn('mine', 60, v);
-    return { placed, rows: window.__xrTrace(120, 'i.enemies.killed > i0.enemies.killed && i.enemies.mine === 0') };
-  }, VARIANT.mine);
+    const tr = window.__xrTrace(120, 'i.enemies.killed > i0.enemies.killed && i.enemies.mine === 0');
+    const c = tr[tr.length - 1].crystals;
+    return { placed, from: pre[0].progress, rows: tr, pick: window.__xrTrace(150, `i.crystals >= ${c + 1}`) };
+  }, [VARIANT.mine, TRIAL_AT.mine]);
+  assertTrialStart(rows.from, TRIAL_AT.mine, 'A : mine');
   assertEq(rows.placed, 1, 'A : spawn(mine) place une mine');
   let r = rows.rows;
   let a = r[0];
   let b = r[r.length - 1];
   const mineT = (r.length - 1) / 60;
   t.log(`A : mine abattue en ${mineT.toFixed(2)} s de jeu (${fmt({ a, b })})`);
-  assert(b.mine === 0 && b.killed === a.killed + 1, `A : mine abattue par le tir automatique (${fmt(b)})`);
+  assert(b.mine === 0 && b.killed === a.killed + 1, `A : mine abattue par les tirs du pilote automatique (${fmt(b)})`);
   assert(mineT <= 0.9, `A : mine posée à 60 u abattue en moins de 0,9 s (${mineT.toFixed(2)} s)`);
   assert(r.every((x) => x.shield === 3), 'A : aucun bouclier perdu en abattant la mine');
   assertEq(b.points - a.points - otherPoints(a, b), POINTS.mine, 'A : points de la mine');
   assert(b.fired > a.fired && r.some((x) => x.target === 'mine'), 'A : mine visée (cible) et tirs partis');
   assertDrops(r, r.length - 1, DROPS.mine, 'A : cristal de la mine, lâché au pas de sa mort');
-  checkAutoFire(r, 'A : mine', acc);
+  checkPilotFire(r, 'A : mine', acc);
   // Son cristal ramassé dans les 2,5 s de jeu suivantes (lâché sur la ligne de la Comète)
   const c0 = b.crystals;
-  r = await trace(t, 150, `i.crystals >= ${c0 + 1}`);
+  r = rows.pick;
   assert(r[r.length - 1].crystals >= c0 + 1, `A : cristal de la mine ramassé (${c0} -> ${r[r.length - 1].crystals})`);
-  checkAutoFire(r, 'A : ramassage', acc);
+  checkPilotFire(r, 'A : ramassage', acc);
 
   // --- Chasseur posé à 60 u : abattu (150 points), ses 2 cristaux lâchés à sa mort puis ramassés
-  rows = await t.ev((v) => {
+  rows = await t.ev(([v, at]) => {
+    const pre = window.__xrTrace(60 * 30, `i.progress >= ${at}`);
+    window.__xr3d.settle();
     const placed = window.__xr3d.spawn('fighter', 60, v);
-    return { placed, rows: window.__xrTrace(240, 'i.enemies.killed > i0.enemies.killed && i.enemies.fighter === 0') };
-  }, VARIANT.fighter);
+    const tr = window.__xrTrace(240, 'i.enemies.killed > i0.enemies.killed && i.enemies.fighter === 0');
+    const c = tr[tr.length - 1].crystals;
+    return { placed, from: pre[0].progress, rows: tr, pick: window.__xrTrace(240, `i.crystals >= ${c + 2}`) };
+  }, [VARIANT.fighter, TRIAL_AT.fighter2]);
+  assertTrialStart(rows.from, TRIAL_AT.fighter2, 'A : chasseur');
   assertEq(rows.placed, 1, 'A : spawn(fighter) place un chasseur');
   r = rows.rows;
   a = r[0];
@@ -657,11 +716,11 @@ async function partA(t) {
   assert(b.fighter === 0 && b.killed === a.killed + 1, `A : chasseur abattu (${fmt(b)})`);
   assertEq(b.points - a.points - otherPoints(a, b), POINTS.fighter, 'A : points du chasseur');
   assertDrops(r, killSteps(r).at(-1), DROPS.fighter, 'A : 2 cristaux du chasseur, lâchés au pas de sa mort');
-  checkAutoFire(r, 'A : chasseur', acc);
-  r = await trace(t, 240, `i.crystals >= ${b.crystals + 2}`);
+  checkPilotFire(r, 'A : chasseur', acc);
+  r = rows.pick;
   assert(r[r.length - 1].crystals >= b.crystals + 2, `A : 2 cristaux du chasseur ramassés (${b.crystals} -> ${r[r.length - 1].crystals})`);
-  assert(r.every((x) => x.shield === 3), 'A : aucun bouclier perdu (chasseur et son orbe)');
-  checkAutoFire(r, 'A : ramassage', acc);
+  assert(rows.rows.concat(r).every((x) => x.shield === 3), 'A : aucun bouclier perdu (chasseur et son orbe)');
+  checkPilotFire(r, 'A : ramassage', acc);
   await t.wait(300);
   await waitFor(t, () => Number(document.querySelector('.fl-crystals .hud-num').textContent) === window.__xr3d.info().crystals, {
     timeout: 2000,
@@ -675,14 +734,14 @@ async function partA(t) {
   const last = r[r.length - 1];
   t.log(`A : rochers détruits ${rocks0} -> ${last.rocks} en ${((r.length - 1) / 60).toFixed(2)} s de jeu, cristaux ${last.crystals}, points ${last.points}`);
   assert(r.some((x) => x.target === 'rock' && x.hit), 'A : un rocher visé et atteignable');
-  assert(last.rocks >= rocks0 + 3, `A : rochers détruits par le tir automatique (${rocks0} -> ${last.rocks})`);
+  assert(last.rocks >= rocks0 + 3, `A : rochers détruits par les tirs du pilote automatique (${rocks0} -> ${last.rocks})`);
   assert(r.every((x) => x.shield === 3), 'A : aucun bouclier perdu (rochers détruits par les tirs)');
   for (let k = 1; k < r.length; k++) {
     if (r[k].killed === r[k - 1].killed) assert(r[k].dropped - r[k - 1].dropped <= r[k].rocks - r[k - 1].rocks, `A : cristal lâché au pas ${k} sans destruction (${fmt(r[k])})`);
   }
-  checkAutoFire(r, 'A : rochers', acc);
-  t.log(`A : tir automatique, ${fmt(acc)}`);
-  assert(acc.noTarget > 0 && acc.shots > 0, `A : traces du tir automatique avec des pas sans cible (aucun tir) et des tirs (${fmt(acc)})`);
+  checkPilotFire(r, 'A : rochers', acc);
+  t.log(`A : tirs du pilote automatique, ${fmt(acc)}`);
+  assert(acc.noTarget > 0 && acc.shots > 0, `A : traces du pilote automatique avec des pas sans cible (aucun tir) et des tirs (${fmt(acc)})`);
   await t.shot('a-auto-fire-hud');
 
   const { log, fired: firedA } = await sfxAndShots(t);
@@ -691,7 +750,7 @@ async function partA(t) {
   assert(count(log, 'enemyBlast') >= 3 && count(log, 'crystal') >= 3, 'A : sons des explosions et des cristaux');
   assertEq(count(log, 'crash'), 0, 'A : aucun choc');
 
-  // --- Capture du tir automatique sur un chasseur posé à 45 u (apparition finie), au ralenti
+  // --- Capture des tirs du pilote automatique sur un chasseur posé à 45 u (apparition finie), au ralenti
   await t.ev((v) => window.__xr3d.spawn('fighter', 45, v), VARIANT.fighter);
   await trace(t, APPEAR_STEPS);
   await slowShot(t, 'a-auto-fire-fighter', 45);
@@ -735,12 +794,13 @@ async function partA(t) {
 // ---------------------------------------------------------------- B. Mitrailleuse
 
 async function partB(t) {
-  // Tir manuel (mesure du canon sans tir automatique) ; le pilote automatique, lui, tire toujours en automatique
-  const i0 = await startFlight(t, 'f1', { crystals: 0, ship: { gun: 1, shield: 2, boost: 0 }, settings: { manualFire: true } }, 1, 'b-comet-machinegun-intro');
-  // Vol ralenti entre deux relevés (les traces gardent le temps de jeu exact) : les essaims sont posés à un
-  // avancement fixé, qu'un vol à vitesse réelle dépassait si les allers-retours duraient plus de ≈ 4 s
+  // Mesures du canon pilote coupé (TIR tenu par fire) ; le pilote automatique tient TIR sur les cibles atteignables
+  const i0 = await startFlight(t, 'f1', { crystals: 0, ship: { gun: 1, shield: 2, boost: 0 } }, 1, 'b-comet-machinegun-intro');
+  // Vol ralenti entre deux relevés (les traces gardent le temps de jeu exact) : le chasseur et les essaims sont
+  // posés à un avancement fixé (TRIAL_AT, SWARM_AT), qu'un vol à vitesse réelle dépassait si les allers-retours
+  // duraient plus de ≈ 4 s
   await t.ev(() => window.__xr3d.timeScale(0.1));
-  assertEq({ gunLevel: i0.gunLevel, waves: i0.waves, manualFire: i0.manualFire }, { gunLevel: 1, waves: 6, manualFire: true }, 'B : mitrailleuse installée');
+  assertEq({ gunLevel: i0.gunLevel, waves: i0.waves }, { gunLevel: 1, waves: 6 }, 'B : mitrailleuse installée');
   const h0 = await hudCombat(t);
   assertEq({ gun: h0.gun, step: h0.step }, { gun: 'machinegun', step: '33.33%' }, 'B : jauge de la mitrailleuse (graduations = 1 s de tir)');
   const acc = { steps: 0, noTarget: 0, notHit: 0, shots: 0 };
@@ -754,14 +814,14 @@ async function partB(t) {
   const end = full.rows[full.rows.length - 1];
   const after = await trace(t, 180, `i.crystals >= ${end.crystals + 1}`);
   assert(after[after.length - 1].crystals >= end.crystals + 1, `B : cristal de la vague entière abattue ramassé (${end.crystals} -> ${after[after.length - 1].crystals})`);
-  checkAutoFire(after, 'B : ramassage', acc);
+  checkPilotFire(after, 'B : ramassage', acc);
 
   // --- Essaim dont un membre file (variante mesurée), puis essaim à orientation libre (journalisé) : vague
   // incomplète, aucun cristal à aucune mort
   const leak = await swarmTrial(t, 'B : essaim (variante qui laisse filer un membre)', VARIANT.swarmLeak, SWARM_AT.leak, acc);
   assert(leak.killed > 0 && leak.killed < leak.placed, `B : un membre au moins file (variante ${VARIANT.swarmLeak} : ${leak.killed} abattus sur ${leak.placed})`);
   await swarmTrial(t, 'B : essaim à orientation libre', null, SWARM_AT.free, acc, false);
-  t.log(`B : tir automatique, ${fmt(acc)}`);
+  t.log(`B : tirs du pilote automatique, ${fmt(acc)}`);
 
   // --- Cadence, alternance des deux canons, surchauffe
   const m = await measureGun(t, 'B : mitrailleuse', 'machinegun');
@@ -788,15 +848,15 @@ async function partB(t) {
 // ---------------------------------------------------------------- B3. Mitrailleuse niveau 3, chocs d'ennemis
 
 async function partB3(t) {
-  const i0 = await startFlight(t, 'f1', { crystals: 0, ship: { gun: 3, shield: 2, boost: 0 }, settings: { manualFire: true } }, 0);
-  assertEq({ gunLevel: i0.gunLevel, manualFire: i0.manualFire, shield: i0.shield }, { gunLevel: 3, manualFire: true, shield: 5 }, 'B3 : mitrailleuse niveau 3, tir manuel, 5 boucliers');
+  const i0 = await startFlight(t, 'f1', { crystals: 0, ship: { gun: 3, shield: 2, boost: 0 } }, 0);
+  assertEq({ gunLevel: i0.gunLevel, shield: i0.shield }, { gunLevel: 3, shield: 5 }, 'B3 : mitrailleuse niveau 3, 5 boucliers');
   const h0 = await hudCombat(t);
   assertEq({ gun: h0.gun, step: h0.step }, { gun: 'machinegun', step: '33.33%' }, 'B3 : jauge de la mitrailleuse (graduations = 1 s de tir)');
   // Dégâts 1,5 : chasseur (3 PV) abattu en 2 coups
   await fighterHits(t, 'B3 : mitrailleuse niveau 3', 'machinegun3', null);
   await afterFirstWave(t);
 
-  // --- Membre d'essaim percuté (tir manuel, Comète en ligne droite, variante fixée) : un bouclier perdu, membre
+  // --- Membre d'essaim percuté (pilote coupé : aucun tir, Comète en ligne droite, variante fixée) : un bouclier perdu, membre
   // détruit au même pas, sans points, sans cristal, sans ennemi abattu
   const r = await t.ev((v) => {
     window.__xr3d.spawn('swarm', 25, v);
@@ -832,21 +892,93 @@ async function partB3(t) {
   assert(m.muzzles.every((y, k) => (y === 0 || y === 1) && (k === 0 || y !== m.muzzles[k - 1])), `B3 : les deux canons tirent à tour de rôle (${m.muzzles})`);
 }
 
-// ---------------------------------------------------------------- C. Tir manuel
+// ---------------------------------------------------------------- C. Commandes du vol, énergie
+
+/**
+ * Énergie partagée par le tir et le turbo, canon léger, pilote coupé (rien d'autre ne tire) ; Espace (turbo) simulé
+ * par des événements clavier dans la même tâche que les traces. Énergie refroidie, puis : turbo seul jusqu'à la
+ * surchauffe (chauffe BOOST_HEAT par seconde, vitesse en hausse, aucun tir, repère du turbo au HUD) ; en surchauffe,
+ * Espace et TIR (fire) tenus : ni turbo ni tir tant que l'énergie n'est pas sous 30 %, puis les deux reprennent ;
+ * énergie refroidie, puis TIR et turbo ensemble : chauffes additionnées, surchauffe bien plus tôt. Renvoie les mesures.
+ */
+async function energyTrial(t, label) {
+  const r = await t.ev(() => {
+    const a = window.__xr3d;
+    const space = (type) => window.dispatchEvent(new KeyboardEvent(type, { code: 'Space', key: ' ' }));
+    a.autopilot(false);
+    a.fire(false);
+    window.__xrTrace(156); // pause sans tirer ni pousser, puis refroidissement complet
+    const n0 = window.__sfxLog.length;
+    space('keydown');
+    const boost = window.__xrTrace(60 * 4, 'i.overheated');
+    a.fire(true);
+    const over = window.__xrTrace(60 * 3, '!i.overheated && i.boosting && i.shotsFired > i0.shotsFired');
+    a.fire(false);
+    space('keyup');
+    const cooled = window.__xrTrace(60 * 4, 'i.heat === 0');
+    a.fire(true);
+    space('keydown');
+    const both = window.__xrTrace(60 * 4, 'i.overheated');
+    a.fire(false);
+    space('keyup');
+    window.__xrTrace(6);
+    return { boost, over, cooled: cooled[cooled.length - 1], both, log: window.__sfxLog.slice(n0) };
+  });
+  const st = (rows) => (rows.length - 1) / 60;
+  // Turbo seul
+  const b0 = r.boost[0];
+  const bEnd = r.boost[r.boost.length - 1];
+  const bOver = st(r.boost);
+  const pre = r.boost.slice(1, -1);
+  const fast = Math.max(...pre.map((x) => x.speed));
+  t.log(`${label} : turbo seul surchauffé en ${bOver.toFixed(2)} s (énergie ${b0.heat} -> ${bEnd.heat}), vitesse ${b0.speed} -> ${fast}`);
+  assert(b0.heat === 0 && !b0.boosting, `${label} : énergie froide, turbo au repos avant l'essai (${fmt(b0)})`);
+  assert(pre.length > 0 && pre.every((x) => x.boosting && x.fired === b0.fired), `${label} : turbo en marche jusqu'à la surchauffe, aucun tir sans TIR`);
+  assertNear(pre[59].heat, BOOST_HEAT, 0.01, `${label} : énergie chauffée de ${BOOST_HEAT} en 1 s de turbo`);
+  assertNear(bOver, 1 / BOOST_HEAT, 0.05, `${label} : turbo seul : surchauffe après ${1 / BOOST_HEAT} s depuis une jauge froide`);
+  assert(fast >= b0.speed * 1.4, `${label} : turbo : vitesse en hausse (${b0.speed} -> ${fast})`);
+  assert(pre.some((x) => x.hudBoost), `${label} : repère du turbo allumé sur la jauge du HUD`);
+  assert(bEnd.over && !bEnd.boosting && bEnd.hudOver && !bEnd.hudBoost, `${label} : surchauffe : turbo coupé, jauge du HUD en surchauffe (${fmt(bEnd)})`);
+  // Surchauffe, Espace et TIR tenus : rien jusqu'à 30 %, puis turbo et tir reprennent
+  const o = r.over;
+  const out = o.findIndex((x) => !x.over);
+  assert(out > 0, `${label} : la surchauffe doit se terminer (${fmt(o[o.length - 1])})`);
+  const still = o.slice(1, out);
+  assert(still.every((x) => !x.boosting && x.fired === o[0].fired), `${label} : en surchauffe, ni turbo ni tir malgré Espace et TIR tenus`);
+  assertNear(out / 60, (1 - RECOVER_AT) / GUNS.light.coolRate, 0.05, `${label} : reprise sous 30 % après la surchauffe (s)`);
+  assert(o[out - 1].heat < RECOVER_AT + 0.02, `${label} : reprise sous 30 % (${o[out - 1].heat})`);
+  const end = o[o.length - 1];
+  assert(end.boosting && end.fired > o[0].fired && o.length - 1 - out <= 2, `${label} : turbo et tir repris dès la fin de la surchauffe (${fmt({ out, steps: o.length - 1, end })})`);
+  // Refroidi, puis TIR et turbo ensemble : surchauffe bien plus tôt (canon léger : 0,25 + turbo 0,4 par seconde)
+  assertEq(r.cooled.heat, 0, `${label} : énergie refroidie entre les essais`);
+  const bothOver = st(r.both);
+  const fired = r.both[r.both.length - 1].fired - r.both[0].fired;
+  t.log(`${label} : TIR et turbo ensemble : surchauffe en ${bothOver.toFixed(2)} s, ${fired} tirs`);
+  const rate = BOOST_HEAT + GUNS.light.rate / GUNS.light.shotsToOver;
+  assertNear(bothOver, 1 / rate, 0.15, `${label} : TIR et turbo : chauffes additionnées, surchauffe vers ${(1 / rate).toFixed(2)} s`);
+  assert(r.both.slice(1, -1).every((x) => x.boosting) && fired >= 6, `${label} : TIR et turbo en marche jusqu'à la surchauffe (${fired} tirs)`);
+  assert(count(r.log, 'overheat') >= 2 && count(r.log, 'boost') >= 3, `${label} : sons de la surchauffe et du turbo (${fmt({ overheat: count(r.log, 'overheat'), boost: count(r.log, 'boost') })})`);
+  return { boostOver: bOver, bothOver, recover: out / 60 };
+}
 
 async function partC(t, f) {
-  const i0 = await startFlight(t, 'f1', { crystals: 0, ship: { gun: 0, shield: 2, boost: 0 }, settings: { manualFire: true, leftHanded: false } });
-  assertEq({ manualFire: i0.manualFire, shield: i0.shield, maxShields: i0.maxShields }, { manualFire: true, shield: 5, maxShields: 5 }, 'C : tir manuel, 5 boucliers');
-  // Bouton TIR : visible en vol, à gauche de TURBO et un peu plus haut, sans le chevaucher
+  const i0 = await startFlight(t, 'f1', { crystals: 0, ship: { gun: 0, shield: 2, boost: 0 }, settings: { leftHanded: false } });
+  assertEq({ shield: i0.shield, maxShields: i0.maxShields }, { shield: 5, maxShields: 5 }, 'C : 5 boucliers');
+  // Gros TIR en bas à droite (pouce droit), TURBO plus petit juste au-dessus, sans chevauchement
   const shoot = await rects(t, '.xr-shoot');
   const boost = await rects(t, '.xr-boost');
   assert(shoot.length === 1 && boost.length === 1, `C : boutons TIR et TURBO visibles (${fmt({ shoot, boost })})`);
   const [S, B] = [shoot[0], boost[0]];
-  assert(S.x + S.w <= B.x + 1 && S.y + S.h / 2 < B.y + B.h / 2, `C : TIR à gauche de TURBO, un peu plus haut (${fmt({ S, B })})`);
-  assert(/TIR/.test(S.text), `C : libellé TIR (${S.text})`);
+  const Wv = await t.ev(() => window.innerWidth);
+  const cx = (r) => r.x + r.w / 2;
+  assert(
+    S.x + S.w > Wv - 60 && S.w > B.w && B.y + B.h <= S.y && Math.abs(cx(B) - cx(S)) < S.w / 2,
+    `C : gros TIR en bas à droite, TURBO plus petit au-dessus (${fmt({ S, B })})`,
+  );
+  assert(/TIR/.test(S.text) && /TURBO/.test(B.text), `C : libellés TIR et TURBO (${S.text}, ${B.text})`);
   const hud = await hudCombat(t);
   assertEq(hud.shields, 5, 'C : 5 boucliers au HUD');
-  await t.shot('c-hud-manual-844x390');
+  await t.shot('c-hud-844x390');
 
   // --- Aucun tir sans appui ; mine posée sur la route : frôlée, elle explose (−1 bouclier, sans points)
   // (le pilote automatique d'afterFirstWave tire : sons comptés après lui)
@@ -859,8 +991,8 @@ async function partC(t, f) {
   let hit = firstStep(r, (x, p) => x.shield < p.shield);
   t.log(`C : mine frôlée au pas ${hit} (${fmt(r[hit])})`);
   assert(hit > 0, 'C : la mine doit exploser au passage de la Comète');
-  assert(r.some((x) => x.target === 'mine'), 'C : mine visée (dans le cône) mais...');
-  assertEq(r[hit].fired, r[0].fired, 'C : ... aucun tir sans appui en tir manuel');
+  assert(r.some((x) => x.target === 'mine' && x.hit), 'C : mine visée (dans le cône) et atteignable (condition de l’ancien tir automatique) mais...');
+  assertEq(r[hit].fired, r[0].fired, 'C : ... aucun tir sans appui sur TIR');
   assertEq([r[hit].shield, r[hit - 1].mine - r[hit].mine], [4, 1], 'C : mine explosée au même pas qu’un bouclier perdu');
   assertEq([r[hit].killed, r[hit].points], [r[hit - 1].killed, r[hit - 1].points], 'C : mine percutée : ni ennemi abattu ni points');
   assertEq(r[hit].dropped, r[hit - 1].dropped, 'C : mine percutée : aucun cristal lâché');
@@ -892,8 +1024,10 @@ async function partC(t, f) {
   await trace(t, 70);
   await recenter(t);
 
-  // --- Bouton TIR tactile tenu : la Comète tire
+  // --- Bouton TIR tactile tenu : la Comète tire (énergie refroidie par settle : le pilote automatique de recenter
+  // a pu prendre le turbo et tirer)
   const P = await center(t, '.xr-shoot');
+  await t.ev(() => window.__xr3d.settle());
   let n0 = (await info(t)).shotsFired;
   await f.start([[...P, 1]]);
   await waitInput(t, (i) => i.fire, 'TIR tenu');
@@ -909,6 +1043,7 @@ async function partC(t, f) {
   const H = await t.ev(() => window.innerHeight);
   const J = [Math.round(W * 0.2), Math.round(H * 0.65)];
   const T = await center(t, '.xr-boost');
+  await t.ev(() => window.__xr3d.settle());
   const v0 = (await info(t)).speed;
   n0 = (await info(t)).shotsFired;
   await f.start([[...J, 2]]);
@@ -921,10 +1056,13 @@ async function partC(t, f) {
   await t.shot('c-stick-turbo-fire');
   await f.end();
   await waitInputIdle(t, 'trois doigts levés');
-  t.log(`C : trois doigts ${fmt({ stickX: st.stickX, boost: st.boost, fire: st.fire })} : vitesse ${v0} -> ${i1.speed}, tirs +${i1.shotsFired - n0}`);
-  assert(i1.shotsFired - n0 >= 2 && i1.speed >= v0 * 1.2, `C : trois doigts : tir et turbo ensemble (${fmt({ v0, v1: i1.speed, tirs: i1.shotsFired - n0 })})`);
+  t.log(`C : trois doigts ${fmt({ stickX: st.stickX, boost: st.boost, fire: st.fire })} : vitesse ${v0} -> ${i1.speed}, tirs +${i1.shotsFired - n0}, énergie ${i1.heat}`);
+  assert(
+    i1.shotsFired - n0 >= 2 && i1.speed >= v0 * 1.2 && i1.boosting && !i1.overheated,
+    `C : trois doigts : tir et turbo ensemble (${fmt({ v0, v1: i1.speed, tirs: i1.shotsFired - n0, boosting: i1.boosting, heat: i1.heat })})`,
+  );
 
-  // --- Clavier : J, X, F tirent aussi en tir manuel
+  // --- Clavier : J, X, F tirent (TIR au clavier)
   // (appui tenu plus longtemps que la cadence : un appui bref juste après un tir est perdu, comme au sol, la
   // mémoire de l'appui, 150 ms, étant plus courte que la cadence du canon léger)
   for (const k of ['KeyJ', 'KeyX', 'KeyF']) {
@@ -941,77 +1079,60 @@ async function partC(t, f) {
   await measureGun(t, 'C : canon léger', 'light');
   log = await sfxLog(t);
   assert(count(log, 'overheat') >= 1 && count(log, 'shipMachinegun') === 0, 'C : son de la surchauffe, pas de son de mitrailleuse');
+
+  // --- Énergie partagée : turbo seul, surchauffe (ni turbo ni tir), TIR et turbo ensemble
+  await recenter(t);
+  const en = await energyTrial(t, 'C : énergie');
+  t.log(`C : énergie ${fmt(en)}`);
+  // Capture du HUD : turbo en marche (repère allumé), énergie qui chauffe
+  await recenter(t);
+  await t.ev(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftLeft', key: 'Shift' }));
+    window.__xrTrace(50);
+  });
+  await slowShot(t, 'c-hud-turbo', 0);
+  await t.ev(() => {
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftLeft', key: 'Shift' }));
+    window.__xr3d.timeScale(1);
+  });
   await recenter(t);
 
   // --- Gros plans (nébuleuse) : chasseur, mine, essaim, explosion, cristaux
   await closeups(t, 'c-nebula', CRUISE.f1);
   await recenter(t);
 
-  // --- HUD à 640x320 (5 boucliers au départ, chauffe, cristaux, TIR)
+  // --- HUD à 640x320 (5 boucliers au départ, énergie, cristaux, TIR et TURBO)
   await t.page.setViewportSize({ width: 640, height: 320 });
   await t.wait(400);
-  await t.shot('c-hud-manual-640x320');
+  await t.shot('c-hud-640x320');
   await t.page.setViewportSize({ width: 844, height: 390 });
   await t.wait(400);
 
-  // --- Pause → Options → « Tir manuel » coupé : bouton masqué, tir automatique revenu
-  await t.key('Escape', 60);
-  await waitPause(t, true);
-  await pressPause(t, 'Options');
-  await waitFor(t, () => document.querySelector('.overlay.pause').dataset.view === 'options', { timeout: 3000, label: 'Pause : vue Options' });
-  await t.wait(350);
-  const PO = '.overlay.pause.is-open';
-  const tog = `${PO} .toggle--manualFire`;
-  await t.ev((s) => document.querySelector(s).scrollIntoView({ block: 'center' }), tog);
-  await t.wait(250);
-  const before = await t.ev((s) => {
-    const e = document.querySelector(s);
-    return { on: e.getAttribute('aria-checked'), tag: e.tagName, text: e.innerText.replace(/\s+/g, ' ').trim() };
-  }, tog);
-  assert(before.on === 'true' && before.tag === 'BUTTON' && /Tir manuel/.test(before.text), `C : interrupteur « Tir manuel » coché dans la Pause (${fmt(before)})`);
-  await t.shot('c-pause-manual-fire-option');
-  await t.page.locator(tog).click({ timeout: 5000 });
-  await waitFor(t, (s) => document.querySelector(s).getAttribute('aria-checked') === 'false', { timeout: 2000, label: 'C : tir manuel coupé', arg: tog });
-  assertEq((await readSave(t)).settings.manualFire, false, 'C : réglage enregistré');
-  await t.page.locator(`${PO} .pause-opt-head .btn-round`).first().click({ timeout: 5000 });
-  await waitFor(t, () => document.querySelector('.overlay.pause').dataset.view === 'menu', { timeout: 2000, label: 'Pause : retour au menu' });
-  await pressPause(t, 'Reprendre');
-  await waitPause(t, false);
-  assertEq((await rects(t, '.xr-shoot')).length, 0, 'C : bouton TIR masqué hors tir manuel');
-  assert((await rects(t, '.xr-boost')).length === 1, 'C : TURBO toujours là');
-  const i2 = await info(t);
-  assertEq(i2.manualFire, false, 'C : tir automatique en vol (effet immédiat)');
-  r = await t.ev((v) => {
-    window.__xr3d.spawn('mine', 70, v);
-    return window.__xrTrace(120, 'i.enemies.killed > i0.enemies.killed');
-  }, VARIANT.mine);
-  assert(r[r.length - 1].killed > r[0].killed && r[r.length - 1].fired > r[0].fired, `C : tir automatique revenu : mine abattue (${fmt(r[r.length - 1])})`);
-  checkAutoFire(r, 'C : tir automatique revenu');
-  log = await sfxLog(t);
-  assert(count(log, 'shipGun') >= 5, 'C : son des tirs (manuels puis automatiques)');
-
-  // --- En tir automatique, J tire aussi sans cible : vol (pilote automatique) jusqu'à 20 pas d'affilée sans cible
-  // (canon prêt), puis J tenue (événements clavier dans la même tâche que la trace)
+  // --- J tire aussi sans cible pendant que le pilote automatique vole (il ne tient TIR que sur les cibles
+  // atteignables) : vol jusqu'à 20 pas d'affilée sans cible (canon prêt, énergie sous 50 %), puis J tenue
+  // (événements clavier dans la même tâche que la trace)
   const jr = await t.ev(() => {
     window.__xr3d.autopilot(true);
-    const pre = window.__xrTrace(60 * 30, 'rows.length > 20 && rows.slice(-20).every((x) => x.target === null)');
+    const pre = window.__xrTrace(60 * 30, 'rows.length > 20 && rows.slice(-20).every((x) => x.target === null) && i.heat < 0.5');
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ', key: 'j' }));
     const rows = window.__xrTrace(30);
     window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyJ', key: 'j' }));
     window.__xr3d.autopilot(false);
     return { pre, rows };
   });
-  checkAutoFire(jr.pre, 'C : avant l’appui sur J (tir automatique)');
+  checkPilotFire(jr.pre, 'C : avant l’appui sur J (pilote automatique)');
   assert(jr.pre.length > 20 && jr.pre.slice(-20).every((x) => x.target === null), 'C : 20 pas d’affilée sans cible trouvés');
   const free = jr.rows.filter((x, k) => k > 0 && x.fired > jr.rows[k - 1].fired && !(x.target !== null && x.hit));
-  t.log(`C : J tenue 0,5 s en tir automatique : ${jr.rows[jr.rows.length - 1].fired - jr.rows[0].fired} tirs, dont ${free.length} sans cible atteignable`);
-  assert(free.length >= 1, 'C : touche J en tir automatique : tir sans cible');
+  t.log(`C : J tenue 0,5 s, pilote automatique : ${jr.rows[jr.rows.length - 1].fired - jr.rows[0].fired} tirs, dont ${free.length} sans cible atteignable`);
+  assert(free.length >= 1, 'C : touche J avec le pilote automatique : tir sans cible');
+  log = await sfxLog(t);
+  assert(count(log, 'shipGun') >= 5, 'C : son des tirs');
 }
 
 // ---------------------------------------------------------------- D. Ceinture d'Orak
 
 async function partD(t) {
-  const i0 = await startFlight(t, 'f2', { crystals: 0, ship: { gun: 1, shield: 2, boost: 0 }, settings: { manualFire: true } });
+  const i0 = await startFlight(t, 'f2', { crystals: 0, ship: { gun: 1, shield: 2, boost: 0 } });
   assertEq({ waves: i0.waves, crystalsTotal: i0.crystalsTotal, gunLevel: i0.gunLevel }, { waves: 10, crystalsTotal: CRYSTALS_TOTAL.f2, gunLevel: 1 }, 'D : départ de f2');
   assertNear(i0.range, CRUISE.f2 * 1.6, 0.2, 'D : portée en f2');
 

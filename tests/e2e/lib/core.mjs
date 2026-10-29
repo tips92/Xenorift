@@ -70,7 +70,8 @@ export function toasts(t) {
 
 /**
  * HUD du vol tel que le joueur le voit : visible, portails passés / total, progression (0..1, barre du haut),
- * jauge de turbo (0..1), chronomètre (texte), boucliers restants.
+ * jauge d'énergie (`energy` : part remplie 0..1, chauffée par le tir et le turbo ; `boosting` : repère du turbo
+ * allumé ; `over` : surchauffe), chronomètre (texte), boucliers restants.
  */
 export function hudFlight(t) {
   return t.ev(() => {
@@ -81,12 +82,16 @@ export function hudFlight(t) {
       return m ? Number(m[1]) : null;
     };
     const total = q('.fl-gates .hud-total');
+    const en = q('.fl-energy');
+    const off = en ? en.querySelector('.heat-grad').style.getPropertyValue('--heat-off').trim() : '';
     return {
       visible: !!hud && !hud.classList.contains('is-hidden') && hud.dataset.mode === 'flight',
       gates: q('.fl-gates .hud-num') ? Number(q('.fl-gates .hud-num').textContent) : null,
       total: total ? Number(total.textContent.replace('/', '')) : null,
       progress: scale(q('.fl-progress-fill')),
-      boost: scale(q('.fl-boost-fill')),
+      energy: off === '' ? null : Math.round((1 - Number(off)) * 100) / 100,
+      boosting: !!en && en.classList.contains('is-boost'),
+      over: !!en && en.classList.contains('is-over'),
       timer: q('.fl-timer') ? q('.fl-timer').textContent : null,
       shield: document.querySelectorAll('.fl-pips .fl-pip:not(.is-empty)').length,
     };
