@@ -36,8 +36,12 @@ nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur 
   j2 « Canopée des spores » (champignons, la méduse-baleine qui agit, Tess, Scarabée-titan), j3 « Sanctuaire du
   gardien » (radio brouillée, combat contre la méduse-baleine, double saut), boss en touches, « Réessayer le
   combat ». Reste l'essai sur téléphone de 4b, puis 4c (cinématiques, léviathan).
-- Reste à faire côté conception : le choix des styles de niveaux bonus, les réglages chiffrés (armes, canons,
-  ennemis du vol, prix) après essai sur téléphone.
+- Plans 5 à 7 écrits le 29/10, choix encore à valider :
+  [05-monde-2.md](plans/05-monde-2.md), [06-carte-et-mondes.md](plans/06-carte-et-mondes.md),
+  [07-secrets-bonus.md](plans/07-secrets-bonus.md). Les styles de bonus proposés sont la course jetpack et la
+  défense de la Comète (question 2 du plan 07).
+- Reste à faire côté conception : valider ces choix, et les réglages chiffrés (armes, canons, ennemis du vol,
+  prix) après essai sur téléphone.
 - Organisation du code et des documents : [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
@@ -208,7 +212,9 @@ du stick.
       course de rover)
 - [ ] Récompense : cristaux en plus ou pièce rare pour le hangar
 
-**À discuter :** quels styles en premier ? Rien ne presse, ils arrivent en dernier.
+**Choix proposés** dans [plans/07-secrets-bonus.md](plans/07-secrets-bonus.md) (pas encore validés) : d'abord la
+course en jetpack et la défense de la Comète. Le tir à défilement, la chute libre et le rover attendent l'essai
+sur téléphone de ces deux-là.
 
 ### 7. Histoire et cinématiques
 
@@ -302,8 +308,9 @@ le jeu en 4c.
    monde avant de multiplier les niveaux. **En cours** (plan validé, branche `claude/world-1-completion-866505`) :
    4a (fondations, j1) et 4b (la Jungle : j2, j3, Tess, mini-boss et gardienne) faites et vérifiées ; prochaine :
    4c (histoire et vol).
-5. **Monde 2** au même format.
-6. **Carte galactique**, puis Boréa, Vulkar et le Cœur de la Faille, avec les cinématiques de fin.
-7. **Objets secrets et niveaux bonus**.
+5. **Monde 2** au même format. Plan écrit, à valider : [plans/05-monde-2.md](plans/05-monde-2.md).
+6. **Carte galactique**, puis Boréa, Vulkar et le Cœur de la Faille, avec les cinématiques de fin. Plan écrit,
+   à valider : [plans/06-carte-et-mondes.md](plans/06-carte-et-mondes.md).
+7. **Objets secrets et niveaux bonus**. Plan écrit, à valider : [plans/07-secrets-bonus.md](plans/07-secrets-bonus.md).
 
 Les défis, succès, contre-la-montre, niveaux de difficulté et le reste s'ajoutent au fil de l'eau.
