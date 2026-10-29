@@ -56,7 +56,10 @@ export const UPGRADE_MULS: Readonly<Record<UpgradeStat, readonly number[]>> = {
   cooling: [1, 1.25, 1.5, 1.8],
 };
 
-/** Turbo : durée de la jauge pleine et vitesse de recharge multipliées, selon le niveau. */
+/**
+ * Turbo, selon le niveau : chauffe du turbo divisée (il dure plus longtemps depuis une jauge froide) et
+ * refroidissement de la jauge d'énergie (tir et turbo) multiplié.
+ */
 export const BOOST_MULS: readonly number[] = [1, 1.25, 1.5];
 
 /** Prix en cristaux ; tableaux indexés par le niveau actuel (prix du niveau suivant). */
@@ -223,10 +226,10 @@ function buildItems(): HangarItem[] {
       kind: 'shipBoost',
       tab: 'ship',
       name: 'Turbo',
-      desc: 'Jauge de turbo plus endurante, recharge plus rapide.',
+      desc: 'Turbo moins gourmand ; l’énergie (tir et turbo) refroidit plus vite.',
       maxLevel: MAX_BOOST_LEVEL,
       prices: PRICES.shipBoost,
-      effects: BOOST_MULS.slice(1).map((m) => `Durée et recharge ${formatMul(m)}`),
+      effects: BOOST_MULS.slice(1).map((m) => `Durée du turbo et refroidissement ${formatMul(m)}`),
       crew: [null, null],
     },
   );
@@ -307,7 +310,7 @@ export function maxShieldsFor(shieldLevel: number): number {
   return BASE_SHIELDS + clampLevel(shieldLevel, MAX_SHIELD_LEVEL);
 }
 
-/** Turbo : multiplicateur de la durée de la jauge et de la recharge (1, 1,25, 1,5). */
+/** Turbo : multiplicateur de la durée du turbo et du refroidissement de l'énergie (1, 1,25, 1,5). */
 export function boostMulFor(level: number): number {
   return BOOST_MULS[clampLevel(level, MAX_BOOST_LEVEL)];
 }

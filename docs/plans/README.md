@@ -10,7 +10,7 @@ en lisant le code concerné ; l'utilisateur valide les choix proposés, qui pass
 |---|---|---|
 | 1. Contrôles 2D (stick à 8 directions, visée, accroupi, descente, portes, réglage des boutons) | [01-controles.md](01-controles.md) | codé et vérifié par la suite e2e complète (branche `plans-etapes-1-3`) ; essai sur téléphone à faire (secteurs d'angle du stick, taille) |
 | 2. Armes et nouveaux bonus | [02-armes.md](02-armes.md) | codé et vérifié par la suite e2e complète (nouveaux scénarios `weapons` / `powerups`) ; essai sur téléphone à faire (réglage des armes, sons, vitesse) |
-| 3. Hangar (3a : hangar et armes de Kaï ; 3b : combat en vol) | [03-hangar.md](03-hangar.md) | 3a et 3b codées et vérifiées par la suite e2e complète (branche `plans-etapes-1-3` ; 3a commitée, 3b pas encore ; nouveaux scénarios `hangar` et `flight-combat`, captures et tests relus) ; essai sur téléphone à faire (3b : lisibilité des tirs et des ennemis, tir automatique, bouton TIR, réglages) ; la balise (point 16) est faite à l'étape 4 |
+| 3. Hangar (3a : hangar et armes de Kaï ; 3b : combat en vol) | [03-hangar.md](03-hangar.md) | 3a et 3b codées et vérifiées par la suite e2e complète (branche `plans-etapes-1-3` ; 3a commitée, 3b pas encore ; nouveaux scénarios `hangar` et `flight-combat`, captures et tests relus) ; premier essai sur téléphone le 29/10/2026 : décision 3 amendée (bouton TIR dédié, TURBO au-dessus, énergie partagée ; branche `claude/vol-tir-bouton`, pas encore commitée) ; à réessayer sur téléphone (lisibilité des tirs et des ennemis, TIR et TURBO, énergie, réglages) ; la balise (point 16) est faite à l'étape 4 |
 | 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | décisions validées le 28/10 (les 19 choix tels quels) ; en cours de réalisation sur la branche `claude/world-1-completion-866505` ; la balise de LUMA (point 16 du plan 03) est faite ici, en 4a |
 | 5. Monde 2 au même format | à écrire | — |
 | 6. Carte galactique, puis Boréa, Vulkar, Cœur de la Faille | à écrire | — |
@@ -43,8 +43,10 @@ d'armes de l'étape 2.
    - hangar : lisibilité sur petit écran (cartes, message, confirmation), prix et multiplicateurs (`PRICES`,
      `UPGRADE_MULS`, `BOOST_MULS` de `src/core/hangar.ts`), gain de cristaux par niveau ;
    - combat en vol (3b ; « Choix de réalisation de 3b » de [03-hangar.md](03-hangar.md), captures de
-     `tests/e2e/out/flight-combat/` et `small-screens/`) : lisibilité des tirs, des ennemis et des orbes, tir
-     automatique (cône et guidage `SHIP_AIM`), bouton TIR et option « Tir manuel », canons (`SHIP_GUNS`,
+     `tests/e2e/out/flight-combat/` et `small-screens/`) : lisibilité des tirs, des ennemis et des orbes, aide à
+     la visée (cône et guidage `SHIP_AIM`), boutons TIR et TURBO (un doigt reste au bouton où il s'est posé : TIR
+     et turbo ensemble demandent deux doigts ; « À juger sur téléphone » de l'amendement du 29/10/2026), énergie
+     (`SHIP_ENERGY`), canons (`SHIP_GUNS`,
      `SHIP_GUN_MULS` de `src/core/shipGuns.ts`), ennemis (`ENEMY_DEFS` de `src/game3d/enemies.ts`), vagues
      (`waves` de `COURSES`), HUD du vol, fluidité (appels de dessin, images par seconde) et sons du vol.
 

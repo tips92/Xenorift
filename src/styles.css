@@ -3410,11 +3410,11 @@ svg {
   text-shadow: 0 0 8px rgba(255, 200, 60, 0.85);
 }
 
-/* ---- Jauge de chauffe : arme équipée (plateforme, .hud-heat) et canon de la Comète (vol, .fl-heat, placée
-   avec le HUD du vol). Mêmes classes internes (hud.ts, createHeatGauge). */
+/* ---- Jauge de chauffe : arme équipée (plateforme, .hud-heat) et énergie de la Comète, chauffée par le tir et le
+   turbo (vol, .fl-energy, placée avec le HUD du vol). Mêmes classes internes (hud.ts, createHeatGauge). */
 
 .hud-heat,
-.fl-heat {
+.fl-energy {
   position: absolute;
   top: var(--hud-top);
   display: flex;
@@ -3437,7 +3437,7 @@ svg {
 
 /* Icône de l'arme : couleur selon la chauffe (froide, tiède, brûlante). */
 .hud-heat .ico-weapon,
-.fl-heat .ico-weapon {
+.fl-energy .ico-weapon {
   flex: none;
   width: 22px;
   height: 22px;
@@ -3446,12 +3446,12 @@ svg {
 }
 
 .hud-heat[data-level='warm'] .ico-weapon,
-.fl-heat[data-level='warm'] .ico-weapon {
+.fl-energy[data-level='warm'] .ico-weapon {
   color: var(--orange);
 }
 
 .hud-heat[data-level='hot'] .ico-weapon,
-.fl-heat[data-level='hot'] .ico-weapon {
+.fl-energy[data-level='hot'] .ico-weapon {
   color: var(--red);
 }
 
@@ -3503,17 +3503,17 @@ svg {
 }
 
 .hud-heat.is-over,
-.fl-heat.is-over {
+.fl-energy.is-over {
   border-color: rgba(255, 63, 94, 0.65);
 }
 
 .hud-heat.is-over .heat-label,
-.fl-heat.is-over .heat-label {
+.fl-energy.is-over .heat-label {
   animation: blink 0.55s linear infinite;
 }
 
 .hud-heat.is-over .heat-track,
-.fl-heat.is-over .heat-track {
+.fl-energy.is-over .heat-track {
   animation: crit-pulse 0.28s ease-in-out infinite alternate;
 }
 
@@ -3641,7 +3641,7 @@ svg {
   transform: scale(0.9);
 }
 
-/* ---- Vol : barre d'avancement, chrono, portails, bouclier, turbo */
+/* ---- Vol : barre d'avancement, chrono, portails, bouclier (énergie : plus bas) */
 
 .fl-progress {
   position: absolute;
@@ -3691,8 +3691,7 @@ svg {
   padding: 6px 14px 7px;
 }
 
-.fl-shield,
-.fl-boost {
+.fl-shield {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -3738,35 +3737,6 @@ svg {
 
 .fl-left.is-critical .fl-pips {
   animation: crit-pulse 0.8s ease-in-out infinite alternate;
-}
-
-.fl-boost-track {
-  position: relative;
-  width: clamp(80px, 14vw, 130px);
-  height: 10px;
-  overflow: hidden;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
-}
-
-.fl-boost-fill {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, #ff9a3f, #ffd84a);
-  transform-origin: left center;
-}
-
-.fl-boost.is-full .fl-boost-fill {
-  background: linear-gradient(90deg, #ffb35c, #fff3a8);
-}
-
-.fl-boost.is-full .fl-label {
-  color: var(--gold);
-}
-
-.fl-boost.is-low .fl-boost-fill {
-  background: var(--red);
 }
 
 .fl-center {
@@ -3846,13 +3816,70 @@ svg {
   font-size: 15px;
 }
 
-/* ---- Vol : chauffe du canon (entre le chrono et le bouton pause, comme la jauge 2D des petits écrans) et
-   cristaux du vol (sous le bouclier et le turbo). De 844 à 568 px de large, la jauge ne touche ni la ligne
-   des portails (la plus large du bloc central) ni le bouton pause, 5 boucliers compris. */
+/* ---- Vol : énergie de la Comète, chauffée par le tir et le turbo (entre le chrono et le bouton pause, comme la
+   jauge 2D des petits écrans), et cristaux du vol (sous le bouclier). De 844 à 568 px de large, la jauge ne
+   touche ni la ligne des portails (la plus large du bloc central) ni le bouton pause, 5 boucliers compris.
+   États : froide (cyan), chaude (orange, data-level warm / hot), surchauffe (.is-over : SURCHAUFFE dessous) ;
+   turbo en marche (.is-boost) : repère du turbo allumé (magenta, comme le bouton TURBO). */
 
-.fl-heat {
+.fl-energy {
   right: calc(var(--hud-right) + 62px);
   width: clamp(116px, 22vw, 220px);
+}
+
+/* Libellé « Énergie » et repère du turbo au-dessus de la barre (masque son débordement : les tests le voient). */
+.fl-energy .heat-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.fl-energy .heat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.fl-energy .heat-track {
+  flex: none;
+}
+
+.fl-turbo {
+  display: inline-flex;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: rgba(255, 64, 214, 0.4);
+  transition:
+    color 120ms ease,
+    filter 120ms ease;
+}
+
+.fl-turbo svg {
+  width: 100%;
+  height: 100%;
+}
+
+.fl-energy.is-boost {
+  border-color: rgba(255, 64, 214, 0.6);
+}
+
+.fl-energy.is-boost .fl-label {
+  color: #ffd2f4;
+}
+
+.fl-energy.is-boost .fl-turbo {
+  color: var(--magenta);
+  filter: drop-shadow(0 0 4px rgba(255, 64, 214, 0.95));
+}
+
+/* Surchauffe (turbo déjà coupé) : le liseré rouge l'emporte. */
+.fl-energy.is-over {
+  border-color: rgba(255, 63, 94, 0.65);
 }
 
 .fl-crystals {
@@ -3934,7 +3961,7 @@ svg {
 @media (max-height: 380px) {
   .hud-chip,
   .hud-heat,
-  .fl-heat {
+  .fl-energy {
     height: 40px;
   }
 
@@ -3985,12 +4012,7 @@ svg {
   }
 
   .fl-left {
-    gap: 10px;
     padding: 6px 10px 7px;
-  }
-
-  .fl-boost-track {
-    width: 64px;
   }
 }
 
@@ -4013,11 +4035,27 @@ svg {
     font-size: 22px;
   }
 
-  /* Jauge du canon resserrée (568 px : 384 à 492 px, la ligne des portails finit vers 362 px). */
-  .fl-heat {
-    gap: 6px;
+  /* Jauge d'énergie resserrée (568 px : 384 à 492 px, la ligne des portails finit vers 362 px) : icône, libellé
+     et repère du turbo plus petits. */
+  .fl-energy {
+    gap: 5px;
     width: 108px;
-    padding: 0 9px;
+    padding: 0 8px;
+  }
+
+  .fl-energy .ico-weapon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .fl-energy .fl-label {
+    font-size: 8px;
+    letter-spacing: 0.1em;
+  }
+
+  .fl-turbo {
+    width: 11px;
+    height: 11px;
   }
 }
 
@@ -4038,33 +4076,16 @@ svg {
   }
 }
 
-/* Bouclier renforcé (4 ou 5 boucliers ; classe posée par hud.ts) : pastilles serrées, jauge de turbo raccourcie
-   de la marge de sécurité de gauche (encoche : le bloc décalé ne touche pas le chrono centré) ; sous 620 px,
-   pastilles plus petites et jauge plus courte encore. */
+/* Bouclier renforcé (4 ou 5 boucliers ; classe posée par hud.ts) : pastilles serrées ; sous 620 px, plus petites
+   (encoche : le bloc décalé ne touche pas le chrono centré). */
 .fl-left.has-extra-shields .fl-pips {
   gap: 2px;
-}
-
-@media (min-width: 701px) {
-  .fl-left.has-extra-shields .fl-boost-track {
-    width: clamp(64px, calc(14vw - var(--sal)), 130px);
-  }
-}
-
-@media (max-width: 700px) {
-  .fl-left.has-extra-shields .fl-boost-track {
-    width: clamp(40px, calc(64px - var(--sal)), 64px);
-  }
 }
 
 @media (max-width: 620px) {
   .fl-left.has-extra-shields .fl-pip {
     width: 17px;
     height: 19px;
-  }
-
-  .fl-left.has-extra-shields .fl-boost-track {
-    width: 52px;
   }
 }
 

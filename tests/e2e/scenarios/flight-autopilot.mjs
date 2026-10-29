@@ -2,7 +2,8 @@
 // ni timeScale) : Vol 1 (16 portails) puis Vol 2 (22 portails) lancé depuis le choix du niveau dans la même page.
 // Chaque vol : aucun portail manqué, ni explosion ni temps écoulé, distorsion puis « VOL RÉUSSI » avec
 // 16/16 (puis 22/22). Le renderer three.js est réutilisé : un seul canevas 3D dans la page à la fin.
-// Combat (plan 03, 3b) : le pilote automatique tire en automatique et s'écarte des mines et des orbes ; il finit
+// Combat (plan 03, 3b) : le pilote automatique tient TIR quand une cible peut être touchée, prend le turbo loin des
+// portails sur une énergie froide (jauge partagée avec le tir) et s'écarte des mines et des orbes ; il finit
 // avec au moins un bouclier, des ennemis abattus et des cristaux ramassés ; appels de dessin relevés chaque
 // seconde, toujours sous 150. Renderer partagé : rien ne survit d'une partie à l'autre (au départ de chaque vol,
 // ni ennemi, ni orbe, ni tir, ni cristal en vol, compteurs à zéro, cristaux du HUD à 0) ; « +N cristaux » de
@@ -44,7 +45,7 @@ async function autoFlight(t, id, gatesTotal) {
       points: i.points,
       heat: i.heat,
       hudCrystals: c ? c.textContent.trim() : null,
-      hudOver: !!document.querySelector('.fl-heat.is-over'),
+      hudOver: !!document.querySelector('.fl-energy.is-over'),
     };
   });
   t.log(`${id} : départ ${JSON.stringify(fresh)}`);
@@ -107,7 +108,7 @@ async function autoFlight(t, id, gatesTotal) {
   t.log(`${id} : résultats après ${secs} s, phases ${[...phases].join(' > ')}, bouclier min ${minShield}, appels de dessin max ${maxCalls}, dernier état ${JSON.stringify(last)}`);
   assert(minShield >= 1, `${id} : au moins un bouclier pendant tout le vol (${minShield})`);
   assert(maxCalls > 0 && maxCalls < 150, `${id} : appels de dessin sous 150 en vol (max relevé ${maxCalls})`);
-  assert(last.enemies.killed > 0 && last.crystals > 0, `${id} : ennemis abattus et cristaux ramassés par le tir automatique (${JSON.stringify({ enemies: last.enemies, crystals: last.crystals })})`);
+  assert(last.enemies.killed > 0 && last.crystals > 0, `${id} : ennemis abattus et cristaux ramassés par les tirs du pilote automatique (${JSON.stringify({ enemies: last.enemies, crystals: last.crystals })})`);
   assert(phases.has('warp') || phases.has('done'), `${id} : la distorsion finale doit avoir eu lieu (phases vues : ${[...phases].join(', ')})`);
   assertEq(last.gates, gatesTotal, `${id} : portails franchis en fin de vol`);
   await waitForScreen(t, 'results', { timeout: 15000 });

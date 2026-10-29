@@ -18,10 +18,12 @@ nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur 
   suite e2e complète avec les nouveaux scénarios `weapons` et `powerups`) ; reste à régler les armes sur
   téléphone (et à écouter leurs sons).
 - **Étape 3 (hangar) codée et vérifiée** sur la même branche : 3a (hangar et armes de Kaï ; nouveau scénario
-  `hangar`, hangar vérifié jusqu'à 568x320) et 3b (combat en vol : canon et mitrailleuse de la Comète, tir
-  automatique ou manuel, astéroïdes destructibles, ennemis spatiaux, cristaux du vol ; nouveau scénario
-  `flight-combat`), suite e2e complète verte, captures et tests relus. 3b n'est pas encore commitée. Reste
-  l'essai sur téléphone des étapes 1 à 3. La balise de LUMA (fin de l'étape 3) est faite avec l'étape 4.
+  `hangar`, hangar vérifié jusqu'à 568x320) et 3b (combat en vol : canon et mitrailleuse de la Comète,
+  astéroïdes destructibles, ennemis spatiaux, cristaux du vol ; nouveau scénario `flight-combat`), suite e2e
+  complète verte, captures et tests relus. Après le premier essai sur téléphone (29/10/2026) : bouton TIR dédié
+  sous le pouce droit (tir tant qu'il est tenu, plus de tir automatique), TURBO au-dessus, une seule jauge
+  d'énergie pour le tir et le turbo (branche `claude/vol-tir-bouton`). Reste l'essai sur téléphone des étapes 1
+  à 3. La balise de LUMA (fin de l'étape 3) est faite avec l'étape 4.
 - **Étape 4 (monde 1 complet) en cours** dans une autre discussion, sur sa propre branche
   (`claude/world-1-completion-866505`) : choix du plan 4 validés le 28/10 tels quels (le plan à jour est sur
   cette branche).
@@ -94,9 +96,12 @@ Plan technique : [plans/03-hangar.md](plans/03-hangar.md).
 **État (28/10/2026) :** 3a codée (réserve de cristaux, sauvegarde version 2, écran du hangar entre deux étapes
 et depuis Niveaux, améliorations des armes de Kaï, cœurs supplémentaires, bouclier renforcé et turbo de la
 Comète, aperçu 2D), vérifiée par les tests navigateur (scénario `hangar`). 3b codée (canon léger et
-mitrailleuse de la Comète, tir automatique ou manuel, astéroïdes destructibles, chasseurs, mines, essaims et
-leurs orbes, cristaux du vol pour la réserve, jauge du canon et cristaux dans le HUD du vol), vérifiée par les
-tests navigateur (scénario `flight-combat`). Les plans d'armes et l'équipage (Tess, Mira) viendront avec
+mitrailleuse de la Comète, astéroïdes destructibles, chasseurs, mines, essaims et leurs orbes, cristaux du vol
+pour la réserve, cristaux dans le HUD du vol), vérifiée par les tests navigateur (scénario `flight-combat`).
+**29/10/2026**, après l'essai sur téléphone : bouton TIR dédié à la place de TURBO (tir tant qu'il est tenu, plus
+de tir automatique ni d'option « Tir manuel »), TURBO au-dessus, une seule jauge « Énergie » que le tir et le
+turbo font chauffer (en surchauffe, ni tir ni turbo) ; le module Turbo rend le turbo moins gourmand et l'énergie
+plus rapide à refroidir. Les plans d'armes et l'équipage (Tess, Mira) viendront avec
 l'étape 4 : d'ici là, hors mode test, seuls le niveau 1 des améliorations du laser et les modules de la Comète
 s'achètent. Restent l'essai sur téléphone (prix, multiplicateurs, lisibilité du hangar ; tirs, ennemis, bouton
 TIR et réglages du vol) et la balise de LUMA (faite avec l'étape 4).
@@ -109,9 +114,11 @@ TIR et réglages du vol) et la balise de LUMA (faite avec l'étape 4).
 - [x] Les cristaux ramassés servent de monnaie
 - [x] Aperçu de la Comète personnalisée et de Kaï avec son arme (en 2D d'abord, 3D plus tard)
 - [x] La Comète a un canon léger dès le départ ; la mitrailleuse est sa première amélioration (3b)
-- [x] Ennemis spatiaux à abattre en vol 3D ; tir automatique quand une cible est devant (option tir manuel) :
-      chasseur, mine, essaim et leurs orbes, astéroïdes destructibles, cristaux du vol (3b ; réglages à faire sur
-      téléphone)
+- [x] Ennemis spatiaux à abattre en vol 3D : chasseur, mine, essaim et leurs orbes, astéroïdes destructibles,
+      cristaux du vol (3b ; réglages à faire sur téléphone)
+- [x] Vol : bouton TIR dédié (tir tant qu'il est tenu, aide à la visée vers la cible devant la Comète) à la place
+      de TURBO, TURBO au-dessus, une seule jauge d'énergie pour le tir et le turbo (demande du 29/10/2026 après
+      essai sur téléphone ; remplace le tir automatique et l'option « Tir manuel »)
 - [x] Tous les cristaux ramassés vont dans la réserve, même en rejouant ; perdus si l'étape est ratée
 - [x] Hangar accessible entre deux étapes et depuis l'écran Niveaux
 - [ ] Les naufragés secourus rejoignent l'équipage et ouvrent de nouveaux services (voir l'histoire) ; le

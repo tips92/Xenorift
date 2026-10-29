@@ -183,10 +183,10 @@ Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de
 | Sauvegarde v2 (réserve, migration) | `core/save.ts` (`load`, `readBase`, `readV2`, `recordResult`, `purchase`), `core/types.ts` | 3a |
 | Prix, conditions et effets du hangar | `core/hangar.ts` (catalogue `HANGAR_ITEMS`, `itemState`, `applyPurchase`, `departLabel` ; pur) | 3a |
 | Écran du hangar, aperçu | `ui/screens/hangar.ts`, `ui/hangarPreview.ts` (chargé à la demande) ; enchaînement dans `ui/App.ts` (`goHangar`, `makeResults`) | 3a |
-| Effets des achats en jeu | `game2d/engine/weapons.ts` (`Gun` : `mods`), `PlatformScene.ts` (`maxHearts`), `game3d/flight.ts` (`maxShield`, `boostDrain`, `boostFill`, `gunLevel`) ; `ui/hud.ts` (4-5 cœurs / boucliers) | 3a et 3b |
+| Effets des achats en jeu | `game2d/engine/weapons.ts` (`Gun` : `mods`), `PlatformScene.ts` (`maxHearts`), `game3d/flight.ts` (`maxShield`, `gunLevel` ; module Turbo : `ShipGun` de `game3d/shots.ts`) ; `ui/hud.ts` (4-5 cœurs / boucliers) | 3a et 3b |
 | Canons de la Comète (fiches) | `core/shipGuns.ts` (`SHIP_GUNS`, `SHIP_GUN_MULS`, `SHIP_AIM`, `resolveShipGun` ; pur) ; canons du modèle dans `game3d/ship.ts` | 3b |
 | Tir, ennemis et cristaux en vol | `game3d/shots.ts` (canon, visée, projectiles), `game3d/enemies.ts` (chasseur, mine, essaim, orbes), `game3d/pickups.ts` (cristaux), `game3d/courses.ts` (`genWaves`), `game3d/asteroids.ts` (PV, cristal) ; branchés dans `game3d/flight.ts` (`updateGun`, `shotHit`) | 3b |
-| Tir manuel en vol | `Settings.manualFire`, `ui/screens/options.ts` (`TOGGLES`), `input/touch.ts` (`.xr-shoot`) ; HUD du vol `ui/hud.ts` (`.fl-heat`, `.fl-crystals`) | 3b |
+| Commandes du vol (TIR, TURBO) et énergie | `input/touch.ts` et `input/styles.ts` (`.xr-shoot`, `.xr-boost`) ; énergie partagée : `game3d/shots.ts` (`ShipGun.boost` / `step`), `core/shipGuns.ts` (`SHIP_ENERGY`) ; HUD du vol `ui/hud.ts` (`.fl-energy`, `.fl-crystals`) | 3b (amendée le 29/10/2026) |
 | Table des mondes, liste des 20 étapes | `core/worlds.ts` (données) → `STAGES` construit à partir d'elle | 4 |
 | Niveaux par monde | `game2d/levels/<monde>/` | 4 |
 | Mini-boss et boss 2D | `game2d/bosses/` : un fichier par boss, un contrat `Boss` commun | 4 |

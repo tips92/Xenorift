@@ -48,10 +48,17 @@ import { Bin, clamp, damp, smoothstep } from './util';
 type Phase = 'intro' | 'fly' | 'warp' | 'dead' | 'timeout' | 'done';
 
 const BOOST_MULT = 1.6;
-/** Turbo de série : jauge vidée en 2,5 s, rechargée en 5 s (× modules du hangar : hooks.loadout.ship). */
-const BOOST_DRAIN = 1 / 2.5;
-const BOOST_FILL = 1 / 5;
+/**
+ * Turbo : énergie partagée avec le canon (ShipGun, SHIP_ENERGY de core/shipGuns.ts : 2,5 s d'affilée depuis une
+ * jauge froide) ; bornes des multiplicateurs du module Turbo (hooks.loadout.ship).
+ */
 const BOOST_MUL_MAX = BOOST_MULS[BOOST_MULS.length - 1];
+/**
+ * Pilote automatique : turbo loin des portails, lancé sur une énergie presque froide et relâché à AP_BOOST_STOP
+ * (le reste de la jauge garde de quoi tirer).
+ */
+const AP_BOOST_START = 0.05;
+const AP_BOOST_STOP = 0.6;
 const INVULN_TIME = 1.0;
 const COUNTDOWN = 3;
 const WARP_TIME = 1.5;
@@ -113,11 +120,11 @@ interface DevApi {
    * chasseur, clignotement de la mine (tests reproductibles).
    */
   spawn(type: string, distance?: number, variant?: number): number;
-  /** Force le tir (tests), en tir automatique comme en tir manuel. */
+  /** Force le tir (tests) : TIR tenu, comme le bouton ou J / X / F. */
   fire(on?: boolean): void;
   /**
-   * Remet la Comète sur la trajectoire idéale à son z, sans vitesse latérale ni inclinaison, canon froid,
-   * turbo plein et sans orbe ennemie en vol (tests : même état de départ quel qu'ait été le vol en temps réel
+   * Remet la Comète sur la trajectoire idéale à son z, sans vitesse latérale ni inclinaison, énergie froide,
+   * turbo coupé et sans orbe ennemie en vol (tests : même état de départ quel qu'ait été le vol en temps réel
    * avant).
    */
   settle(): void;
@@ -155,12 +162,11 @@ export class FlightRun implements ModeHandle {
   private readonly crystalColor: THREE.Color;
   /** Cristaux du vol (scintillement du ramassage). */
   private readonly pickupColor: THREE.Color;
-  /** Modules de la Comète (hooks.loadout.ship), lus au départ : boucliers max, vidange et recharge du turbo (/s). */
+  /** Modules de la Comète (hooks.loadout.ship), lus au départ : boucliers max (canon et turbo : gun). */
   private readonly maxShield: number;
-  private readonly boostDrain: number;
-  private readonly boostFill: number;
 
-  // --- Combat (3b) : canon (hooks.loadout.ship.gunLevel), projectiles, cristaux, ennemis
+  // --- Combat (3b) : canon et jauge d'énergie partagée avec le turbo (hooks.loadout.ship), projectiles,
+  // cristaux, ennemis
   private readonly gun: ShipGun;
   private readonly shots: ShotPool;
   private readonly pickups: CrystalPickups;
@@ -175,7 +181,7 @@ export class FlightRun implements ModeHandle {
     THREE.MathUtils.degToRad(Math.min(SHIP_AIM.coneDeg, SHIP_AIM.homingDeg + AIM_SURE_MARGIN)),
   );
   private readonly homingRad = THREE.MathUtils.degToRad(SHIP_AIM.homingDeg);
-  /** La cible visée peut être touchée par le prochain tir (tir automatique). */
+  /** La cible visée peut être touchée par le prochain tir (réservation des dégâts, pilote automatique). */
   private targetHit = false;
   /** La Comète vue par les ennemis (tenue à jour avant chaque EnemyField.update). */
   private readonly shipState: ShipState = { x: 0, y: 0, z: 0, vx: 0, vy: 0, speed: 0, r: SHIP_HIT_R };
@@ -204,9 +210,8 @@ export class FlightRun implements ModeHandle {
   private speed = 0;
   private slow = 1;
   private travel = 0;
-  private boostGauge = 1;
+  /** Turbo en marche (ShipGun.boost, recopié pour le rendu et le HUD). */
   private boosting = false;
-  private boostLocked = false;
   private boostVis = 0;
   private shield = BASE_SHIELDS;
   private invuln = 0;
@@ -279,17 +284,21 @@ export class FlightRun implements ModeHandle {
     this.hooks = hooks;
     const ship = hooks.loadout ? hooks.loadout.ship : undefined;
     this.maxShield = Math.floor(shipValue(ship && ship.maxShields, BASE_SHIELDS, MAX_SHIELDS_CAP, BASE_SHIELDS));
-    this.boostDrain = BOOST_DRAIN * shipValue(ship && ship.boostDrainMul, 1 / BOOST_MUL_MAX, 1, 1);
-    this.boostFill = BOOST_FILL * shipValue(ship && ship.boostFillMul, 1, BOOST_MUL_MAX, 1);
     this.shield = this.maxShield;
     const courseId: CourseId = stage.levelId === 'asteroids' ? 'asteroids' : 'nebula';
     this.course = buildCourse(courseId);
     this.theme = this.course.def.theme;
     this.timeLeft = this.course.def.startTime;
     const theme = this.theme;
-    // Canon : 0 canon léger, 1 mitrailleuse, 2-3 ses améliorations ; portée selon la vitesse du parcours
+    // Canon : 0 canon léger, 1 mitrailleuse, 2-3 ses améliorations ; portée selon la vitesse du parcours.
+    // Module Turbo : chauffe du turbo (×1, ×0,8, ×0,667) et refroidissement de l'énergie (×1, ×1,25, ×1,5).
     const gunLevel = Math.floor(shipValue(ship && ship.gunLevel, 0, MAX_SHIP_GUN_LEVEL, 0));
-    this.gun = new ShipGun(gunLevel, this.course.def.speed);
+    this.gun = new ShipGun(
+      gunLevel,
+      this.course.def.speed,
+      shipValue(ship && ship.boostDrainMul, 1 / BOOST_MUL_MAX, 1, 1),
+      shipValue(ship && ship.boostFillMul, 1, BOOST_MUL_MAX, 1),
+    );
     this.shotColor = new THREE.Color(this.gun.stats.color);
     this.crystalColor = new THREE.Color(theme.crystal);
     this.pickupColor = new THREE.Color(PICKUP_COLOR);
@@ -758,9 +767,12 @@ export class FlightRun implements ModeHandle {
       }
       sx = tvx / MAX_LAT;
       sy = tvy / MAX_LAT;
+      // Turbo à bon escient : loin du prochain portail, lancé sur une énergie presque froide et relâché avant
+      // d'entamer la réserve du canon (le tir se décide dans updateGun)
       const ng = this.course.gates[this.nextGate];
       const far = !ng || this.z - ng.z > 140;
-      this.apBoost = far && (this.boostGauge > 0.95 || (this.apBoost && this.boostGauge > 0.35));
+      const heat = this.gun.heat;
+      this.apBoost = far && !this.gun.overheated && (heat < AP_BOOST_START || (this.apBoost && heat < AP_BOOST_STOP));
       wantBoost = this.apBoost;
     } else {
       sx = input.stickX;
@@ -778,23 +790,11 @@ export class FlightRun implements ModeHandle {
       sy /= sl;
     }
 
-    // Turbo : jauge vidée en ~2,5 s, rechargée en ~5 s une fois relâché (module Turbo : ×1,25 / ×1,5)
-    if (!wantBoost) this.boostLocked = false;
-    if (wantBoost && !this.boostLocked && this.boostGauge > 0) {
-      if (!this.boosting) {
-        this.boosting = true;
-        this.hooks.audio.sfx('boost');
-      }
-      this.boostGauge -= this.boostDrain * h;
-      if (this.boostGauge <= 0) {
-        this.boostGauge = 0;
-        this.boosting = false;
-        this.boostLocked = true;
-      }
-    } else {
-      this.boosting = false;
-      this.boostGauge = Math.min(1, this.boostGauge + this.boostFill * h);
-    }
+    // Turbo : chauffe la jauge d'énergie partagée avec le canon (2,5 s d'affilée depuis une jauge froide ; module
+    // Turbo : ×1,25 / ×1,5) ; coupé en surchauffe, comme le tir, jusqu'au seuil de reprise
+    const wasBoosting = this.boosting;
+    this.boosting = this.gun.boost(h, wantBoost);
+    if (this.boosting && !wasBoosting) this.hooks.audio.sfx('boost');
 
     // Vitesse d'avance (perte brève après un choc)
     this.slow = Math.min(1, this.slow + h * 0.55);
@@ -944,7 +944,10 @@ export class FlightRun implements ModeHandle {
     if (this.shield <= 0) this.explode();
   }
 
-  /** Visée, tir automatique ou manuel, canon (cadence, surchauffe) et projectiles ; un sous-pas de vol. */
+  /**
+   * Visée (direction des tirs), tir tant que TIR est tenu, canon (cadence, énergie, surchauffe) et projectiles ;
+   * un sous-pas de vol.
+   */
   private updateGun(h: number): void {
     const aim = this.aim;
     const gun = this.gun;
@@ -971,14 +974,14 @@ export class FlightRun implements ModeHandle {
       }
     }
 
+    // Tir seulement quand TIR est tenu (bouton, J / X / F ; appui bref mémorisé) : l'aide à la visée oriente les
+    // tirs, elle ne les déclenche jamais. Le pilote automatique tient TIR tant qu'une cible visée peut être
+    // touchée (pas d'énergie perdue sur une cible au bord du cône ni sur une cible condamnée).
     const input = this.hooks.input;
     if (input.consumePress('fire')) this.fireQueue = FIRE_QUEUE;
     else if (this.fireQueue > 0) this.fireQueue -= h;
-    const held = input.state.fire || this.fireQueue > 0 || this.devFire;
-    // Tir automatique (réglage par défaut ; toujours avec le pilote automatique) : tant qu'une cible visée
-    // peut être touchée (pas de chauffe perdue sur une cible au bord du cône ni sur une cible condamnée)
-    const auto = !this.hooks.settings.manualFire || this.autopilot;
-    const m = gun.step(h, held || (auto && this.targetHit));
+    const held = input.state.fire || this.fireQueue > 0 || this.devFire || (this.autopilot && this.targetHit);
+    const m = gun.step(h, held);
     if (m >= 0) {
       this.fireQueue = 0;
       this.ship.muzzleWorld(m, this.x, this.y, this.z, _mz);
@@ -995,8 +998,11 @@ export class FlightRun implements ModeHandle {
       this.lastMuzzle = m;
       this.sfx(st.sfx, st.muzzles > 1 ? 0.6 : 0.85, 0.96 + Math.random() * 0.08);
     }
-    // Surchauffe : un son, pas de message (la jauge du HUD l'affiche)
+    // Surchauffe (tir ou turbo, depuis boost) : un son, pas de message (la jauge du HUD l'affiche)
     if (gun.justOverheated) {
+      gun.justOverheated = false;
+      // Turbo coupé dès ce sous-pas, même si c'est un tir qui a fait surchauffer la jauge
+      this.boosting = false;
       this.hooks.audio.sfx('overheat');
       this.pushHudLight();
     }
@@ -1273,11 +1279,11 @@ export class FlightRun implements ModeHandle {
       gatesTotal: this.course.gates.length,
       shield: this.shield,
       maxShield: this.maxShield,
-      boost: Math.round(this.boostGauge * 100) / 100,
       progress: Math.round(this.progress() * 1000) / 1000,
       gunLevel: this.gun.stats.level,
       heat: Math.round(this.gun.heat * 100) / 100,
       overheated: this.gun.overheated,
+      boosting: this.boosting,
       crystals: this.crystals,
     };
     this.lastHudTime = hud.timeLeft;
@@ -1289,10 +1295,10 @@ export class FlightRun implements ModeHandle {
     this.lastHudTime = timeLeft;
     this.hooks.hud.updateFlight({
       timeLeft,
-      boost: Math.round(this.boostGauge * 100) / 100,
       progress: Math.round(this.progress() * 1000) / 1000,
       heat: Math.round(this.gun.heat * 100) / 100,
       overheated: this.gun.overheated,
+      boosting: this.boosting,
     });
   }
 
@@ -1320,10 +1326,10 @@ export class FlightRun implements ModeHandle {
           gatesTotal: this.course.gates.length,
           shield: this.shield,
           maxShields: this.maxShield,
-          boost: Math.round(this.boostGauge * 1000) / 1000,
           boosting: this.boosting,
-          boostDrain: this.boostDrain,
-          boostFill: this.boostFill,
+          // Énergie (tir et turbo) : chauffe du turbo et refroidissement par seconde, module Turbo compris
+          boostHeat: this.gun.stats.boostHeat,
+          coolRate: this.gun.stats.coolRate,
           progress: Math.round(this.progress() * 1000) / 1000,
           speed: Math.round(this.speed),
           calls: this.renderer.info.render.calls,
@@ -1338,7 +1344,6 @@ export class FlightRun implements ModeHandle {
           gunLevel: this.gun.stats.level,
           heat: Math.round(this.gun.heat * 1000) / 1000,
           overheated: this.gun.overheated,
-          manualFire: !!this.hooks.settings.manualFire,
           range: Math.round(this.gun.stats.range * 10) / 10,
           shotsActive: this.shots.active,
           shotsFired: this.shotsFired,
@@ -1397,8 +1402,7 @@ export class FlightRun implements ModeHandle {
         this.roll = this.pitch = this.yaw = 0;
         this.gun.cool();
         this.fireQueue = 0;
-        this.boostGauge = 1;
-        this.boosting = this.boostLocked = this.apBoost = false;
+        this.boosting = this.apBoost = false;
         this.enemies.clearOrbs();
       },
     };

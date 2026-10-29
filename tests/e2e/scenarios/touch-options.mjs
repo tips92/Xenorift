@@ -8,13 +8,15 @@
 //  - persistance après rechargement de la page ;
 //  - en 2D : stick à droite (plus grand), SAUT et TIR à gauche, commandes fonctionnelles ;
 //  - réglages changés depuis la Pause : visibles à la reprise (stick revenu à gauche, 1,2 fois plus petit) ;
-//  - en vol : joystick sur la moitié droite (un doigt glissé à gauche ne pilote pas), TURBO à gauche ; en tir
-//    manuel (plan 03, 3b), bouton TIR à gauche aussi (miroir : à droite de TURBO), réglages Grands et Discrète
-//    (hors défaut) : de la taille du TIR de la plateforme au cran Grands, dans la couche du vol à l'opacité
-//    Discrète (0,45), qui tire ; TIR tenu avec le joystick à droite.
+//  - en vol : joystick sur la moitié droite (un doigt glissé à gauche ne pilote pas), TIR et TURBO à gauche
+//    (miroir : gros TIR en bas à gauche, TURBO au-dessus), réglages Grands et Discrète (hors défaut) : TIR de la
+//    taille de SAUT et TURBO de celle du TIR de la plateforme au cran Grands, dans la couche du vol à l'opacité
+//    Discrète (0,45) ; ancien réglage « tir manuel » de la sauvegarde ignoré (aucun tir sans appui, même avec une
+//    mine atteignable devant la Comète) ; TIR et TURBO tenus avec le joystick à droite : la Comète tire en turbo.
 import { assert, assertEq, assertNear, center, fmt, readSave, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
 import { touches } from '../lib/touch.mjs';
 import { input, press, pressPause, rects, waitInput, waitInputIdle, waitPause } from '../lib/core.mjs';
+import { assertNoAutoFire } from '../lib/game3d.mjs';
 
 export const meta = {
   title: 'Options : rubrique Commandes (taille, opacité, gaucher), persistance, changement depuis la Pause',
@@ -301,13 +303,16 @@ export default async function (t) {
   );
 
   // ---------------------------------------------------------------- Vol : joystick à droite en mode gaucher
-  // Réglages hors défaut (Grands, Discrète) : le TIR du vol doit les suivre comme le reste
+  // Réglages hors défaut (Grands, Discrète) : TIR et TURBO du vol doivent les suivre comme le reste. Ancien réglage
+  // « tir manuel » (retiré le 29/10/2026) laissé dans la sauvegarde, à false (ancien tir automatique, sans bouton
+  // TIR) : ignoré, TIR toujours là et aucun tir sans appui.
   const fireW = fire.w;
+  const jumpW = jump.w;
   await t.ev(() => {
     const KEY = 'xeno-rift-save-v1';
     const s = JSON.parse(localStorage.getItem(KEY));
     s.settings.leftHanded = true;
-    s.settings.manualFire = true;
+    s.settings.manualFire = false;
     s.settings.touchSize = 2;
     s.settings.touchOpacity = 0;
     localStorage.setItem(KEY, JSON.stringify(s));
@@ -317,18 +322,21 @@ export default async function (t) {
   const zone = await one(t, '.xr-stick-zone');
   const base = await one(t, '.xr-stick-base');
   const boost = await one(t, '.xr-boost');
-  assert(zone.x >= W / 2 - 1 && cx(base) > W / 2 && cx(boost) < W / 2, `vol gaucher : joystick à droite, TURBO à gauche (${fmt({ zone, base, boost })})`);
-  // Tir manuel : TIR à gauche, à droite de TURBO (miroir du droitier), un peu plus haut, même taille que le TIR 2D
   const shoot = await one(t, '.xr-shoot');
-  assert(cx(shoot) < W / 2 && shoot.x >= boost.x + boost.w - 1 && shoot.y + shoot.h / 2 < boost.y + boost.h / 2, `vol gaucher : TIR à gauche, à droite de TURBO (${fmt({ shoot, boost })})`);
-  assertNear(shoot.w, bigFireW, 1, `vol gaucher : TIR du vol de la taille du TIR de la plateforme au cran Grands (${fireW} px au cran Moyens)`);
-  assertNear(shoot.w, fireW * 1.2, 1.5, 'vol gaucher : TIR du vol 1,2 fois plus grand qu’au cran Moyens');
-  const inLayer = await t.ev(() => !!document.querySelector('.xr-shoot').closest('.xr-tc-flight'));
-  assert(inLayer, 'vol : TIR dans la couche des commandes du vol (.xr-tc-flight)');
+  assert(zone.x >= W / 2 - 1 && cx(base) > W / 2 && cx(boost) < W / 2 && cx(shoot) < W / 2, `vol gaucher : joystick à droite, TIR et TURBO à gauche (${fmt({ zone, base, boost, shoot })})`);
+  // Miroir du droitier : gros TIR en bas à gauche, TURBO juste au-dessus ; tailles du cran Grands (TIR = SAUT de
+  // la plateforme, TURBO = TIR de la plateforme)
+  assert(shoot.x < 60 && boost.y + boost.h <= shoot.y && Math.abs(cx(boost) - cx(shoot)) < shoot.w / 2, `vol gaucher : TIR en bas à gauche, TURBO au-dessus (${fmt({ shoot, boost })})`);
+  assertNear(shoot.w, jumpW * 1.2, 1.5, `vol gaucher : TIR du vol de la taille de SAUT au cran Grands (${jumpW} px au cran Moyens)`);
+  assertNear(boost.w, bigFireW, 1, `vol gaucher : TURBO de la taille du TIR de la plateforme au cran Grands (${fireW} px au cran Moyens)`);
+  const inLayer = await t.ev(() => !!document.querySelector('.xr-shoot').closest('.xr-tc-flight') && !!document.querySelector('.xr-boost').closest('.xr-tc-flight'));
+  assert(inLayer, 'vol : TIR et TURBO dans la couche des commandes du vol (.xr-tc-flight)');
   await waitFor(t, () => Math.abs(Number(getComputedStyle(document.querySelector('.xr-tc-flight')).opacity) - 0.45) < 0.01, {
     timeout: 2000,
     label: 'vol : opacité Discrète (0,45) de la couche du vol, TIR compris',
   });
+  // Ancien réglage « tir automatique » ignoré : mine atteignable posée devant la Comète, aucun tir sans appui
+  await assertNoAutoFire(t, 'vol : ancien réglage « tir automatique » ignoré');
   const H = await t.ev(() => window.innerHeight);
   // Doigt posé sur la moitié gauche (hors TURBO) puis glissé comme sur le joystick : rien ne pilote, la base
   // du joystick reste au repos.
@@ -346,14 +354,15 @@ export default async function (t) {
   await f.start([[...S, 4]]);
   await f.move([[S[0] - 70, S[1] - 50, 4]]);
   await waitInput(t, (i) => i.stickX < -0.5 && i.stickY > 0.4, 'vol gaucher : joystick haut-gauche');
-  // TIR (à gauche) tenu avec le joystick (à droite) : la Comète tire
+  // TIR et TURBO (à gauche) tenus avec le joystick (à droite) : la Comète tire en turbo
   const n0 = await t.ev(() => window.__xr3d.info().shotsFired);
   const P = await center(t, '.xr-shoot');
-  await f.start([[S[0] - 70, S[1] - 50, 4], [...P, 5]]);
-  await waitInput(t, (i) => i.fire && i.stickX < -0.5, 'vol gaucher : joystick + TIR');
+  const T = await center(t, '.xr-boost');
+  await f.start([[S[0] - 70, S[1] - 50, 4], [...P, 5], [...T, 6]]);
+  await waitInput(t, (i) => i.fire && i.boost && i.stickX < -0.5, 'vol gaucher : joystick + TIR + TURBO');
   await t.wait(600);
-  const n1 = await t.ev(() => window.__xr3d.info().shotsFired);
-  assert(n1 >= n0 + 2, `vol gaucher : TIR tenu, la Comète tire (${n0} -> ${n1})`);
+  const i1 = await t.ev(() => window.__xr3d.info());
+  assert(i1.shotsFired >= n0 + 2 && i1.boosting, `vol gaucher : TIR et TURBO tenus, la Comète tire en turbo (${n0} -> ${i1.shotsFired}, turbo ${i1.boosting})`);
   await t.shot('flight-lefty-stick');
   await f.end();
   await waitInputIdle(t, 'vol gaucher : tout levé');

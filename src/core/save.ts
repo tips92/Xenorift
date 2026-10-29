@@ -54,8 +54,6 @@ const DEFAULT_SETTINGS: Settings = {
   touchSize: 1,
   touchOpacity: 1,
   leftHanded: false,
-  // Vol : tir automatique par défaut (bouton TIR seulement en tir manuel).
-  manualFire: false,
 };
 
 function defaults(): SaveData {
@@ -77,7 +75,8 @@ function defaults(): SaveData {
 /**
  * Réglages relus : chaque champ connu garde sa valeur enregistrée si elle a le bon type (crans arrondis et
  * bornés à 0..2), sinon reçoit sa valeur par défaut. Ancienne sauvegarde sans un réglage, ou valeur abîmée :
- * tous les modules voient alors la même valeur.
+ * tous les modules voient alors la même valeur. Un réglage retiré (ex. `manualFire`, tir manuel en vol avant le
+ * 29/10/2026) est ignoré, puis oublié au prochain enregistrement.
  */
 function readSettings(raw: unknown): Settings {
   const src = raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};

@@ -152,8 +152,8 @@ export function aimDirection(
 /**
  * Distance minimale (u) entre un projectile parti de (fromX, fromY, fromZ), direction unitaire `dir`, vitesse
  * ABSOLUE `speed`, et la cible (à sa vitesse), pendant les `life` secondes de vie du projectile. Comparée au
- * rayon de la cible + SHOT_R : le tir automatique ne part que s'il peut toucher (le guidage est borné à
- * homingDeg, la cible peut être jusqu'à coneDeg de l'axe).
+ * rayon de la cible + SHOT_R : un tir ne réserve ses dégâts sur la cible, et le pilote automatique ne tient TIR,
+ * que s'il peut toucher (le guidage est borné à homingDeg, la cible peut être jusqu'à coneDeg de l'axe).
  */
 export function shotMiss(
   fromX: number,
@@ -180,45 +180,66 @@ export function shotMiss(
   return Math.sqrt(ex * ex + ey * ey + ez * ez);
 }
 
-// ---------------------------------------------------------------- Canon
+// ---------------------------------------------------------------- Canon et énergie
 
 /**
- * Canon de la Comète : cadence, chauffe et surchauffe, sur le modèle de Gun (game2d/engine/weapons.ts) :
- * chauffe par tir, refroidissement après coolDelayMs sans tirer (immédiat en surchauffe), reprise sous
- * OVERHEAT_RECOVER_AT (30 %). Les bouches tirent à tour de rôle.
+ * Canon de la Comète et jauge d'énergie partagée avec le turbo (SHIP_ENERGY de core/shipGuns.ts), sur le
+ * modèle de Gun (game2d/engine/weapons.ts) : chauffe par tir et par seconde de turbo, refroidissement après
+ * coolDelayMs sans tirer ni pousser (immédiat en surchauffe), surchauffe à 1 : ni tir ni turbo jusqu'à
+ * OVERHEAT_RECOVER_AT (30 %). Les bouches tirent à tour de rôle. À chaque sous-pas de vol : boost puis step.
  */
 export class ShipGun {
-  /** Chauffe, 0..1. */
+  /** Jauge d'énergie (chauffe), 0..1. */
   heat = 0;
   overheated = false;
-  /** Passé en surchauffe pendant le dernier step (son 'overheat', une fois ; pas de message : le HUD l'affiche). */
+  /**
+   * Passé en surchauffe (tir ou turbo) depuis le dernier boost (son 'overheat', une fois ; pas de message : le
+   * HUD l'affiche). Remis à faux par boost, appelé en premier à chaque sous-pas de vol.
+   */
   justOverheated = false;
-  /** Valeurs effectives (niveau du hangar, portée du parcours). */
+  /** Turbo en marche pendant ce sous-pas (boost). */
+  boosting = false;
+  /** Valeurs effectives (niveau du hangar, portée du parcours, module Turbo). */
   readonly stats: ShipGunStats = createShipGunStats();
   /** Prochaine bouche (0..stats.muzzles − 1). */
   private muzzle = 0;
   private cooldownMs = 0;
-  /** Depuis le dernier tir (refroidissement hors surchauffe). */
-  private sinceShotMs = 1e6;
+  /** Depuis le dernier tir ou la dernière poussée du turbo (refroidissement hors surchauffe). */
+  private sinceUseMs = 1e6;
 
-  /** `level` : hooks.loadout.ship.gunLevel (0..3) ; `cruiseSpeed` : CourseDef.speed (portée). */
-  constructor(level: number, cruiseSpeed: number) {
+  /**
+   * `level` : hooks.loadout.ship.gunLevel (0..3) ; `cruiseSpeed` : CourseDef.speed (portée) ; module Turbo
+   * (ShipLoadout) : `boostHeatMul` multiplie la chauffe du turbo, `coolMul` le refroidissement de la jauge.
+   */
+  constructor(level: number, cruiseSpeed: number, boostHeatMul = 1, coolMul = 1) {
     resolveShipGun(level, cruiseSpeed, this.stats);
+    this.stats.boostHeat *= boostHeatMul;
+    this.stats.coolRate *= coolMul;
   }
 
-  /** Canon froid, prêt à tirer, première bouche (aide DEV : essais reproductibles). */
+  /** Énergie froide, canon prêt à tirer, première bouche (aide DEV : essais reproductibles). */
   cool(): void {
-    this.heat = 0;
-    this.overheated = false;
-    this.justOverheated = false;
-    this.muzzle = 0;
-    this.cooldownMs = 0;
-    this.sinceShotMs = 1e6;
+    this.reset();
   }
 
-  /** Bouche du prochain tir (vérification du tir automatique avant step). */
+  /** Bouche du prochain tir (vérification de la visée avant step). */
   get nextMuzzle(): number {
     return this.muzzle;
+  }
+
+  /**
+   * Turbo pendant un sous-pas de `h` secondes, appelé en premier à chaque sous-pas de vol (avant step) : il
+   * pousse si `wants` et hors surchauffe, et chauffe la jauge (stats.boostHeat par seconde) ; il se coupe au
+   * sous-pas où la jauge surchauffe. Renvoie boosting.
+   */
+  boost(h: number, wants: boolean): boolean {
+    this.justOverheated = false;
+    this.boosting = wants && !this.overheated;
+    if (!this.boosting) return false;
+    this.sinceUseMs = 0;
+    this.heat += this.stats.boostHeat * h;
+    if (this.heat >= 1 - 1e-6) this.overheat();
+    return this.boosting;
   }
 
   /**
@@ -228,16 +249,15 @@ export class ShipGun {
   step(h: number, wants: boolean): number {
     const st = this.stats;
     const dtMs = h * 1000;
-    this.justOverheated = false;
     if (this.cooldownMs > 0) this.cooldownMs -= dtMs;
-    this.sinceShotMs += dtMs;
+    this.sinceUseMs += dtMs;
 
-    // Refroidissement : immédiat en surchauffe, sinon après une pause sans tirer (plus longue que la cadence :
-    // le tir continu ne refroidit jamais).
+    // Refroidissement : immédiat en surchauffe, sinon après une pause sans tirer ni pousser (plus longue que la
+    // cadence : le tir continu ne refroidit jamais ; boost remet la pause à zéro à chaque sous-pas de turbo).
     if (this.overheated) {
       this.heat -= st.coolRate * h;
       if (this.heat < OVERHEAT_RECOVER_AT) this.overheated = false;
-    } else if (this.sinceShotMs >= st.coolDelayMs) {
+    } else if (this.sinceUseMs >= st.coolDelayMs) {
       this.heat -= st.coolRate * h;
     }
     if (this.heat < 0) this.heat = 0;
@@ -245,15 +265,11 @@ export class ShipGun {
     if (!wants || this.cooldownMs > 0 || this.overheated) return -1;
     // Garde le reliquat pour une cadence régulière en tir continu (sous-pas de 1/60 s).
     this.cooldownMs = st.cooldownMs + Math.max(-20, Math.min(0, this.cooldownMs));
-    this.sinceShotMs = 0;
+    this.sinceUseMs = 0;
     const m = this.muzzle;
     this.muzzle = (m + 1) % Math.max(1, st.muzzles);
     this.heat += st.heatPerShot;
-    if (this.heat >= 1 - 1e-6) {
-      this.heat = 1;
-      this.overheated = true;
-      this.justOverheated = true;
-    }
+    if (this.heat >= 1 - 1e-6) this.overheat();
     return m;
   }
 
@@ -261,9 +277,18 @@ export class ShipGun {
     this.heat = 0;
     this.overheated = false;
     this.justOverheated = false;
+    this.boosting = false;
     this.muzzle = 0;
     this.cooldownMs = 0;
-    this.sinceShotMs = 1e6;
+    this.sinceUseMs = 1e6;
+  }
+
+  /** Jauge pleine : surchauffe, turbo coupé. */
+  private overheat(): void {
+    this.heat = 1;
+    this.overheated = true;
+    this.justOverheated = true;
+    this.boosting = false;
   }
 }
 

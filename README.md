@@ -47,10 +47,10 @@ npm run dev
 Puis ouvrir http://localhost:5173. Clavier : flèches ou ZQSD, Espace ou K = saut (Espace = turbo en vol),
 J, X ou F = tir, Échap = pause. En 2D, ↑ / Z vise vers le haut (avec ← → : en diagonale) et fait entrer dans
 une porte ; il ne fait pas sauter. ↓ / S accroupit (puis ← → : ramper) ; ↓ + saut descend d'une plateforme
-traversable ou mobile. En vol, la Comète tire seule sur la cible devant elle ; Options › Commandes › « Tir
-manuel » la fait tirer seulement sur appui (la touche de tir marche dans les deux cas). Sur téléphone : stick
-rond à 8 directions, boutons Saut et Tir ; en vol, joystick, Turbo et, en tir manuel, Tir ; taille, opacité
-et mode gaucher dans Options › Commandes.
+traversable ou mobile. En vol, la Comète tire tant que la touche de tir est tenue (vers la cible devant elle) ;
+Maj ou Espace = turbo ; le tir et le turbo font chauffer la même jauge d'énergie. Sur téléphone : stick rond à
+8 directions, boutons Saut et Tir ; en vol, joystick, gros bouton Tir et Turbo au-dessus ; taille, opacité et
+mode gaucher dans Options › Commandes.
 Raccourcis de test : `?stage=j1` (ou `f1`, `m1`, `f2`) lance directement une étape, `?unlock=1` débloque tout,
 `?touch=1` affiche les boutons tactiles sur PC, `?weapon=machinegun` (ou `laser`, `shotgun`, `rifle`) impose
 l'arme pour la session, même si elle n'est pas possédée (rien n'est enregistré ; une valeur inconnue est

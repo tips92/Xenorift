@@ -108,11 +108,19 @@ Défilement horizontal, gameplay « à la Mario ». Constantes et règles de lev
 Vol en « couloir semi-libre » : la Comète avance seule vers l'avant ; le joueur la déplace
 haut / bas / gauche / droite dans un couloir (rayon ~12 unités) pour traverser les portails.
 
-- Contrôles : joystick virtuel à gauche, bouton **Turbo** à droite (jauge qui se vide en 2,5 s et se
-  recharge en 5 s ; module Turbo du hangar : durée et recharge ×1,25 puis ×1,5), et bouton **TIR** en tir
-  manuel seulement (voir plus bas) ;
-  l'inverse en mode gaucher, avec la même taille et la même opacité qu'en 2D.
+- Contrôles (décision du 29/10/2026, après essai sur téléphone) : joystick virtuel à gauche ; à droite, gros
+  bouton **TIR** sous le pouce (la Comète tire tant qu'il est tenu, à la cadence du canon ; plus de tir
+  automatique) et bouton **TURBO** juste au-dessus, un peu plus petit ; l'inverse en mode gaucher, avec la même
+  taille et la même opacité qu'en 2D. Joystick, TIR et TURBO se tiennent ensemble (multi-touch). Clavier : tir
+  J / X / F (tenu), turbo Espace / Maj.
   Option « inclinaison du téléphone » (réglage) qui remplace le joystick.
+- **Énergie** : une seule jauge, que le tir et le turbo font chauffer. Chaque tir la chauffe (canon léger :
+  surchauffe après 4 s de tir continu ; mitrailleuse : 3 s), chaque seconde de turbo de 0,4 (2,5 s de turbo
+  d'affilée depuis une jauge froide ; ensemble : ~1,5 s au canon léger) ; elle refroidit (0,5 / 0,55 par
+  seconde) après 0,4 / 0,3 s sans tirer ni pousser. Jauge pleine : **surchauffe**, ni tir ni turbo jusqu'à
+  30 % (~1,4 s). Rafales courtes et turbo bref se combinent donc sans jamais bloquer longtemps. Module Turbo
+  du hangar : turbo moins gourmand (÷1,25 puis ÷1,5 : 3,1 puis 3,75 s) et énergie qui refroidit plus vite
+  (×1,25 puis ×1,5).
 - Portails : anneaux lumineux animés, ~16 à 22 par parcours, positions variées mais toujours atteignables.
   Portail traversé = +2 s et son ; portail manqué = -5 s et message.
 - Obstacles : astéroïdes (et débris). Choc = -1 bouclier (3 au total, 4 ou 5 avec le bouclier renforcé du
@@ -121,12 +129,10 @@ haut / bas / gauche / droite dans un couloir (rayon ~12 unités) pour traverser 
 - Canon de la Comète (étape 3b ; valeurs de départ, à régler sur téléphone) : **canon léger** au départ (sous
   le nez, 4 tirs/s, dégâts 1, trait cyan) ; **mitrailleuse** en première amélioration du hangar (deux canons
   sous les ailes en alternance, 10 tirs/s, trait cyan clair), puis dégâts ×1,25 / ×1,5 et cadence ×1,15 / ×1,3.
-  Portée : la distance parcourue en 1,6 s. Surchauffe comme au sol : tir continu surchauffé au bout de 4 s
-  (canon léger) ou 3 s (mitrailleuse), reprise sous 30 %.
-- Tir **automatique** par défaut : la Comète tire seule sur l'astéroïde ou l'ennemi le plus proche dans un cône
-  de 10° devant elle (tir guidé de 6° au plus), seulement si le tir peut toucher et si les tirs déjà en route ne
-  suffisent pas à détruire la cible. Option **« Tir manuel »** (Commandes, aussi dans Pause) : bouton **TIR** à
-  côté de Turbo, en vol seulement (gaucher, taille et opacité respectés). Clavier : J / X / F dans les deux modes.
+  Portée : la distance parcourue en 1,6 s. Surchauffe comme au sol, sur la jauge d'énergie (voir plus haut) :
+  tir continu surchauffé au bout de 4 s (canon léger) ou 3 s (mitrailleuse), reprise sous 30 %.
+- **Aide à la visée** : les tirs partent vers l'astéroïde ou l'ennemi le plus proche dans un cône de 10° devant
+  la Comète (tir guidé de 6° au plus). Elle oriente les tirs, elle ne les déclenche jamais : seul TIR tire.
 - Astéroïdes destructibles : 1 à 5 PV selon la taille ; détruit par les tirs, il éclate sans dégât pour la
   Comète (10 points) ; environ un rocher du couloir sur quatre lâche un cristal.
 - Ennemis « touchés par le Vide » (silhouettes violet-noir veinées de magenta), en vagues fixes par parcours
@@ -164,7 +170,8 @@ démo ». JOUER reprend directement à l'étape en cours, sans passer par le han
 - **Hangar** (dans la Comète) : réserve en haut, aperçu 2D à gauche (Kaï avec l'arme, la Comète et ses
   modules), onglets **Établi** (armes : équiper, acheter ; 4 améliorations à 3 niveaux par arme : dégâts
   ×1,25 / ×1,5 / ×2, cadence et portée ×1,15 / ×1,3 / ×1,5, refroidissement ×1,25 / ×1,5 / ×1,8),
-  **Comète** (mitrailleuse puis ses deux améliorations, voir « Mode vol spatial 3D » ; bouclier renforcé 4 puis 5 boucliers ; turbo) et
+  **Comète** (mitrailleuse puis ses deux améliorations, voir « Mode vol spatial 3D » ; bouclier renforcé 4 puis 5 boucliers ; turbo :
+  durée du turbo et refroidissement de l'énergie ×1,25 puis ×1,5) et
   **Kaï** (cœur supplémentaire, jusqu'à 5 ; drone compagnon plus tard). Achat avec confirmation, définitif.
   Prix de départ : arme 80 à 120, amélioration 30 / 60 / 100, mitrailleuse 100 puis 80 / 140, bouclier et
   turbo 80 / 140, cœur 150 / 250. Conditions : une arme demande son plan, les niveaux 2 et 3 d'une
@@ -175,11 +182,13 @@ démo ». JOUER reprend directement à l'étape en cours, sans passer par le han
   équipage) sont levées, pas les prix ; une arme non possédée s'y équipe pour la session seulement.
   Raccourci `?weapon=` dans l'URL (arme de la session, jamais enregistrée).
 - HUD 2D : cœurs (3 à 5), vies, cristaux, jauge de chauffe avec l'icône de l'arme (une graduation par tir),
-  anneaux des bonus actifs (vitesse, cadence, bouclier). HUD du vol : 3 à 5 boucliers, jauge de turbo,
-  chrono, portails, jauge de chauffe du canon (icône du canon léger ou de la mitrailleuse), cristaux du vol.
+  anneaux des bonus actifs (vitesse, cadence, bouclier). HUD du vol : 3 à 5 boucliers, chrono, portails,
+  jauge « Énergie » (icône du canon léger ou de la mitrailleuse, une graduation par seconde de tir continu ;
+  froide en cyan, chaude en orange puis rouge, SURCHAUFFE dessous ; repère du turbo allumé en magenta quand il
+  pousse), cristaux du vol.
 - Options (même panneau dans le menu Pause), en deux rubriques : **Général** (musique, effets sonores,
   vibrations, tout débloquer) et **Commandes** (aperçu des commandes ; taille des boutons et opacité, 3 crans
-  chacune ; mode gaucher ; pilotage par inclinaison ; tir manuel en vol) ; puis réinitialiser la progression (déblocages, scores,
+  chacune ; mode gaucher ; pilotage par inclinaison) ; puis réinitialiser la progression (déblocages, scores,
   armes, réserve et achats du hangar ; les réglages restent). Effet immédiat, même en partie.
 - Pause : bouton en haut à droite, touche Échap/P, bouton retour Android, mise en arrière-plan de l'app.
 - Bouton retour Android : en jeu → pause ; dans un sous-menu → retour ; sur l'accueil → quitter.
