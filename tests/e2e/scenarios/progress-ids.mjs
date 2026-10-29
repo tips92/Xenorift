@@ -1,17 +1,21 @@
 // Progression par identifiants d'étape (plan 04 : choix 2, 5, 16 et 19), sauvegardes injectées avant le chargement.
+// Étapes lues sur la page (cartes des Niveaux, dans l'ordre) : verrous, étoiles du monde et total en découlent (ouverte
+// = la première, une réussie ou la suivante d'une réussie), quel que soit le nombre d'étapes.
 //  A. Sauvegarde neuve : « Nouvelle aventure » ; Niveaux ouverts sur le monde 1 (◀ désactivé), seule j1 ouverte ;
 //     toucher une carte verrouillée du monde 2 : message, rien ne démarre ; JOUER → carte d'intro de « Lisière de
 //     Xéna » (Échap : retour à l'accueil).
-//  B. Version 1 « unlocked: 3 », j1 f1 m1 réussis : toutes ouvertes, records et étoiles (cartes, monde, en-tête) ;
-//     JOUER → Ceinture d'Orak ; Niveaux ouverts sur le monde 2 ; plan du mitrailleur rendu au chargement
-//     (hangar : arme achetable) ; retour du hangar sur la même page ; pages : glissement au doigt commencé sur une
-//     carte ouverte (page changée, carte non lancée), petit glissement (la page revient), geste vif, glissement à
-//     la souris, flèches du clavier, souris relâchée hors de la zone des pages puis survol sans bouton (pas de
-//     glissement fantôme), Entrée sur j1 après un glissement au doigt (son intro) ; carte de f1 touchée → son intro.
-//  C. Version 1 « unlocked: 2 », j1 seul réussi : f1 ouverte, m1 et f2 verrouillées (l'index n'ouvre plus rien) ;
-//     JOUER → Nébuleuse d'Azur ; pas de plan.
-//  D. Version 2, f1 seul réussi (mode test) : j1 (la première), f1 et m1 ouvertes, f2 verrouillée ; JOUER → Lisière
-//     de Xéna ; plan du mitrailleur. Version 2 sans records mais avec des marques d'histoire : « Continuer »
+//  B. Version 1 « unlocked: 3 », j1 f1 m1 réussis : j2 (suivante de j1) et f2 (suivante de m1) ouvertes aussi,
+//     records et étoiles (cartes, monde, en-tête) ; JOUER → Canopée des spores ; Niveaux ouverts sur le monde 1 ;
+//     plan du mitrailleur rendu au chargement (hangar : arme achetable) ; retour du hangar sur la même page ; pages :
+//     glissement au doigt commencé sur une carte ouverte (page changée, carte non lancée), petit glissement (la page
+//     revient), geste vif, glissement à la souris, flèches du clavier, souris relâchée hors de la zone des pages puis
+//     survol sans bouton (pas de glissement fantôme), Entrée sur j1 après un glissement au doigt (son intro) ; carte
+//     de f1 touchée → son intro.
+//  C. Version 1 « unlocked: 2 », j1 seul réussi : j2 ouverte, f1, m1 et f2 verrouillées (l'index n'ouvre plus
+//     rien) ; JOUER → Canopée des spores ; pas de plan.
+//  D. Version 2, f1 seul réussi (mode test) : j1 (la première), f1 et m1 ouvertes, j2 et f2 verrouillées ; JOUER →
+//     Lisière de Xéna ; plan du mitrailleur, pas de Tess à l'Établi. Version 2, j1 et j2 réussis sans équipage : Tess
+//     rendue au chargement (récompense de j2), mentionnée à l'Établi. Version 2 sans records mais avec des marques d'histoire : « Continuer »
 //     (pas « Nouvelle aventure ») ; marques relues sans doublon ni valeur invalide, plan et `unlocked` gardés à
 //     l'enregistrement suivant (réglage changé).
 //  E. Dev seulement (aides DEV ; sauté en --prod) : f1 gagné → résultats avec « Plan : mitrailleur » ; SUIVANT →
@@ -30,7 +34,8 @@ export const meta = {
 const SAVE_KEY = 'xeno-rift-save-v1';
 const S = '.screens [data-screen="select"].is-active';
 const HG = '.screens [data-screen="hangar"].is-active';
-const ORDER = ['j1', 'f1', 'm1', 'f2'];
+/** Étapes dans l'ordre des cartes des Niveaux (lu à la première ouverture). */
+let ORDER = [];
 
 /** Remplace la sauvegarde (null : l'efface) puis recharge l'accueil. */
 async function loadSave(t, save) {
@@ -78,11 +83,25 @@ async function openSelect(t) {
 /** Verrous des cartes, dans l'ordre de ORDER. */
 const locks = (sel) => ORDER.map((id) => sel.cards[id].locked);
 
+/** Verrous attendus d'après les étapes réussies (core/save.ts : la première, une réussie, la suivante d'une réussie). */
+const lockedBy = (cleared) => ORDER.map((id, i) => !(i === 0 || cleared.includes(id) || cleared.includes(ORDER[i - 1])));
+
+/** Étoiles « n/max » d'un ensemble d'étapes (3 par étape) d'après les records `best`. */
+const starsOf = (ids, best) => `${ids.reduce((n, id) => n + (best[id] ? best[id].stars : 0), 0)}/${ids.length * 3}`;
+
 /** Hangar ouvert depuis les Niveaux : état du mitrailleur sur l'Établi (« Plan manquant » ou son prix). */
 async function machinegunState(t) {
   await t.page.locator(`${S} .select-hangar`).click({ timeout: 5000 });
   await waitForScreen(t, 'hangar');
   return t.ev((h) => document.querySelector(`${h} .hg-weapon[data-weapon="machinegun"] .hg-weapon-state`).textContent.trim(), HG);
+}
+
+/** Hangar affiché : mention de l'équipière à l'Établi (« Tess à l’établi »), ou null. */
+function crewMention(t) {
+  return t.ev((h) => {
+    const e = document.querySelector(`${h} .hg-crew`);
+    return e ? e.textContent.trim() : null;
+  }, HG);
 }
 
 /** Toujours l'écran Niveaux, sans carte d'intro, `ms` après un geste. */
@@ -116,9 +135,16 @@ export default async function (t) {
   await loadSave(t, null);
   assertEq(await playSub(t), 'Nouvelle aventure', 'sauvegarde neuve : JOUER');
   let sel = await openSelect(t);
-  assertEq(sel.order, ORDER, 'cartes des Niveaux (data-stage)');
+  ORDER = sel.order;
+  t.log(`étapes : ${ORDER.join(' ')}`);
+  for (const id of ['j1', 'j2', 'j3', 'f1', 'm1', 'f2']) assert(ORDER.includes(id), `carte de ${id} dans les Niveaux (${fmt(ORDER)})`);
+  assertEq(ORDER[0], 'j1', 'première carte : j1');
+  /** Cartes d'une page (monde). */
+  const worldOf = (w) => ORDER.filter((id) => sel.cards[id].world === w);
+  const W1 = worldOf(1);
+  const W2 = worldOf(2);
   assertEq({ world: sel.world, prev: sel.prev, next: sel.next }, { world: 1, prev: { disabled: true }, next: { disabled: false } }, 'sauvegarde neuve : monde 1');
-  assertEq(locks(sel), [false, true, true, true], 'sauvegarde neuve : seule j1 ouverte');
+  assertEq(locks(sel), lockedBy([]), 'sauvegarde neuve : seule j1 ouverte');
   assertEq(sel.cards.j1.sub, 'Monde 1 · Niveau 1', 'sous-titre de j1');
   assertEq(sel.cards.f2.sub, 'Monde 2 · Vol', 'sous-titre de f2');
   await t.page.locator(`${S} .select-next`).click();
@@ -136,56 +162,61 @@ export default async function (t) {
   assertEq(await playTarget(t), 'Lisière de Xéna', 'sauvegarde neuve : JOUER → j1');
 
   // ---------------------------------------------------------------- B. v1 « unlocked: 3 », j1 f1 m1 réussis
-  await loadSave(t, {
-    version: 1,
-    unlocked: 3,
-    best: { j1: { score: 4321, stars: 3 }, f1: { score: 2500, stars: 2 }, m1: { score: 1800, stars: 1 } },
-    settings: {},
-  });
-  assertEq(await playSub(t), "Continuer · Ceinture d'Orak", 'v1 unlocked 3 : JOUER');
+  const bestB = { j1: { score: 4321, stars: 3 }, f1: { score: 2500, stars: 2 }, m1: { score: 1800, stars: 1 } };
+  await loadSave(t, { version: 1, unlocked: 3, best: bestB, settings: {} });
+  assertEq(await playSub(t), 'Continuer · Canopée des spores', 'v1 unlocked 3 : JOUER (j2, ouverte par j1 et pas réussie)');
   sel = await openSelect(t);
   t.log(`v1 unlocked 3 : ${fmt({ world: sel.world, name: sel.name, worldStars: sel.worldStars, total: sel.total })}`);
-  assertEq(locks(sel), [false, false, false, false], 'v1 unlocked 3 : toutes ouvertes');
+  assertEq(locks(sel), lockedBy(Object.keys(bestB)), 'v1 unlocked 3 : réussies et suivantes ouvertes');
+  assertEq([sel.cards.j2.locked, sel.cards.f2.locked], [false, false], 'v1 unlocked 3 : j2 et f2 ouvertes');
+  const REC = { j1: ['4 321', 3], f1: ['2 500', 2], m1: ['1 800', 1] };
   assertEq(
     ORDER.map((id) => [sel.cards[id].best, sel.cards[id].stars]),
-    [['4 321', 3], ['2 500', 2], ['1 800', 1], ['—', 0]],
+    ORDER.map((id) => REC[id] || ['—', 0]),
     'v1 unlocked 3 : records et étoiles des cartes',
   );
   assert(/record 4\s?321/.test(sel.cards.j1.label), `aria-label de j1 avec son record (${sel.cards.j1.label})`);
-  assertEq({ world: sel.world, name: sel.name, worldStars: sel.worldStars, total: sel.total }, { world: 2, name: 'Monde 2 · Lune Krator', worldStars: '1/6', total: '6/12' }, 'v1 unlocked 3 : ouvert sur le monde de f2');
+  assertEq(
+    { world: sel.world, name: sel.name, worldStars: sel.worldStars, total: sel.total },
+    { world: 1, name: 'Monde 1 · Jungle de Xéna', worldStars: starsOf(W1, bestB), total: starsOf(ORDER, bestB) },
+    'v1 unlocked 3 : ouvert sur le monde de j2',
+  );
   assertEq(await machinegunState(t), '80', 'v1 avec f1 réussi : plan du mitrailleur rendu au chargement (arme achetable)');
   await t.key('Escape', 40);
   await waitForScreen(t, 'select');
-  assertEq((await selectState(t)).world, 2, 'retour du hangar : même page (monde 2)');
-  await t.shot('select-world2-records');
+  assertEq((await selectState(t)).world, 1, 'retour du hangar : même page (monde 1)');
+  await t.shot('select-world1-records');
 
-  // Glissement au doigt commencé sur une carte ouverte (m1) : page précédente, m1 non lancée.
-  await swipe(t, 'm1', 300, 12);
-  await waitSelectPage(t, 1);
-  await stillSelect(t, 'glissement vers la droite');
+  // Glissement au doigt commencé sur une carte ouverte (f1) : page suivante, f1 non lancée.
+  await swipe(t, 'f1', -300, 12);
+  await waitSelectPage(t, 2);
+  await stillSelect(t, 'glissement vers la gauche');
   sel = await selectState(t);
-  assertEq({ name: sel.name, worldStars: sel.worldStars }, { name: 'Monde 1 · Jungle de Xéna', worldStars: '5/6' }, 'monde 1 après le glissement');
+  assertEq({ name: sel.name, worldStars: sel.worldStars }, { name: 'Monde 2 · Lune Krator', worldStars: starsOf(W2, bestB) }, 'monde 2 après le glissement');
+  await t.shot('select-world2-records');
   // Petit glissement lent (sous le seuil) : la page revient, la carte n'est pas lancée.
-  await swipe(t, 'j1', -60, 10);
-  await waitSelectPage(t, 1);
+  await swipe(t, 'm1', 60, 10);
+  await waitSelectPage(t, 2);
   await stillSelect(t, 'petit glissement');
   // Geste vif et court (100 px, sous la part de largeur qui suffit seule ; vif si fini en moins de 220 ms) :
-  // page suivante.
-  await swipe(t, 'f1', -100, 1);
-  await waitSelectPage(t, 2);
+  // page précédente.
+  await swipe(t, 'm1', 100, 1);
+  await waitSelectPage(t, 1);
   await stillSelect(t, 'geste vif');
-  // Glissement à la souris : page précédente, carte non lancée.
+  // Glissement à la souris : page suivante, carte non lancée.
   const c = await t.ev((s) => {
     const b = document.querySelector(s).getBoundingClientRect();
     return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
-  }, `${S} .card[data-stage="f2"]`);
+  }, `${S} .card[data-stage="j1"]`);
   await t.page.mouse.move(c.x, c.y);
   await t.page.mouse.down();
-  for (let i = 1; i <= 10; i++) await t.page.mouse.move(c.x + 25 * i, c.y, { steps: 1 });
+  for (let i = 1; i <= 10; i++) await t.page.mouse.move(c.x - 25 * i, c.y, { steps: 1 });
   await t.page.mouse.up();
-  await waitSelectPage(t, 1);
+  await waitSelectPage(t, 2);
   await stillSelect(t, 'glissement à la souris');
-  // Clavier : → puis ←.
+  // Clavier : ← puis →, puis ← (retour au monde 1).
+  await t.key('ArrowLeft', 40);
+  await waitSelectPage(t, 1);
   await t.key('ArrowRight', 40);
   await waitSelectPage(t, 2);
   await t.key('ArrowLeft', 40);
@@ -217,36 +248,54 @@ export default async function (t) {
   assertEq(await introThenBack(t), 'Lisière de Xéna', 'Entrée sur la carte de j1 après un glissement : son intro');
   await press(t, 'title', 'Niveaux');
   await waitForScreen(t, 'select');
-  await waitSelectPage(t, 2);
+  await waitSelectPage(t, 1);
   // Un simple toucher lance toujours la carte.
   await pickStage(t, 'f1');
   assertEq(await introThenBack(t), "Nébuleuse d'Azur", 'carte de f1 touchée : son intro');
-  assertEq(await playTarget(t), "Ceinture d'Orak", 'v1 unlocked 3 : JOUER → f2');
+  assertEq(await playTarget(t), 'Canopée des spores', 'v1 unlocked 3 : JOUER → j2');
 
   // ---------------------------------------------------------------- C. v1 « unlocked: 2 », j1 seul réussi
-  await loadSave(t, { version: 1, unlocked: 2, best: { j1: { score: 1234, stars: 2 } }, settings: {} });
-  assertEq(await playSub(t), "Continuer · Nébuleuse d'Azur", 'v1 unlocked 2 : JOUER');
+  const bestC = { j1: { score: 1234, stars: 2 } };
+  await loadSave(t, { version: 1, unlocked: 2, best: bestC, settings: {} });
+  assertEq(await playSub(t), 'Continuer · Canopée des spores', 'v1 unlocked 2 : JOUER');
   sel = await openSelect(t);
-  assertEq(locks(sel), [false, false, true, true], 'v1 unlocked 2 : f1 ouverte, m1 et f2 verrouillées (index ignoré)');
-  assertEq({ world: sel.world, worldStars: sel.worldStars, total: sel.total }, { world: 1, worldStars: '2/6', total: '2/12' }, 'v1 unlocked 2 : monde 1, étoiles');
+  assertEq(locks(sel), lockedBy(['j1']), 'v1 unlocked 2 : j2 ouverte, la suite verrouillée (index ignoré)');
+  assertEq([sel.cards.j2.locked, sel.cards.f1.locked], [false, true], 'v1 unlocked 2 : j2 ouverte, f1 verrouillée');
+  assertEq(
+    { world: sel.world, worldStars: sel.worldStars, total: sel.total },
+    { world: 1, worldStars: starsOf(W1, bestC), total: starsOf(ORDER, bestC) },
+    'v1 unlocked 2 : monde 1, étoiles',
+  );
   assertEq(await machinegunState(t), 'Plan manquant', 'v1 sans f1 réussi : pas de plan');
   await t.key('Escape', 40);
   await waitForScreen(t, 'select');
   await t.key('Escape', 40);
   await waitForScreen(t, 'title');
-  assertEq(await playTarget(t), "Nébuleuse d'Azur", 'v1 unlocked 2 : JOUER → f1');
+  assertEq(await playTarget(t), 'Canopée des spores', 'v1 unlocked 2 : JOUER → j2');
 
   // ---------------------------------------------------------------- D. Version 2
   await loadSave(t, { version: 2, unlocked: 0, best: { f1: { score: 900, stars: 1 } }, settings: {}, crystals: 5 });
   assertEq(await playSub(t), 'Continuer · Lisière de Xéna', 'v2, f1 seul réussi : JOUER');
   sel = await openSelect(t);
-  assertEq(locks(sel), [false, false, false, true], 'v2, f1 seul réussi : j1, f1 et m1 ouvertes');
+  assertEq(locks(sel), lockedBy(['f1']), 'v2, f1 seul réussi : j1, f1 et m1 ouvertes');
+  assertEq([sel.cards.j2.locked, sel.cards.m1.locked, sel.cards.f2.locked], [true, false, true], 'v2, f1 seul réussi : j2 et f2 verrouillées, m1 ouverte');
   assertEq(await machinegunState(t), '80', 'v2, f1 réussi : plan du mitrailleur');
+  assertEq(await crewMention(t), null, 'v2, j2 non réussie : pas de Tess à l’Établi');
   await t.key('Escape', 40);
   await waitForScreen(t, 'select');
   await t.key('Escape', 40);
   await waitForScreen(t, 'title');
   assertEq(await playTarget(t), 'Lisière de Xéna', 'v2, f1 seul réussi : JOUER → j1');
+
+  // j1 et j2 réussis, équipage vide : Tess rendue au chargement (récompense de j2), à l'Établi.
+  await loadSave(t, { version: 2, unlocked: 2, best: { j1: { score: 900, stars: 1 }, j2: { score: 800, stars: 1 } }, settings: {}, crew: [] });
+  await openSelect(t);
+  await machinegunState(t);
+  assertEq(await crewMention(t), 'Tess à l’établi', 'v2, j2 réussie sans équipage : Tess rendue au chargement, à l’Établi');
+  await t.key('Escape', 40);
+  await waitForScreen(t, 'select');
+  await t.key('Escape', 40);
+  await waitForScreen(t, 'title');
 
   await loadSave(t, { version: 2, unlocked: 0, best: {}, settings: {} });
   assertEq(await playSub(t), 'Nouvelle aventure', 'v2 sans records ni histoire : JOUER');

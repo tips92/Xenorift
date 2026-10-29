@@ -7,7 +7,7 @@ de « à discuter » vers « retenu » quand elle est validée.
 Rappel des contraintes du projet : tout est dessiné par code et les sons sont synthétisés, donc chaque
 nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur un mobile milieu de gamme.
 
-## Où on en est (28/10/2026)
+## Où on en est (29/10/2026)
 
 - Toutes les décisions prises avec l'utilisateur sont dans ce fichier, dans [HISTOIRE.md](HISTOIRE.md)
   (validée) et dans la section « Décisions » de chaque plan technique.
@@ -20,11 +20,18 @@ nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur 
 - **Étape 3 (hangar) codée et vérifiée** sur la même branche : 3a (hangar et armes de Kaï ; nouveau scénario
   `hangar`, hangar vérifié jusqu'à 568x320) et 3b (combat en vol : canon et mitrailleuse de la Comète, tir
   automatique ou manuel, astéroïdes destructibles, ennemis spatiaux, cristaux du vol ; nouveau scénario
-  `flight-combat`), suite e2e complète verte, captures et tests relus. 3b n'est pas encore commitée. Reste
-  l'essai sur téléphone des étapes 1 à 3. La balise de LUMA (fin de l'étape 3) est faite avec l'étape 4.
-- **Étape 4 (monde 1 complet) en cours** dans une autre discussion, sur sa propre branche
-  (`claude/world-1-completion-866505`) : choix du plan 4 validés le 28/10 tels quels (le plan à jour est sur
-  cette branche).
+  `flight-combat`), suite e2e complète verte, captures et tests relus. 3a et 3b sont commitées. Reste
+  l'essai sur téléphone des étapes 1 à 3. La balise de LUMA (fin de l'étape 3) est faite avec l'étape 4 (4a).
+- **Étape 4 (monde 1 complet) en cours** sur la branche `claude/world-1-completion-866505` (3b y est fusionnée) :
+  choix du plan 4 validés le 28/10 tels quels, plus les boss en touches et le tir au bouton en vol le 29/10.
+  **Partie 4a faite et vérifiée** (nouveaux scénarios `progress-ids`, `luma-radio`, `boss-mini`), essayée sur
+  téléphone le 29/10 : table des mondes et progression par identifiants, écran Niveaux en pages par monde,
+  récompenses aux résultats, j1 au nouveau format (arrivée en Comète, tutoriel de LUMA par radio, ruine aux
+  glyphes, arène du Blob-roi, balise de LUMA), sons du monde 1. **Partie 4b faite et vérifiée** (suite e2e
+  complète 39/39, nouveaux scénarios `j2-play`, `boss-titan`, `boss-whale`, `j3-ctx-boss`) : campagne à 6 étapes,
+  j2 « Canopée des spores » (champignons, la méduse-baleine qui agit, Tess, Scarabée-titan), j3 « Sanctuaire du
+  gardien » (radio brouillée, combat contre la méduse-baleine, double saut), boss en touches, « Réessayer le
+  combat ». Reste l'essai sur téléphone de 4b, puis 4c (cinématiques, léviathan).
 - Reste à faire côté conception : le choix des styles de niveaux bonus, les réglages chiffrés (armes, canons,
   ennemis du vol, prix) après essai sur téléphone.
 - Organisation du code et des documents : [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -35,17 +42,21 @@ nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur 
 
 ### 1. Mondes et niveaux
 
-Aujourd'hui : 2 mondes (Jungle de Xéna, Lune Krator), chacun avec 1 niveau plateforme suivi d'un vol 3D.
+Aujourd'hui : 2 mondes ; la Jungle de Xéna au nouveau format (3 niveaux plateforme, mini-boss, gardienne,
+puis un vol 3D), la Lune Krator à l'ancien (1 niveau plateforme, puis un vol 3D).
 
 **Décidé :** 5 mondes de 3 niveaux plateforme + 1 vol, soit 20 étapes. La créature géante du monde est
 loin au niveau 1, plus proche au niveau 2, et c'est le boss du niveau 3. Une fois battue, Kaï monte dans
 la Comète et décolle. Le vol suit le même principe avec une créature spatiale.
 
-- [ ] Passer la Jungle et la Lune au nouveau format (2 niveaux plateforme à créer pour chacune)
+- [ ] Passer la Jungle et la Lune au nouveau format (2 niveaux plateforme à créer pour chacune) (Jungle faite en
+      4b : j2 et j3 ; la Lune : étape 5)
 - [ ] Créer Boréa (glace), Vulkar (volcans) et le Cœur de la Faille (proposés dans l'histoire)
-- [ ] Créature géante qui se rapproche d'un niveau à l'autre, et qui agit déjà au niveau 2
+- [ ] Créature géante qui se rapproche d'un niveau à l'autre, et qui agit déjà au niveau 2 (Jungle faite en 4b :
+      méduse-baleine lointaine en j1, proche en j2 avec son ombre, la secousse qui abat un tronc et la pluie de
+      spores, immense en j3 ; vérifiée par `j2-play` et `boss-whale`)
 - [ ] Une mécanique propre à chaque monde : champignons qui font rebondir, gravité faible, sol qui glisse,
-      lave qui monte, gravité qui s'inverse
+      lave qui monte, gravité qui s'inverse (champignons faits en 4b, vérifiés par `j2-play` et check-levels)
 - [ ] Pour chaque monde : décor, 4 ennemis, créature géante, musique (comme la Jungle et la Lune)
 - [ ] Remplacer l'écran « Fin de la démo » par la fin de l'histoire
 
@@ -64,7 +75,9 @@ bouclier, double saut selon le mode test). Reste le réglage sur téléphone (so
 un bloc `loadout` (arme équipée, armes possédées, double saut appris), relu à chaque étape ; depuis
 l'étape 3a, l'arme équipée se change au hangar (enregistrée). En mode test, une arme non possédée s'y équipe
 pour la session seulement, comme avec `?weapon=`. Les plans d'armes sur les boss et l'apprentissage du double
-saut auprès du premier gardien viennent avec l'étape 4.
+saut auprès du premier gardien viennent avec l'étape 4 (4a : le plan du mitrailleur est donné en réussissant le
+vol 1, en attendant le léviathan de 4c ; les récompenses sont rendues aux anciens joueurs ; 4b : le double saut
+est appris en battant la méduse-baleine de j3).
 
 - [x] Arme équipée conservée d'un niveau à l'autre (enregistrée dans la sauvegarde : `loadout.equipped`)
 - [x] Pistolet laser : arme de départ (l'actuelle)
@@ -78,8 +91,9 @@ saut auprès du premier gardien viennent avec l'étape 4.
 - [x] Bonus temporaire : vitesse de course
 - [x] Bonus temporaire : cadence de tir
 - [x] Bonus bouclier conservé (absorbe 1 coup)
-- [ ] Double saut retiré des bonus : compétence apprise en battant le premier gardien, gardée ensuite
-      (retiré des bonus et rangé dans la sauvegarde à l'étape 2 ; appris auprès du gardien : étape 4)
+- [x] Double saut retiré des bonus : compétence apprise en battant le premier gardien, gardée ensuite
+      (retiré des bonus et rangé dans la sauvegarde à l'étape 2 ; appris en battant la méduse-baleine de j3 en 4b,
+      « Compétence : double saut » aux résultats ; vérifié par `boss-whale` et `campaign-flow`)
 - [x] Tir triple supprimé (la pompe prend le relais)
 
 **Décidé :** surchauffe pour toutes les armes, pas de munitions (rien de plus à gérer sur un écran
@@ -96,13 +110,15 @@ et depuis Niveaux, améliorations des armes de Kaï, cœurs supplémentaires, bo
 Comète, aperçu 2D), vérifiée par les tests navigateur (scénario `hangar`). 3b codée (canon léger et
 mitrailleuse de la Comète, tir automatique ou manuel, astéroïdes destructibles, chasseurs, mines, essaims et
 leurs orbes, cristaux du vol pour la réserve, jauge du canon et cristaux dans le HUD du vol), vérifiée par les
-tests navigateur (scénario `flight-combat`). Les plans d'armes et l'équipage (Tess, Mira) viendront avec
-l'étape 4 : d'ici là, hors mode test, seuls le niveau 1 des améliorations du laser et les modules de la Comète
-s'achètent. Restent l'essai sur téléphone (prix, multiplicateurs, lisibilité du hangar ; tirs, ennemis, bouton
-TIR et réglages du vol) et la balise de LUMA (faite avec l'étape 4).
+tests navigateur (scénario `flight-combat`). Les plans d'armes et l'équipage viennent avec l'étape 4 : plan du
+mitrailleur après le vol 1 (4a), Tess secourue en j2 (4b) ouvre les niveaux 2 et 3 des améliorations ; Mira
+(cœurs) viendra avec le monde 3. Restent l'essai sur téléphone (prix, multiplicateurs, lisibilité du hangar ;
+tirs, ennemis, bouton TIR et réglages du vol). La balise de LUMA est faite avec l'étape 4.
 
 - [ ] Hangar dans la Comète en orbite : on y monte par la balise de LUMA en fin de niveaux 1 et 2, et en
-      décollant après le niveau 3
+      décollant après le niveau 3 (balises de j1 et j2, bouton « Atterrir » / « Redescendre » / « Décoller » au
+      hangar, hangar après j3 : faits en 4a et 4b ; le décollage après le niveau 3 viendra avec la cinématique de
+      libération, 4c)
 - [x] Établi : acheter les armes débloquées et les améliorer (dégâts, cadence, portée, refroidissement)
 - [x] Atelier de la Comète : mitrailleuse, bouclier renforcé, meilleur turbo… (bouclier renforcé et turbo
       en 3a ; mitrailleuse et ses deux améliorations en 3b, vérifiées par `flight-combat`)
@@ -115,8 +131,9 @@ TIR et réglages du vol) et la balise de LUMA (faite avec l'étape 4).
 - [x] Tous les cristaux ramassés vont dans la réserve, même en rejouant ; perdus si l'étape est ratée
 - [x] Hangar accessible entre deux étapes et depuis l'écran Niveaux
 - [ ] Les naufragés secourus rejoignent l'équipage et ouvrent de nouveaux services (voir l'histoire) ; le
-      hangar sait déjà les attendre (Tess : niveaux 2 et 3 des améliorations, Mira : cœurs), le secours vient
-      avec l'étape 4
+      hangar sait déjà les attendre (Tess : niveaux 2 et 3 des améliorations, Mira : cœurs). Tess faite en 4b :
+      secourue en j2, à bord à la réussite, « Tess à l'établi », niveaux 2 et 3 ouverts (vérifié par `j2-play` et
+      `hangar`) ; les autres avec leur monde
 - [x] Cœur supplémentaire achetable (maximum 5)
 - [ ] Drone compagnon achetable : suit Kaï, attire les cristaux proches ou tire de temps en temps
 
@@ -125,13 +142,27 @@ TIR et réglages du vol) et la balise de LUMA (faite avec l'étape 4).
 **Décidé :** un mini-boss à la fin des niveaux 1 et 2, le gardien au niveau 3, un boss dans chaque vol.
 Toujours un point de contrôle juste avant chaque combat.
 
-- [ ] Mini-boss de fin des niveaux 1 et 2 : grande version d'un ennemi du monde (10 au total)
+**État (29/10/2026) :** cadre des boss 2D fait en 4a (arène fermée par des barrières, point de contrôle juste
+avant, caméra calée, barre de vie commune au 2D et au vol, boss remis à neuf après une vie perdue, prime de
+2 000 points) avec le premier mini-boss, le **Blob-roi** (j1). En 4b : le **Scarabée-titan** (j2), la
+**méduse-baleine** (gardienne de j3, 3 phases, prime de 5 000 points, sa défaite termine le niveau), les boss en
+touches (décidé le 29/10 : le Blob-roi était trop dur ; 4 touches pour un mini-boss, 6 pour la gardienne) et
+« Réessayer le combat » (reprise au point de contrôle d'avant l'arène, avec l'état de ce moment, sans prime de
+vies) ; vérifiés par `boss-mini`, `boss-titan`, `boss-whale`, `j3-ctx-boss`. Difficulté à régler sur téléphone.
+
+- [ ] Mini-boss de fin des niveaux 1 et 2 : grande version d'un ennemi du monde (10 au total) (2 sur 10 : le
+      Blob-roi et le Scarabée-titan)
 - [ ] Gardien au niveau 3 : la créature vue au loin (méduse-baleine, ver des sables, colosse de givre,
-      salamandre de magma, puis Éon)
-- [ ] Après la victoire : cinématique de libération, nouvelle compétence, embarquement et décollage
+      salamandre de magma, puis Éon) (1 sur 5 : la méduse-baleine)
+- [ ] Après la victoire : cinématique de libération, nouvelle compétence, embarquement et décollage (compétence
+      donnée aux résultats en 4b ; cinématique en 4c)
 - [ ] Boss dans chaque vol 3D (léviathan, ver cosmique, raie solaire, Sentinelle, puis la fuite finale)
-- [ ] Barre de vie, 2 ou 3 phases, point faible lisible
-- [ ] Musique de boss et effets d'apparition / de défaite
+- [ ] Barre de vie, 2 ou 3 phases, point faible lisible (barre en crans, 2 et 3 phases faites ; lisibilité des
+      points faibles à juger sur téléphone)
+- [ ] « Réessayer le combat » si les vies tombent à zéro contre un boss (2D faite en 4b, vérifiée par `boss-mini`,
+      `boss-titan`, `boss-whale` et `j3-ctx-boss` ; en vol avec le léviathan, 4c)
+- [x] Musique de boss et effets d'apparition / de défaite (musique `boss`, effets d'apparition, de coup, de
+      phase et de défaite, joués par le Blob-roi ; musique du gardien à 3 intensités prête pour 4b)
 
 ### 5. Contrôles 2D : stick à deux axes
 
@@ -150,11 +181,12 @@ du stick.
 - [x] Le pad gauche devient un stick à deux axes (stick rond à 8 directions)
 - [x] Haut maintenu + Tir : tirer vers le haut (Kaï s'arrête)
 - [x] Haut + côté maintenus + Tir : tirer en diagonale
-- [x] Haut devant une porte : entrer (portes `D` par paires ; pour l'instant une salle secrète dans la
-      Jungle, les ruines et les naufragés viendront avec le monde 1)
+- [x] Haut devant une porte : entrer (portes `D` par paires ; dans la Jungle, la salle murée est devenue la
+      ruine astréenne en 4a ; en j2, Haut devant Tess la secourt, 4b)
 - [x] Bas : s'accroupir (esquiver les tirs ennemis hauts ; ↓ + côté une fois accroupi : ramper lentement)
 - [x] Bas sur un support traversable : descendre d'un étage (↓ + Saut, sur `=` et sur les plateformes mobiles)
-- [ ] Nouveaux supports traversables : branches, lianes, passerelles…
+- [x] Nouveaux supports traversables : branches, lianes, passerelles… (4a : dans la Jungle, les `=` sont
+      dessinés en branches, lianes ou passerelles, une famille par rangée ; même comportement)
 - [x] Seuils d'angle nets entre droit devant, diagonale et vers le haut (30° et 65°, à affiner sur téléphone)
 - [x] Clavier : ↑ / Z pour viser en haut et entrer (avec ← → pour la diagonale), ↓ / S pour s'accroupir
       et descendre
@@ -173,8 +205,15 @@ du stick.
 
 Détail dans [HISTOIRE.md](HISTOIRE.md).
 
-- [ ] LUMA, l'ordinateur de bord : messages radio avec portrait et bips synthétisés
-- [ ] Tutoriel dans le niveau 1, donné par LUMA au moment où on a besoin de chaque commande
+**État (29/10/2026) :** radio de LUMA et tutoriel de j1 faits en 4a (scénario `luma-radio`), rythme validé sur
+téléphone ; en 4b, radio de j2 (champignons, la méduse-baleine, dialogue de Tess) et radio brouillée de j3.
+Lecteur de cinématiques, prologue et libération dessinés (`src/story/`, page `preview/story.html`), branchés dans
+le jeu en 4c.
+
+- [x] LUMA, l'ordinateur de bord : messages radio avec portrait et bips synthétisés (bulle non bloquante en haut à
+      gauche, file de 2 messages, figée en pause)
+- [x] Tutoriel dans le niveau 1, donné par LUMA au moment où on a besoin de chaque commande (11 messages, muets
+      une fois j1 réussi ; texte du clavier sur PC)
 - [ ] Cinématique : prologue
 - [ ] Cinématique : libération du gardien (même modèle pour les mondes 1 à 4)
 - [ ] Cinématique : les fresques des Astréens (Vulkar)
@@ -182,9 +221,11 @@ Détail dans [HISTOIRE.md](HISTOIRE.md).
 - [ ] Cinématique : finale et épilogue
 - [ ] Bouton Passer sur toutes les cinématiques
 - [ ] Le Vide : zones et ennemis éteints (gris, fissures noires, reflets rouges)
-- [ ] Portes vers les ruines astréennes (fresques, morceaux d'histoire)
-- [ ] Un naufragé à secourir par monde, du monde 1 au monde 4
-- [ ] Balises de LUMA en fin de niveaux 1 et 2
+- [x] Portes vers les ruines astréennes (fresques, morceaux d'histoire) (4a : ruine de j1, glyphes qui s'allument
+      et message de LUMA ; une par monde ensuite)
+- [ ] Un naufragé à secourir par monde, du monde 1 au monde 4 (monde 1 : Tess, en j2, faite en 4b)
+- [x] Balises de LUMA en fin de niveaux 1 et 2 (j1 en 4a, j2 en 4b ; vérifiées par `j1-play`, `boss-mini`,
+      `j2-play`)
 
 ---
 
@@ -209,7 +250,8 @@ Détail dans [HISTOIRE.md](HISTOIRE.md).
 - [ ] **Ennemis touchés par le Vide** : version sombre et plus résistante des ennemis normaux. On les
       réutilise d'un monde à l'autre et on voit le Vide gagner du terrain à mesure qu'on approche de la Faille.
 - [ ] **Confort et accessibilité** : réduire les secousses et les flashs (les boss en auront beaucoup),
-      couleurs des projectiles adaptées aux daltoniens, taille des textes.
+      couleurs des projectiles adaptées aux daltoniens, taille des textes. (Depuis 4b, toutes les secousses du jeu
+      2D passent par une seule fonction, `Effects.shake`, prête pour un réglage.)
 - [ ] **Mode Boss** (après la fin du jeu) : enchaîner tous les boss contre la montre.
 - [ ] **Nouvelle partie +** : recommencer l'histoire avec des ennemis plus coriaces, en gardant armes et
       améliorations.
@@ -248,8 +290,9 @@ Détail dans [HISTOIRE.md](HISTOIRE.md).
    **3a et 3b codées et vérifiées** (suite e2e) ; essai sur téléphone à faire ; balise faite avec l'étape 4 (4a).
 4. **Monde 1 complet au nouveau format** : 3 niveaux, mini-boss, méduse-baleine, double saut, vol avec le
    léviathan, LUMA, prologue et cinématique de libération. Il sert de modèle : on valide tout sur un seul
-   monde avant de multiplier les niveaux. **En cours** dans une autre discussion (plan validé, branche
-   `claude/world-1-completion-866505`).
+   monde avant de multiplier les niveaux. **En cours** (plan validé, branche `claude/world-1-completion-866505`) :
+   4a (fondations, j1) et 4b (la Jungle : j2, j3, Tess, mini-boss et gardienne) faites et vérifiées ; prochaine :
+   4c (histoire et vol).
 5. **Monde 2** au même format.
 6. **Carte galactique**, puis Boréa, Vulkar et le Cœur de la Faille, avec les cinématiques de fin.
 7. **Objets secrets et niveaux bonus**.

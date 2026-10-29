@@ -6,8 +6,8 @@
 //  ↓ + Saut sur un sol plein = saut normal ; plafond bas (tuiles posées par le test) : impossible de se relever
 //  ni de sauter, reptation pour en sortir, relevé seulement une fois tout le corps sorti ; ↓ seul et Saut seul
 //  sur une plateforme '=' ne font pas tomber, ↘ + Saut y fait un vrai saut, ↓ + Saut la traverse ; portes
-//  (128, 5) ↔ (144, 9) : flèche ▲, ↑ avec Tir maintenu n'entre pas, aller, ↑ pressé pendant que ← est tenu
-//  (contre le mur de la salle) n'entre pas, retour.
+//  (128, 5) ↔ (144, 9) : flèche ▲, ↑ avec Tir maintenu n'entre pas, aller (glyphes de la ruine allumés à
+//  l'arrivée), ↑ pressé pendant que ← est tenu (contre le mur de la salle) n'entre pas, retour.
 //  Jungle (j1), au stick tactile : stick posé sur ↑ devant la porte : passage ; doigt gardé sur ↑ après
 //  l'arrivée : pas de retour ; TIR posé puis stick ↑ : pas de passage, ni au lever de TIR ; doigt glissé de ←
 //  (contre le mur) vers ↑ : retour.
@@ -453,6 +453,10 @@ async function jungle(t) {
   await t.key('ArrowUp', 80);
   await waitAtDoor(t, doorB, 'porte : arrivée devant la porte de la salle secrète (128, 5)');
   assert(atDoor(await kai2d(t), doorB), 'porte : Kaï centré devant la porte de la salle');
+  await waitFor(t, () => window.__xr2d.scene.glyphs.list.every((g) => g.lit && g.on.alpha > 0.99), {
+    timeout: 4000,
+    label: 'ruine astréenne : glyphes allumés à l’arrivée par la porte',
+  });
   await waitFor(t, () => window.__xr2d.scene.doors.nearIndex >= 0 && window.__xr2d.scene.doors.arrow.alpha > 0.95, {
     timeout: 2000,
     label: 'flèche ▲ revenue au-dessus de la porte de la salle',

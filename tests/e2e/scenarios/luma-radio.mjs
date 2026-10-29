@@ -1,19 +1,31 @@
-// Radio de LUMA en jeu (plan 04, points 7 et 14 ; choix 12) dans j1, sauvegarde neuve :
-//  A. Message de départ (fenêtre 0-12) dès le début : radioOpen puis lettres ; bulle « signal brouillé » sans
-//     pointer-events (elle et tout son contenu ; elementFromPoint passe à travers) ; texte complet posé une seule
-//     fois dans le nœud aria-live ; bips lumaBip espacés d'au moins 125 ms (8 par seconde au plus, une voix).
+// Radio de LUMA en jeu (plan 04, points 7, 9 et 14 ; choix 12) dans j1, sauvegarde neuve, au clavier (?touch=0) :
+//  A. Messages du départ (fenêtres 0-12) dès l'arrivée : histoire (brouillée) puis « courir et sauter » en attente ;
+//     radioOpen puis lettres ; bulle « signal brouillé » sans pointer-events (elle et tout son contenu ;
+//     elementFromPoint passe à travers) ; texte complet posé une seule fois dans le nœud aria-live ; bips lumaBip
+//     espacés d'au moins 125 ms (8 par seconde au plus, une voix) ; texte du clavier (`keys`) sans commandes tactiles ;
+//     Kaï immobile : le premier marcheur reste dans son enclos (35-40), rien ne vient au départ.
+//  A2. Départ à pleine course (→ tenu, saut au pilier 33) : « tuto-stomp » (urgent) passe devant « tuto-move » et
+//     s'ouvre avant le contact avec le premier marcheur (relevé à chaque image, postupdate).
+//  A3. Départ à 2,5 colonnes/s (rythme de check-levels ; Kaï avancé d'une colonne toutes les 400 ms) :
+//     « tuto-stomp » ouvert avant la colonne 30, sa première phrase écrite au pied du pilier (32).
 //  B. Première surchauffe → message du tutoriel ; une seconde surchauffe, radio revenue au repos, ne le rejoue pas
 //     (LevelEvents.say espionné : un seul appel par message, la file de la radio ne masque rien).
-//  C. Téléportation au-delà de la ruine (127-137) : fenêtre sautée ; dans celle de la balise (193-206) : jouée une
-//     fois (y revenir ne la rejoue pas : un seul appel à LevelEvents.say).
+//  C. Tutoriel complet, dans l'ordre du niveau : Kaï posé dans chaque fenêtre (bornes lues dans la page) et aux
+//     déclencheurs à colonne connue (point de contrôle 78, porte du rocher vers la ruine, arène) ; chaque message
+//     demandé une fois (LevelEvents.say) au bon endroit, puis joué par la radio avec son texte du clavier s'il en a
+//     un ; aucune fenêtre sautée ; ruine : glyphes éteints avant la porte, allumés à l'arrivée ; revenir dans la
+//     fenêtre de la balise ne la rejoue pas.
 //  D. Pause (Échap) pendant l'écriture : lettres et bips figés, bulle .is-paused ; page cachée puis revenue : figée,
 //     partie toujours en pause ; REPRENDRE : l'écriture repart.
 //  E. File : 3 messages poussés pendant qu'un autre s'affiche → 2 en attente (le plus ancien chassé), joués dans
 //     l'ordre ; fin de l'étape : file vidée, bulle cachée ; marque tutorial-j1 enregistrée.
-//  F. Sauvegarde avec tutorial-j1 : tutoriel muet à la surchauffe, message d'histoire toujours joué.
+//  F. Sauvegarde avec tutorial-j1 : tutoriel muet (surchauffe, point de contrôle, fenêtres), messages d'histoire
+//     toujours joués ; téléportation au-delà des fenêtres : sautées.
 //  G. Mise en page à 844x390, 740x360 et 640x320, 3 et 5 cœurs, trois bonus allumés : bulle dans la fenêtre, sous
 //     les stats, sans toucher pause, jauge, bonus, commandes tactiles ni messages (qui passent dessous, un seul à la
 //     fois, au-dessus de Kaï) ; les messages glissent (transition de top) quand la bulle paraît et se cache. Captures.
+//  H. j3 : radio brouillée de bout en bout (bulle « scrambled ») ; Kaï posé dans chaque fenêtre, dans l'ordre du
+//     niveau : chaque message demandé une fois, joué sans être chassé, avec son texte du clavier s'il en a un.
 import { assert, assertEq, fmt, readSave, waitFor, waitFor2dPlay, waitForScreen } from '../lib/helpers.mjs';
 import { overlaps } from '../lib/core.mjs';
 import { placeKai } from '../lib/game2d.mjs';
@@ -23,7 +35,7 @@ export const meta = {
   title: 'Radio de LUMA : fenêtres, téléportation, bips, pause, file, tutoriel, mise en page',
   suites: ['full'],
   dev: true,
-  timeoutMs: 240000,
+  timeoutMs: 300000,
 };
 
 const SAVE_KEY = 'xeno-rift-save-v1';
@@ -87,6 +99,7 @@ function radio(t) {
           }
         : null,
       windows: s && s.levelEvents ? s.levelEvents.windows.map((w) => [w.id, w.state]) : null,
+      text: r.text,
       bips: window.__sfxLog ? window.__sfxLog.filter((e) => e[0] === 'lumaBip').length : 0,
     };
   });
@@ -205,7 +218,59 @@ async function start(t, query) {
   await t.ev(() => window.__xr2d.god(true));
 }
 
-const BASE_SAVE = { version: 2, unlocked: 0, best: {}, settings: { unlockAll: true }, story: { seen: [] } };
+/** Lettres écrites dans la bulle de la radio (sélecteur). */
+const LETTERS = `${BUBBLE} .xr-bubble-text > span.is-on`;
+
+/**
+ * Dans la page : premier contact entre Kaï et le premier marcheur (enclos 35-40) relevé à chaque image (postupdate),
+ * avec l'état de la radio à cet instant : window.__contact. `drive` : → tenu, saut au pilier (touches simulées).
+ */
+function watchContact(t, drive) {
+  return t.ev(
+    ([drive, sel]) => {
+      const s = window.__xr2d.scene;
+      const w = s.enemies.list.find((e) => e.kind === 'w' && e.homeX > 35 * 64 && e.homeX < 41 * 64);
+      const key = (type, code) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code === 'Space' ? ' ' : code }));
+      window.__contact = null;
+      let jumpAt = -1;
+      if (drive) key('keydown', 'ArrowRight');
+      const f = () => {
+        const p = s.player;
+        const now = performance.now();
+        if (drive && jumpAt < 0 && p.x >= 31.4 * 64) {
+          jumpAt = now;
+          key('keydown', 'Space');
+        } else if (jumpAt > 0 && now - jumpAt > 300) {
+          jumpAt = Infinity;
+          key('keyup', 'Space');
+        }
+        const b = w.body;
+        const touch = !w.alive || (p.right > b.x && p.left < b.x + b.width && p.feetY > b.y && p.top < b.y + b.height);
+        if (!touch) return;
+        const r = window.__xrShell.radio();
+        window.__contact = { at: now, kaiX: Math.round(p.x), walkerX: Math.round(w.sprite.x), played: r.played.slice(), current: r.current, phase: r.phase, letters: document.querySelectorAll(sel).length };
+        s.events.off('postupdate', f);
+        if (drive) key('keyup', 'ArrowRight');
+        if (jumpAt !== Infinity && jumpAt > 0) key('keyup', 'Space');
+      };
+      s.events.on('postupdate', f);
+      return { walker: Math.round(w.homeX / 64 - 0.5) };
+    },
+    [drive, LETTERS],
+  );
+}
+
+/** Ouverture (radioOpen, performance.now) de chaque message joué depuis le chargement : [id, instant]. */
+function opens(t) {
+  return t.ev(() => {
+    const ids = window.__xrShell.radio().played;
+    const at = window.__sfxLog.filter((e) => e[0] === 'radioOpen').map((e) => e[1]);
+    return ids.map((id, i) => [id, at[i]]);
+  });
+}
+
+/** Mise en page (G) : tutoriel déjà vu, seuls les messages d'histoire et ceux poussés par le test. */
+const BASE_SAVE = { version: 2, unlocked: 0, best: {}, settings: { unlockAll: true }, story: { seen: ['tutorial-j1'] } };
 
 export default async function (t) {
   await instrument(t);
@@ -220,7 +285,12 @@ export default async function (t) {
     return i.current === 'j1-start' && (i.phase === 'typing' || i.phase === 'hold');
   }, 'A : message de départ affiché');
   let r = await radio(t);
-  assertEq(r.windows, [['j1-start', 1], ['j1-ruin', 0], ['j1-beacon', 0]], 'A : fenêtres après le départ');
+  assertEq(
+    r.windows.filter((w) => w[1] !== 0),
+    [['j1-start', 1], ['tuto-move', 1]],
+    'A : fenêtres du départ jouées, toutes les autres en attente',
+  );
+  assertEq(r.waiting, ['tuto-move'], 'A : « courir et sauter » en attente derrière le message de départ');
   assert(r.bubble && !r.bubble.hidden && r.bubble.speaker === 'luma' && r.bubble.mood === 'scrambled', `A : bulle de LUMA brouillée (${fmt(r.bubble)})`);
   assertEq(r.bubble.status, 'signal brouillé', 'A : mention « signal brouillé »');
   await assertNotClickable(t, 'A');
@@ -228,6 +298,59 @@ export default async function (t) {
   await waitRadio(t, () => window.__xrShell.radio().phase === 'hold', 'A : message de départ entièrement écrit');
   await assertSpoken(t, RADIO['j1-start'].text, 'A (départ)');
   await t.shot('start-written');
+  await waitRadio(t, () => window.__xrShell.radio().current === 'tuto-move', 'A : tutoriel « courir et sauter » affiché', { timeout: 20000 });
+  assertEq((await radio(t)).text, RADIO['tuto-move'].keys, 'A : texte du clavier sans commandes tactiles');
+  const pen = await t.ev(() => {
+    const s = window.__xr2d.scene;
+    const ws = s.enemies.list.filter((e) => e.kind === 'w' && e.alive && !e.summoned).map((e) => e.sprite.x / 64);
+    return { first: Math.min(...ws), kai: s.player.x / 64 };
+  });
+  assert(pen.first >= 35 && pen.first <= 41 && pen.kai < 9, `A : Kaï immobile, premier marcheur toujours dans son enclos 35-40 (${fmt(pen)})`);
+
+  // ---------------------------------------------------------------- A2. Départ à pleine course
+  await start(t, '?touch=0&unlock=1&stage=j1');
+  const a2 = await watchContact(t, true);
+  await waitFor(t, () => window.__contact, { timeout: 15000, interval: 50, label: `A2 : Kaï atteint le premier marcheur (${a2.walker})` });
+  const c2 = await t.ev(() => window.__contact);
+  const o2 = await opens(t);
+  const stomp2 = o2.find((o) => o[0] === 'tuto-stomp');
+  t.log(`A2 : contact en x ${c2.kaiX} (marcheur ${c2.walkerX}) ; radio : ${fmt(o2.map(([id, at]) => [id, Math.round(at - c2.at)]))} ms par rapport au contact ; ${c2.current} ${c2.phase}, ${c2.letters} lettres`);
+  assert(stomp2 && stomp2[1] < c2.at, `A2 : « tuto-stomp » ouvert avant le contact (${fmt({ c2, o2 })})`);
+  assertEq(o2.slice(0, 2).map((o) => o[0]), ['j1-start', 'tuto-stomp'], 'A2 : « tuto-stomp » (urgent) passé devant « tuto-move »');
+  await waitRadio(t, () => window.__xrShell.radio().played.includes('tuto-move'), 'A2 : « tuto-move » joué ensuite', { timeout: 20000 });
+
+  // ---------------------------------------------------------------- A3. Départ à 2,5 colonnes/s
+  await start(t, '?touch=0&unlock=1&stage=j1');
+  await watchContact(t, false);
+  const steps = await t.ev(
+    (sel) =>
+      new Promise((done) => {
+        const log = [];
+        let col = 8;
+        const id = setInterval(() => {
+          col++;
+          window.__xr2d.teleport(col, 11);
+          const r = window.__xrShell.radio();
+          log.push({ col, played: r.played.slice(), current: r.current, letters: document.querySelectorAll(sel).length });
+          if (col >= 32) {
+            clearInterval(id);
+            done(log);
+          }
+        }, 400);
+      }),
+    LETTERS,
+  );
+  const at30 = steps.find((s) => s.col === 30);
+  const at32 = steps.find((s) => s.col === 32);
+  const open3 = steps.find((s) => s.played.includes('tuto-stomp'));
+  t.log(`A3 : « tuto-stomp » ouvert à la colonne ${open3 ? open3.col : '-'} ; au pilier (32) : ${at32.current}, ${at32.letters} lettres ; ordre ${fmt(at32.played)}`);
+  assert(at30.played.includes('tuto-stomp'), `A3 : « tuto-stomp » ouvert avant la colonne 30 (${fmt(steps.map((s) => [s.col, s.current, s.letters]))})`);
+  const first = RADIO['tuto-stomp'].keys.indexOf('.') + 1;
+  assert(at32.played.includes('tuto-stomp') && (at32.current !== 'tuto-stomp' || at32.letters >= first), `A3 : au pied du pilier, « ${RADIO['tuto-stomp'].keys.slice(0, first)} » écrit (${fmt(at32)})`);
+  assert(!(await t.ev(() => window.__contact)), 'A3 : aucun contact avec le marcheur (enclos)');
+
+  // Partie neuve pour la suite (fenêtres du départ seules jouées).
+  await start(t, '?touch=0&unlock=1&stage=j1');
 
   // ---------------------------------------------------------------- B. Surchauffe
   await spySay(t);
@@ -242,21 +365,58 @@ export default async function (t) {
   r = await radio(t);
   assertEq([await said(t, 'tuto-overheat'), count(r, 'tuto-overheat'), r.phase], [1, 1, 'idle'], 'B : seconde surchauffe : message pas rejoué');
 
-  // ---------------------------------------------------------------- C. Fenêtres et téléportation
-  await placeKai(t, 150, 11, 'C (au-delà de la ruine)');
-  await waitRadio(t, () => window.__xr2d.scene.levelEvents.windows[1].state === 2, 'C : fenêtre de la ruine sautée');
-  await placeKai(t, 195, 11, 'C (fenêtre de la balise)');
-  await waitRadio(t, () => window.__xr2d.scene.levelEvents.windows[2].state === 1, 'C : fenêtre de la balise jouée');
-  await placeKai(t, 184, 11, 'C (retour avant la fenêtre)');
+  // ---------------------------------------------------------------- C. Tutoriel complet
+  // Ordre du niveau : fenêtres (Kaï posé sur une case debout de la fenêtre) et déclencheurs à colonne connue.
+  const TOUR = [
+    ['tuto-stomp', 17, 11],
+    ['tuto-aim', 56, 11],
+    ['tuto-drop', 64, 11],
+    ['tuto-checkpoint', 78, 11, 'point de contrôle 78'],
+    ['tuto-blocks', 91, 11],
+    ['tuto-armored', 118, 11],
+    ['tuto-door', 140, 11],
+    ['j1-ruin', 144, 9, 'porte du rocher, ↑'],
+    ['tuto-later', 151, 11],
+    ['j1-beacon', 195, 11],
+  ];
+  const windowsC = await t.ev(() => window.__xr2d.scene.levelEvents.windows.map((w) => [w.id, w.col0, w.col1]));
+  for (const [id, col, row, how] of TOUR) {
+    const win = windowsC.find((w) => w[0] === id);
+    if (win) assert(col >= win[1] && col <= win[2], `C : « ${id} » : colonne ${col} dans sa fenêtre ${win[1]}-${win[2]}`);
+    await placeKai(t, col, row, `C (${how || id})`);
+    if (id === 'j1-ruin') {
+      assert(await t.ev(() => window.__xr2d.scene.glyphs.list.every((g) => !g.lit)), 'C : glyphes de la ruine éteints avant la porte');
+      await t.key('ArrowUp', 80);
+    }
+    await waitRadio(t, (m) => window.__said.filter((x) => x === m).length === 1, `C : « ${id} » demandé (${how || `colonne ${col}`})`, { arg: id, timeout: 5000 });
+    await waitRadio(t, (m) => window.__xrShell.radio().played.includes(m), `C : « ${id} » joué par la radio`, { arg: id, timeout: 25000 });
+    const shown = await radio(t);
+    if (shown.current === id) assertEq(shown.text, RADIO[id].keys || RADIO[id].text, `C : « ${id} » : texte du clavier`);
+    if (id === 'j1-ruin') {
+      await waitRadio(t, () => window.__xr2d.scene.glyphs.list.every((g) => g.lit && g.on.alpha > 0.99), 'C : ruine : glyphes allumés', { timeout: 4000 });
+      assertEq(await t.ev(() => window.__xr2d.scene.glyphs.list.length), 6, 'C : 6 glyphes dans la ruine');
+      await t.shot('ruin-glyphs');
+    }
+  }
+  // Revenir dans la fenêtre de la balise ne la rejoue pas ; puis l'arène (déclencheur « boss »).
+  await placeKai(t, 184, 11, 'C (retour avant la fenêtre de la balise)');
   await placeKai(t, 196, 11, 'C (de nouveau dans la fenêtre)');
-  await t.wait(300);
+  await t.ev(() => window.__xr2d.boss.enter());
+  await waitRadio(t, () => window.__said.includes('j1-boss'), 'C : « j1-boss » demandé à l’entrée dans l’arène', { timeout: 5000 });
+  await waitRadio(t, () => window.__xrShell.radio().played.includes('j1-boss'), 'C : « j1-boss » joué', { timeout: 25000 });
   r = await radio(t);
-  assertEq(r.windows, [['j1-start', 1], ['j1-ruin', 2], ['j1-beacon', 1]], 'C : fenêtres');
-  assert(!r.played.includes('j1-ruin') && !r.waiting.includes('j1-ruin'), `C : pas de message de la ruine (${fmt(r)})`);
-  assertEq(count(r, 'j1-beacon'), 1, 'C : message de la balise une seule fois');
-  assertEq([await said(t, 'j1-ruin'), await said(t, 'j1-beacon')], [0, 1], 'C : LevelEvents.say : ruine jamais, balise une fois');
+  assertEq(r.windows.filter((w) => w[1] !== 1), [], 'C : toutes les fenêtres jouées, aucune sautée');
+  const ORDER = ['tuto-overheat', ...TOUR.map((v) => v[0]), 'j1-boss'];
+  assertEq(await t.ev(() => window.__said.slice()), ORDER, 'C : LevelEvents.say : chaque message une fois, dans l’ordre du niveau');
+  assertEq(
+    r.played.filter((id) => id !== 'j1-start' && id !== 'tuto-move'),
+    ORDER,
+    'C : radio : tous joués, aucun chassé de la file',
+  );
 
   // ---------------------------------------------------------------- D. Pause et page cachée
+  await waitRadio(t, () => window.__xrShell.radio().phase === 'idle', 'D : radio au repos', { timeout: 20000 });
+  await push(t, ['j1-beacon']);
   await waitRadio(
     t,
     (sel) => {
@@ -315,10 +475,19 @@ export default async function (t) {
   // ---------------------------------------------------------------- F. Tutoriel terminé
   await start(t, '?touch=0&stage=j1');
   await waitRadio(t, () => window.__xrShell.radio().current === 'j1-start', 'F : message d’histoire toujours joué');
+  await spySay(t);
   await overheat(t, 'F');
-  await t.wait(1500);
+  await placeKai(t, 78, 11, 'F (point de contrôle 78)');
+  await placeKai(t, 195, 11, 'F (fenêtre de la balise)');
+  await waitRadio(t, () => window.__xrShell.radio().played.includes('j1-beacon'), 'F : message de la balise joué', { timeout: 25000 });
   r = await radio(t);
-  assert(r.current !== 'tuto-overheat' && count(r, 'tuto-overheat') === 0, `F : tutoriel muet après la réussite de j1 (${fmt(r)})`);
+  assertEq(r.played, ['j1-start', 'j1-beacon'], `F : tutoriel muet après la réussite de j1, histoire jouée (${fmt(r)})`);
+  assertEq(await t.ev(() => window.__said.slice()), ['tuto-overheat', 'tuto-checkpoint', 'j1-beacon'], 'F : messages demandés par le niveau (la radio filtre)');
+  assertEq(
+    r.windows,
+    r.windows.map((w) => [w[0], w[0] === 'j1-start' || w[0] === 'tuto-move' || w[0] === 'j1-beacon' ? 1 : 2]),
+    'F : fenêtres franchies par téléportation : sautées',
+  );
 
   // ---------------------------------------------------------------- G. Mise en page
   const SIZES = [
@@ -404,4 +573,44 @@ export default async function (t) {
     assert(slides.some((s) => !s[0]) && slides.some((s) => s[0]), `${tag} : bulle cachée puis rouverte (${fmt(slides)})`);
     for (const [on, props] of slides) assert(props.includes('top'), `${tag} : messages ${on ? 'descendus' : 'remontés'} sans glisser (${fmt(slides)})`);
   }
+
+  // ---------------------------------------------------------------- H. j3 : radio brouillée
+  await t.page.setViewportSize({ width: 844, height: 390 });
+  await start(t, '?touch=0&stage=j3');
+  const J3 = [
+    ['j3-start', 8, 11],
+    ['j3-pits', 34, 11],
+    ['j3-spores', 102, 11],
+    ['j3-signal', 131, 11],
+    ['j3-heart', 148, 11],
+  ];
+  const windowsH = await t.ev(() => window.__xr2d.scene.levelEvents.windows.map((w) => [w.id, w.col0, w.col1]));
+  assertEq(windowsH.map((w) => w[0]), J3.map((v) => v[0]), 'H : messages de j3 dans l’ordre du niveau');
+  await spySay(t);
+  for (const [id, col, row] of J3) {
+    const win = windowsH.find((w) => w[0] === id);
+    assert(col >= win[1] && col <= win[2], `H : « ${id} » : colonne ${col} dans sa fenêtre ${win[1]}-${win[2]}`);
+    // Le message du départ est demandé dès l'arrivée, avant l'espion.
+    if (id !== 'j3-start') {
+      await placeKai(t, col, row, `H (${id})`);
+      await waitRadio(t, (m) => window.__said.filter((x) => x === m).length === 1, `H : « ${id} » demandé (colonne ${col})`, { arg: id, timeout: 5000 });
+    }
+    const shown = await waitRadio(
+      t,
+      ([m, sel]) => {
+        const i = window.__xrShell.radio();
+        const b = document.querySelector(sel);
+        return i.current === m && b && !b.classList.contains('is-hidden') ? { text: i.text, mood: b.dataset.mood, speaker: b.dataset.speaker } : false;
+      },
+      `H : « ${id} » affiché`,
+      { arg: [id, BUBBLE], timeout: 25000 },
+    );
+    assertEq(shown, { text: RADIO[id].keys || RADIO[id].text, mood: 'scrambled', speaker: 'luma' }, `H : « ${id} » : radio brouillée, texte du clavier`);
+    await t.shot(`j3-${id}`);
+  }
+  await waitRadio(t, () => window.__xrShell.radio().phase === 'idle', 'H : radio au repos', { timeout: 20000 });
+  r = await radio(t);
+  assertEq(r.played, J3.map((v) => v[0]), 'H : tous joués dans l’ordre, aucun chassé de la file');
+  assertEq(await t.ev(() => window.__said.slice()), J3.slice(1).map((v) => v[0]), 'H : LevelEvents.say : chaque message une fois');
+  assertEq(r.windows.filter((w) => w[1] !== 1), [], 'H : toutes les fenêtres jouées');
 }

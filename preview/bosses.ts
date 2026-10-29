@@ -89,6 +89,7 @@ class BossScene extends Phaser.Scene {
     } else if (view === 'beetle') {
       build('beetleTitan');
       build('beetleTitanCracked');
+      build('titanRock');
     } else if (view === 'whale') {
       for (const id of ['whaleBody', 'whaleHeart', 'whaleTentacle'] as const) build(id, grey);
       build('whaleSpot');
@@ -277,6 +278,11 @@ class BossScene extends Phaser.Scene {
     this.laser(m, 130);
     this.place('beetleTitan', undefined, 4, 1190, GROUND, 'charge');
     this.kai(1440, GROUND, true);
+    // Phase 2 : cailloux en chute et leur marque d'annonce au sol.
+    this.place('titanRock', undefined, 0, 1440, GROUND - 140, 'caillou');
+    this.place('titanRock', undefined, 2, 1440, GROUND, undefined, 1, DEPTH.items);
+    this.place('titanRock', undefined, 1, 520, GROUND - 120);
+    this.place('titanRock', undefined, 2, 520, GROUND, undefined, 1, DEPTH.items);
   }
 
   // ------------------------------------------------------------ Méduse-baleine dans son arène

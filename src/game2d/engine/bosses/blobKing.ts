@@ -1,30 +1,34 @@
 import * as Phaser from 'phaser';
 import { BLOB_POSE, BLOB_WAVE, BOSS_SHEETS } from '../../art/draw/bosses';
 import type { BossBox, BossFrameBoxes, BossSheet } from '../../art/draw/bosses';
-import { DEPTH } from '../../constants';
+import { DEPTH, TILE } from '../../constants';
 import type { PlatformScene } from '../PlatformScene';
 import type { Player } from '../Player';
 import type { Boss, BossSpot, BossState } from './types';
 
 // Blob-roi, mini-boss du niveau 1 (plan 04, point 17) : il bondit vers Kaï ; à l'atterrissage, deux ondes filent au
-// ras du sol (à sauter) et il reste aplati, noyau exposé : seul moment où les tirs le blessent (ailleurs, la gelée
-// les arrête). À mi-vie (phase 2) : plus vif, il appelle 2 petits blobs (marcheurs de réserve, hors score).
-// Vaincu, il s'enfuit d'un grand bond. Mouvement à la main (sol plat de l'arène), sans corps Arcade.
+// ras du sol (à sauter) et il reste aplati, noyau exposé : seul moment où on peut le toucher, d'un tir ou d'un saut
+// sur le noyau (ailleurs, la gelée arrête les tirs). Une touche referme le noyau : il se relève. Après 2 touches
+// (phase 2) : plus vif, il appelle 2 petits blobs (marcheurs de réserve, hors score). Vaincu, il s'enfuit d'un
+// grand bond. Mouvement à la main (sol plat de l'arène), sans corps Arcade.
 
 const NORMAL = BOSS_SHEETS.blobKing;
 const RAGE = BOSS_SHEETS.blobKingRage;
 const WAVE = BOSS_SHEETS.blobWave;
 
-const MAX_LIFE = 24;
+/** 4 touches (plan 04, point 20), 2 par phase. */
+const MAX_LIFE = 4;
 /** Petits blobs appelés en phase 2 (marcheurs créés cachés au chargement : EnemyManager). */
 export const BLOB_KING_MINIONS = 2;
 
-// Réglages en ms et px, phase 1 puis phase 2 (à régler sur téléphone).
-const IDLE_MS = [850, 480];
-const SQUASH_MS = [430, 300];
-const LEAP_MS = [880, 720];
+// Réglages en ms et px, phase 1 puis phase 2. Une fenêtre (noyau aplati) = une touche au plus ; cycles ≈ 3,8 s puis
+// 2,8 s, plus le cri et la colère.
+const IDLE_MS = [1000, 600];
+const SQUASH_MS = [450, 320];
+const LEAP_MS = [880, 740];
 const LEAP_H = [220, 260];
-const FLAT_MS = [1500, 1150];
+/** Noyau exposé (aplati) : la fenêtre de tir. */
+const FLAT_MS = [1300, 1000];
 const WAVE_SPEED = [430, 560];
 const RISE_MS = 160;
 const INTRO_MS = 900;
@@ -33,10 +37,12 @@ const FLEE_SHAKE_MS = 700;
 const FLASH_MS = 90;
 /** Demi-largeur du corps : le boss reste entre les bornes. */
 const HALF_W = 76;
-/** Noyau écrasé par le dessus quand il est aplati. */
-const STOMP_DAMAGE = 3;
 /** Marge autour du noyau pour les tirs. */
 const WEAK_PAD = 6;
+/** Après une touche : noyau refermé, il reste aplati ce temps (clignotement), puis se relève. */
+const SHUT_MS = 250;
+/** Après une touche : les plombs de la même salve (ou tirs rapprochés) sont absorbés, sans seconde touche ni son. */
+const TOUCH_GRACE_MS = 120;
 const WAVE_COUNT = 4;
 const WAVE_HALF = 30;
 const WAVE_FRAME_MS = 90;
@@ -74,6 +80,8 @@ export class BlobKing implements Boss {
   x: number;
   y: number;
 
+  /** Hauteur à l'image précédente (rebond pendant un bond qui monte). */
+  private prevY = 0;
   private act: Act = 'none';
   private actMs = 0;
   private clock = 0;
@@ -85,6 +93,9 @@ export class BlobKing implements Boss {
   private flashMs = 0;
   private lastHitSfx = -1e9;
   private lastArmorSfx = -1e9;
+  /** Touché pendant cette fenêtre : noyau refermé. */
+  private shut = false;
+  private touchAt = -1e9;
   private leapFrom = 0;
   private leapTo = 0;
   private fleeX = 0;
@@ -130,8 +141,11 @@ export class BlobKing implements Boss {
     this.frame = BLOB_POSE.idle[0];
     this.flashMs = 0;
     this.fleeing = false;
+    this.shut = false;
+    this.touchAt = -1e9;
     this.x = this.spot.x;
     this.y = this.spot.feetY;
+    this.prevY = this.y;
     this.sprite.setVisible(true).setAlpha(1);
     this.glow.setVisible(false);
     this.clearWaves();
@@ -154,6 +168,7 @@ export class BlobKing implements Boss {
 
   update(dt: number, dtMs: number): void {
     this.clock += dtMs;
+    this.prevY = this.y;
     this.updateWaves(dt, dtMs);
     if (this.flashMs > 0) {
       this.flashMs -= dtMs;
@@ -174,6 +189,11 @@ export class BlobKing implements Boss {
 
   private get pi(): number {
     return this.phase > 1 ? 1 : 0;
+  }
+
+  /** Aplati et pas encore touché : la fenêtre où une touche compte. */
+  private get open(): boolean {
+    return this.state === 'fight' && this.act === 'flat' && !this.shut;
   }
 
   private idleFrame(): number {
@@ -265,10 +285,11 @@ export class BlobKing implements Boss {
     this.x = this.leapTo;
     this.frame = BLOB_POSE.flat;
     this.go('flat');
+    this.shut = false;
     this.spawnWave(-1);
     this.spawnWave(1);
     const scene = this.scene;
-    scene.cameras.main.shake(160, 0.006);
+    scene.fx.shake(0.6, 160);
     scene.playSfx('quake', 0.75);
     scene.vibrate(40);
     scene.fx.puff(this.x - 70, feet, 4);
@@ -282,25 +303,31 @@ export class BlobKing implements Boss {
     this.go('rage');
     const scene = this.scene;
     scene.playSfx('bossPhase');
-    scene.cameras.main.shake(300, 0.008);
+    scene.fx.shake(0.8, 300);
     scene.vibrate([40, 40, 60]);
     scene.fx.burst(this.x, this.y - 60, 0xd2ff28, 18);
   }
 
   private summonMinions(): void {
     const scene = this.scene;
+    const feet = this.spot.feetY;
     const dir = scene.player.x < this.x ? -1 : 1;
     for (let k = 0; k < BLOB_KING_MINIONS; k++) {
       const side = k % 2 === 0 ? -1 : 1;
-      const x = Math.min(this.spot.right - 40, Math.max(this.spot.left + 40, this.x + side * 90));
-      if (scene.enemies.summon(x, this.spot.feetY, dir, -620)) scene.fx.burst(x, this.spot.feetY - 30, 0x9dff5c, 8);
+      let x = Math.min(this.spot.right - 40, Math.max(this.spot.left + 40, this.x + side * 90));
+      // Pas dans une case pleine (champignon de l'arène) : une tuile plus près du boss, sinon pas de renfort.
+      if (scene.grid.solidAtPx(x, feet - 12)) x += x < this.x ? TILE : -TILE;
+      if (scene.grid.solidAtPx(x, feet - 12)) continue;
+      if (scene.enemies.summon(x, feet, dir, -620)) scene.fx.burst(x, feet - 30, 0x9dff5c, 8);
     }
   }
 
-  /** Dégâts directs (tirs sur le noyau, écrasement, aide de test) ; renvoie les dégâts pris. */
+  /** Touches directes (tir ou saut sur le noyau, aide de test) : noyau refermé ; renvoie les touches prises. */
   takeDamage(n: number): number {
-    if (this.state !== 'fight' || !(n > 0)) return 0;
-    this.life = Math.max(0, this.life - n);
+    const k = Math.min(this.life, Math.floor(n));
+    if (this.state !== 'fight' || !(k >= 1)) return 0;
+    this.life -= k;
+    this.touchAt = this.scene.clockMs;
     this.flashMs = FLASH_MS;
     this.glow.setVisible(true);
     const scene = this.scene;
@@ -308,11 +335,15 @@ export class BlobKing implements Boss {
       this.lastHitSfx = scene.clockMs;
       scene.playSfx('bossHit');
     }
-    if (this.life <= 1e-6) this.defeat();
+    if (this.life <= 0) this.defeat();
     else if (this.phase === 1 && this.life <= MAX_LIFE / 2) this.enterRage();
+    else if (this.act === 'flat') {
+      this.shut = true;
+      this.actMs = Math.max(this.actMs, FLAT_MS[this.pi] - SHUT_MS);
+    }
     // Les coups arrivent après update() (tirs, écrasement) : copie recalée avant le rendu de cette image.
     this.place();
-    return n;
+    return k;
   }
 
   private defeat(): void {
@@ -328,7 +359,7 @@ export class BlobKing implements Boss {
     const scene = this.scene;
     scene.playSfx('bossDefeat');
     scene.vibrate([60, 40, 120]);
-    scene.cameras.main.shake(380, 0.01);
+    scene.fx.shake(1, 380);
     scene.fx.burst(this.x, this.y - 60, 0x9dff5c, 26);
     scene.fx.burst(this.x, this.y - 60, 0xff4fd8, 14);
     scene.onBossBeaten();
@@ -412,21 +443,17 @@ export class BlobKing implements Boss {
     return this.sheet.boxes[this.frame];
   }
 
-  hitBy(x: number, y: number, dmg: number): number {
+  hitBy(x: number, y: number): number {
     if (this.state === 'gone') return -1;
     const b = this.boxes;
     const rx = (x - this.x) * this.facing;
     const ry = y - this.y;
-    if (inside(b.weak, rx, ry, WEAK_PAD)) {
-      if (this.state === 'fight' && this.act !== 'rage' && this.act !== 'intro') return this.takeDamage(dmg) || 0;
-      this.armorSfx();
-      return 0;
-    }
-    if (inside(b.armor, rx, ry, 0)) {
-      this.armorSfx();
-      return 0;
-    }
-    return -1;
+    const weak = inside(b.weak, rx, ry, WEAK_PAD);
+    if (!weak && !inside(b.armor, rx, ry, 0)) return -1;
+    if (weak && this.open) return this.takeDamage(1);
+    if (this.scene.clockMs - this.touchAt < TOUCH_GRACE_MS) return 1;
+    this.armorSfx();
+    return 0;
   }
 
   private armorSfx(): void {
@@ -466,7 +493,7 @@ export class BlobKing implements Boss {
 
   /**
    * Kaï retombe sur lui : rebond sur la gelée (couronne comprise : elle dépasse du corps au milieu) ; aplati,
-   * l'écrasement du noyau le blesse.
+   * l'écrasement du noyau est une touche.
    */
   stomp(p: Player): boolean {
     if (this.state !== 'fight' || p.body.velocity.y <= 0) return false;
@@ -487,12 +514,13 @@ export class BlobKing implements Boss {
     }
     if (top === Infinity) return false;
     const y = this.y + top;
-    if (p.feetY < y || p.prevBottom > y + 12) return false;
+    // Pieds au-dessus du dessus avant cette image : celui d'avant (le boss monte pendant un bond) ou l'actuel.
+    if (p.feetY < y || p.prevBottom > Math.max(y, this.prevY + top) + 12) return false;
     const scene = this.scene;
     p.bounce(scene.session ? scene.session.hooks.input.state.jump : false);
     scene.stompGraceMs = 140;
-    if (flat) {
-      this.takeDamage(STOMP_DAMAGE);
+    if (flat && this.open) {
+      this.takeDamage(1);
       scene.playSfx('stomp');
     } else {
       this.armorSfx();
@@ -533,6 +561,7 @@ export class BlobKing implements Boss {
       texture: this.sheet.key,
       facing: this.facing,
       flashing: this.glow.visible,
+      open: this.open,
       waves,
       visible: this.sprite.visible,
     };

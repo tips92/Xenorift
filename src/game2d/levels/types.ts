@@ -22,20 +22,56 @@ export interface LevelData {
   radio?: readonly LevelRadio[];
   /** Boss de l'arène (case 'M' entre les deux bornes '|') : obligatoire avec une arène, interdit sans. */
   boss?: BossId;
+  /**
+   * Arrivée de Kaï au départ 'P' : 'ship' = il sort de la Comète posée derrière lui (3 colonnes à gauche de P), qui
+   * repart aussitôt en orbite, à vide ; 'beam' = le faisceau de LUMA le dépose. Absent : il est déjà là (ancien
+   * format). Pas d'arrivée au départ d'un point de contrôle (?at=boss) ni à la réapparition.
+   */
+  start?: LevelStart;
+  /** Distance du gardien du monde dans le décor ('near' au niveau 2, 'looming' au niveau 3). Absent : 'far'. */
+  creature?: CreatureDistance;
+  /** Événements du décor (engine/levelEvents.ts), chacun joué au plus une fois par partie. */
+  events?: readonly LevelEvent[];
+  /** Temps de référence du bonus de temps (s) : (parTimeS - secondes de jeu) x TIME_BONUS_PER_S, s'il est positif. */
+  parTimeS: number;
 }
 
+export const LEVEL_STARTS = ['ship', 'beam'] as const;
+export type LevelStart = (typeof LEVEL_STARTS)[number];
+
+export const CREATURE_DISTANCES = ['far', 'near', 'looming'] as const;
+export type CreatureDistance = (typeof CREATURE_DISTANCES)[number];
+
 /** Événements de jeu qui peuvent déclencher un message (engine/levelEvents.ts). */
-export const RADIO_TRIGGERS = ['overheat', 'boss'] as const;
+export const RADIO_TRIGGERS = ['overheat', 'boss', 'checkpoint', 'door', 'rescue'] as const;
 export type RadioTrigger = (typeof RADIO_TRIGGERS)[number];
 
 /**
  * Message de la radio : `cols` [col0, col1] = quand Kaï (son centre) entre dans ces colonnes, sauté s'il les a
  * dépassées sans y passer (porte, téléportation) ; `on` = à la première fois que l'événement arrive
- * ('overheat' : première surchauffe de l'arme ; 'boss' : barrières de l'arène fermées, le combat commence).
+ * ('overheat' : première surchauffe de l'arme ; 'boss' : barrières de l'arène fermées, le combat commence ;
+ * 'checkpoint' : premier point de contrôle allumé ; 'door' : première porte franchie ; 'rescue' : Kaï parle au
+ * naufragé 'N', dans l'ordre de la liste : sa réplique, puis celle de LUMA qui le téléporte à bord).
  */
 export type LevelRadio =
   | { readonly id: RadioId; readonly cols: readonly [number, number] }
   | { readonly id: RadioId; readonly on: RadioTrigger };
+
+export const LEVEL_EVENT_KINDS = ['shadow', 'quake', 'spores'] as const;
+export type LevelEventKind = (typeof LEVEL_EVENT_KINDS)[number];
+
+/**
+ * Événement du décor, joué quand le centre de Kaï entre dans les colonnes `cols` [col0, col1] (sauté s'il les a
+ * dépassées sans y passer : porte, téléportation) :
+ * - 'shadow' : l'ombre de la créature (LevelData.creature) passe sur la vue ;
+ * - 'quake' : secousse qui abat le tronc dont la souche est la case `trunk` [col, ligne] (vide, sur un sol plein) :
+ *   il tombe vers la droite et devient un obstacle plein, souche (1 case) et fût (3 x 2 cases à sa droite) ;
+ * - 'spores' : pluie de spores sur les colonnes `rain` [col0, col1], devant Kaï, chacune annoncée par une tache au sol.
+ */
+export type LevelEvent =
+  | { readonly kind: 'shadow'; readonly cols: readonly [number, number] }
+  | { readonly kind: 'quake'; readonly cols: readonly [number, number]; readonly trunk: readonly [number, number] }
+  | { readonly kind: 'spores'; readonly cols: readonly [number, number]; readonly rain: readonly [number, number] };
 
 /**
  * Légende des caractères de la carte.
@@ -58,7 +94,8 @@ export const LEGEND = {
   '1': 'bloc bonus : vitesse (course et accélérations ×1,35 pendant 12 s)',
   '2': 'bloc bonus : bouclier',
   '3': 'bloc bonus : cadence (délai entre tirs et chauffe par tir ×0,6 pendant 12 s)',
-  '=': 'plateforme traversable par le dessous',
+  '=': "plateforme traversable par le dessous (Jungle : branche, liane ou passerelle, une famille par rangée, tirée d'après la position)",
+  o: "champignon (case pleine) : Kaï qui s'y pose rebondit (MUSHROOM_BOUNCE_TILES, plus haut en tenant Saut)",
   '^': 'pics / acide : retire 1 cœur et repousse le joueur',
   c: 'cristal',
   w: 'marcheur (patrouille, fait demi-tour au bord ou contre un mur)',
@@ -74,7 +111,9 @@ export const LEGEND = {
   D: 'porte (1x2 tuiles : la case et celle du dessus, posée sur un sol) ; par paires, voir plus haut',
   '|': "borne d'arène de boss, posée sur le sol, colonne vide au-dessus : deux par arène, de 16 à 22 colonnes bornes comprises, sol continu entre elles, un 'K' dans les 6 colonnes avant la première ; barrières fermées de la borne jusqu'en haut pendant le combat, rouvertes par la victoire",
   M: "boss de l'arène (LevelData.boss), un seul, posé sur le sol entre les deux bornes '|'",
+  N: "naufragé du monde (Tess dans la Jungle), au plus un, posé sur le sol, sa capsule sur les 2 cases vides à sa gauche ; Haut près de lui : il parle, LUMA le téléporte à bord (il rejoint l'équipage à la réussite : récompense 'crew' de l'étape) ; une porte 'D' voisine (à 1 colonne, même ligne) doit être le seul passage vers la sortie : l'appui Haut devant elle le secourt d'abord",
   '*': 'décor sans collision',
+  G: "glyphe astréen : décor gravé sur le mur du fond d'une salle close (case vide), qui s'allume quand Kaï approche",
 } as const;
 
 export type LegendChar = keyof typeof LEGEND;

@@ -1,5 +1,6 @@
 // Arrière-plan et vol 3D (f1), commandes tactiles :
-//  A. Jungle (j1) gagnée → résultats : le canvas 2D est masqué derrière l'écran de résultats ; SUIVANT → hangar →
+//  A. Jungle gagnée (le niveau qui précède f1, lu dans __xrShell.info().stages : j2) → résultats : le canvas 2D est
+//     masqué derrière l'écran de résultats ; SUIVANT → hangar →
 //     DÉCOLLER → carte d'intro du Vol 1, page cachée 3,5 s : aucune étape lancée ; au retour, le vol démarre EN PAUSE (un seul
 //     menu, un seul canvas visible, compte à rebours et chrono figés) ; REPRENDRE → le vol démarre.
 //  B. En vol, joystick + TURBO tenus puis page cachée : menu Pause, AudioContext suspendu, joystick et TURBO
@@ -8,7 +9,7 @@
 //  C. Pause Capacitor seule : progression figée ; après « resume », toujours en pause ; REPRENDRE → ça repart.
 import { assert, assertEq, center, fmt, info3d, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
 import { canvases } from '../lib/gl.mjs';
-import { nextViaHangar } from '../lib/core.mjs';
+import { nextViaHangar, stageBefore } from '../lib/core.mjs';
 import { touches } from '../lib/touch.mjs';
 import {
   cap,
@@ -62,12 +63,15 @@ async function visibleCanvases(t) {
 
 export default async function (t) {
   await instrument(t);
-  await t.goto('?touch=1&unlock=1&stage=j1');
+  await t.goto('?touch=1&unlock=1');
+  await waitFor(t, () => !!window.__xrShell, { timeout: 20000, label: 'coquille chargée' });
+  const jungle = await stageBefore(t, 'f1');
+  await t.goto(`?touch=1&unlock=1&stage=${jungle}`);
   await waitFor2dPlay(t);
   await t.key('KeyZ', 40); // premier geste : déblocage du son
   await waitAudio(t, 'running', 'son actif après le premier geste');
 
-  // ---------------------------------------------------------------- A. j1 → résultats → intro f1 cachée
+  // ---------------------------------------------------------------- A. Jungle → résultats → intro f1 cachée
   await t.ev(() => window.__xr2d.win());
   await waitForScreen(t, 'results', { timeout: 25000 });
   const onResults = await visibleCanvases(t);

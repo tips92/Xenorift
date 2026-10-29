@@ -19,6 +19,7 @@ import {
   sphereGrad,
   wrapX,
 } from '../util';
+import { drawWhaleBody } from './bosses';
 
 // Textures de l'arrière-plan (préfixe 'bg-<thème>-'), générées une fois puis gardées en cache.
 
@@ -48,6 +49,8 @@ export function bgKey(theme: ThemeId, name: string): string {
 
 /** Points d'attache des tentacules sous la méduse-baleine (coordonnées dans la frame 'whale'). */
 export const WHALE = { w: 460, h: 240, tentacles: [130, 170, 205, 240, 275, 310, 350], tentY: 168 } as const;
+/** Part de gris du Vide sur la méduse-baleine lointaine (frame 'whale', drawWhaleBody de bosses.ts). */
+export const WHALE_GREY_FAR = 0.25;
 
 /** Somme de sinus périodique sur W (lignes de crête qui se raccordent). */
 function wave(x: number, W: number, terms: [number, number, number][]): number {
@@ -845,96 +848,6 @@ function drawDust(ctx: Ctx, w: number, h: number): void {
   ctx.fillRect(0, 0, w, h);
 }
 
-/** Méduse-baleine géante (tournée vers la gauche). */
-function drawWhale(ctx: Ctx, pal: ThemePalette): void {
-  const { w, h } = WHALE;
-  // Nageoire pectorale (derrière)
-  const fin = new Path2D();
-  fin.moveTo(150, 150);
-  fin.bezierCurveTo(120, 190, 150, 230, 200, 228);
-  fin.bezierCurveTo(190, 200, 205, 175, 215, 152);
-  fin.closePath();
-  ctx.fillStyle = 'rgba(120,110,255,0.35)';
-  ctx.fill(fin);
-  ctx.strokeStyle = 'rgba(160,250,255,0.5)';
-  ctx.lineWidth = 2;
-  ctx.stroke(fin);
-  // Corps : tête arrondie à gauche, queue en voile à droite
-  const body = new Path2D();
-  body.moveTo(30, 120);
-  body.bezierCurveTo(28, 60, 110, 30, 210, 36);
-  body.bezierCurveTo(300, 40, 360, 70, 400, 100);
-  body.bezierCurveTo(420, 80, 445, 60, 455, 56);
-  body.bezierCurveTo(450, 90, 440, 120, 430, 136);
-  body.bezierCurveTo(445, 150, 452, 175, 450, 192);
-  body.bezierCurveTo(430, 175, 410, 160, 392, 150);
-  body.bezierCurveTo(340, 168, 260, 172, 200, 170);
-  body.bezierCurveTo(110, 168, 32, 160, 30, 120);
-  body.closePath();
-  const g = ctx.createRadialGradient(170, 90, 10, 220, 110, 260);
-  g.addColorStop(0, 'rgba(210,200,255,0.9)');
-  g.addColorStop(0.35, 'rgba(130,110,255,0.75)');
-  g.addColorStop(0.75, 'rgba(70,50,190,0.65)');
-  g.addColorStop(1, 'rgba(40,20,120,0.55)');
-  softDot(ctx, 220, 110, 230, '#7a6aff', 0.25);
-  ctx.fillStyle = g;
-  ctx.fill(body);
-  ctx.save();
-  ctx.clip(body);
-  // Organes internes lumineux
-  softDot(ctx, 200, 110, 60, pal.bioB, 0.35);
-  softDot(ctx, 270, 115, 40, pal.bioA, 0.25);
-  // Ventre plus sombre et rayures
-  ctx.fillStyle = 'rgba(30,10,90,0.35)';
-  ctx.beginPath();
-  ctx.ellipse(220, 175, 220, 40, 0, 0, TAU);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(180,240,255,0.25)';
-  ctx.lineWidth = 2;
-  for (let k = 0; k < 8; k++) {
-    const x = 90 + k * 34;
-    ctx.beginPath();
-    ctx.moveTo(x, 150);
-    ctx.quadraticCurveTo(x + 10, 120, x + 4, 95);
-    ctx.stroke();
-  }
-  ctx.restore();
-  // Liseré lumineux
-  ctx.strokeStyle = 'rgba(160,250,255,0.75)';
-  ctx.lineWidth = 2.5;
-  ctx.stroke(body);
-  // Rangées de points bioluminescents
-  for (let k = 0; k < 16; k++) {
-    const t = k / 15;
-    const x = 70 + t * 320;
-    const y = 70 - Math.sin(t * Math.PI) * 26 + t * 30;
-    glowDot(ctx, x, y + 12, 2.2 - t, pal.bioA);
-  }
-  for (let k = 0; k < 10; k++) {
-    const x = 100 + k * 28;
-    glowDot(ctx, x, 140 + Math.sin(k) * 3, 1.5, pal.bioB);
-  }
-  // Œil
-  glowDot(ctx, 70, 108, 4, '#ffffff');
-  softDot(ctx, 70, 108, 14, pal.bioA, 0.6);
-  // Jupe festonnée (méduse) sous le corps
-  const skirt = new Path2D();
-  skirt.moveTo(90, 160);
-  for (let k = 0; k <= 10; k++) {
-    const x = 90 + k * 30;
-    skirt.quadraticCurveTo(x + 15, 188 + (k % 2) * 6, x + 30, 166);
-  }
-  skirt.lineTo(390, 150);
-  skirt.closePath();
-  ctx.fillStyle = 'rgba(150,130,255,0.35)';
-  ctx.fill(skirt);
-  ctx.strokeStyle = 'rgba(190,250,255,0.55)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke(skirt);
-  void w;
-  void h;
-}
-
 function drawTentacle(ctx: Ctx, w: number, h: number, pal: ThemePalette): void {
   softDot(ctx, w / 2, h / 2, w / 2, pal.bioA, 0.45);
   const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, h * 0.42);
@@ -1140,7 +1053,8 @@ const BG_STYLES: Record<ThemeId, BgStyle> = {
       { name: 'moonB', w: 110, h: 110, draw: (c) => planetMoon(c, 55, 55, 32, '#ffe0f6', '#d07ad0', '#4a1a5a', '#ff7ae0', 12) },
     ],
     fx: (pal) => [
-      { name: 'whale', w: WHALE.w, h: WHALE.h, draw: (c) => drawWhale(c, pal) },
+      // Méduse-baleine au loin ('far'), un peu tachée par le Vide (parallax.ts : 'near' et 'looming' à part).
+      { name: 'whale', w: WHALE.w, h: WHALE.h, draw: (c) => drawWhaleBody(c, 1, WHALE_GREY_FAR, { pal }) },
       { name: 'tent', w: 22, h: 22, draw: (c, w, h) => drawTentacle(c, w, h, pal) },
       { name: 'flyer0', w: 28, h: 18, draw: (c, w, h) => drawTinyFlyer(c, w, h, true, pal) },
       { name: 'flyer1', w: 28, h: 18, draw: (c, w, h) => drawTinyFlyer(c, w, h, false, pal) },

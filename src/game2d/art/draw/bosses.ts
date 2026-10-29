@@ -67,6 +67,7 @@ export type BossSheetId =
   | 'blobWave'
   | 'beetleTitan'
   | 'beetleTitanCracked'
+  | 'titanRock'
   | 'whaleBody'
   | 'whaleHeart'
   | 'whaleTentacle'
@@ -1347,6 +1348,83 @@ function beetleBoxes(cracked: boolean): BossFrameBoxes[] {
   return out;
 }
 
+/** Cailloux de la phase 2 du titan : images de 96x64, origine au centre ; rayon du caillou. */
+export const TITAN_ROCK = { w: 96, h: 64, r: 21 } as const;
+/** 0 et 1 : caillou (deux formes) ; 2 : marque d'annonce au sol (posée sur la surface). */
+export const ROCK_POSE = { rocks: [0, 1], mark: 2 } as const;
+
+/** Caillou détaché par le choc du titan contre la barrière (sol de la Jungle, mousse dessus), ou sa marque au sol. */
+export function drawTitanRock(ctx: Ctx, theme: ThemeId, frame: number): void {
+  const P = PALETTES[theme];
+  const cx = TITAN_ROCK.w / 2;
+  const cy = TITAN_ROCK.h / 2;
+  if (frame === ROCK_POSE.mark) {
+    // Ambre (les spores de la méduse-baleine sont annoncées en vert) : ellipse en tirets, cœur vif, croix de visée.
+    const col = '#ffb347';
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1, 0.24);
+    softDot(ctx, 0, 0, 44, col, 0.5);
+    ctx.restore();
+    ctx.setLineDash([9, 6]);
+    ctx.strokeStyle = rgba(col, 0.95);
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 40, 10, 0, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    glow(ctx, col, 10, () => {
+      ctx.strokeStyle = '#ffe2b0';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 20, 5, 0, 0, TAU);
+      ctx.stroke();
+    });
+    ctx.strokeStyle = '#fff1d6';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const s of [-1, 1]) {
+      ctx.moveTo(cx + s * 28, cy);
+      ctx.lineTo(cx + s * 36, cy);
+    }
+    ctx.stroke();
+    glowDot(ctx, cx, cy, 2.4, '#ffffff');
+    return;
+  }
+  const r = rng(frame === 0 ? 17 : 41);
+  const R = TITAN_ROCK.r;
+  const pts: number[] = [];
+  const n = 7;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU + (r() - 0.5) * 0.5;
+    const d = R * (0.82 + r() * 0.2);
+    pts.push(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.88);
+  }
+  const rock = poly(pts);
+  // Halo ambré, comme sa marque au sol : il se détache du ciel violet.
+  softDot(ctx, cx, cy, R + 10, '#ffb347', 0.45);
+  fillOutlined(ctx, rock, sphereGrad(ctx, cx, cy, R, mix(P.soilSpeck, '#ffffff', 0.25), P.soilSpeck, P.soil), OUT, 3);
+  ctx.save();
+  ctx.clip(rock);
+  // Mousse lumineuse sur le dessus, éclats plus clairs, fissure.
+  ctx.fillStyle = P.surface;
+  ctx.fill(ellipse(cx - 3, cy - R * 0.95, R * 0.95, R * 0.42, -0.15));
+  ctx.fillStyle = rgba(P.surfaceLight, 0.7);
+  ctx.fill(ellipse(cx - 7, cy - R * 0.98, R * 0.5, R * 0.18, -0.15));
+  for (let i = 0; i < 4; i++) softDot(ctx, cx + (r() - 0.5) * R * 1.2, cy + r() * R * 0.6, 2.2, P.soilSpeck, 0.9);
+  ctx.strokeStyle = OUT;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cx + (frame === 0 ? 6 : -8), cy - 4);
+  ctx.lineTo(cx + (frame === 0 ? 1 : -3), cy + 4);
+  ctx.lineTo(cx + (frame === 0 ? 7 : -9), cy + 12);
+  ctx.stroke();
+  ctx.restore();
+  rimLight(ctx, rock, rgba('#ffd9a0', 0.8), 2.5, -2, -3);
+  glowDot(ctx, cx + (frame === 0 ? -9 : 8), cy + 5, 1.8, P.vein);
+}
+
 // ================================================================ Méduse-baleine (gardien du niveau 3)
 
 /**
@@ -2154,6 +2232,17 @@ export const BOSS_SHEETS: Readonly<Record<BossSheetId, BossSheet>> = {
     body: tb(6, 8, 60, 54.5),
     draw: (ctx, theme, i) => drawBeetleTitan(ctx, theme, i, { cracked: true }),
   },
+  titanRock: {
+    key: 'boss-titan-rock',
+    w: TITAN_ROCK.w,
+    h: TITAN_ROCK.h,
+    count: 3,
+    originX: 0.5,
+    originY: 0.5,
+    frames: { rocks: ROCK_POSE.rocks, mark: ROCK_POSE.mark },
+    boxes: [0, 1, 2].map((i) => ({ weak: NONE, hurt: i === ROCK_POSE.mark ? NONE : [box(-18, -18, 36, 36)], armor: NONE })),
+    draw: (ctx, theme, i) => drawTitanRock(ctx, theme, i),
+  },
   whaleBody: {
     key: 'boss-whale',
     w: WW,
@@ -2217,7 +2306,7 @@ export const BOSS_SHEETS: Readonly<Record<BossSheetId, BossSheet>> = {
 /** Planches de chaque boss, à générer à l'arrivée dans l'arène (ou au chargement du niveau). */
 export const BOSS_ART = {
   blobKing: ['blobKing', 'blobKingRage', 'blobWave'],
-  beetleTitan: ['beetleTitan', 'beetleTitanCracked'],
+  beetleTitan: ['beetleTitan', 'beetleTitanCracked', 'titanRock'],
   whale: ['whaleBody', 'whaleHeart', 'whaleTentacle', 'whaleSpot'],
 } as const satisfies Record<string, readonly BossSheetId[]>;
 

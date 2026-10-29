@@ -6,14 +6,32 @@
 // porte de sa paire, dans les deux sens). Les plafonds et les murs bloquent les sauts. Le faisceau d'une balise
 // 'L' happe Kaï à toute hauteur : le parcours s'y arrête, et un trajet qui traverse sa colonne au-dessus de son
 // sol mène à la balise (on ne la franchit pas). Les bornes d'arène '|' sont vides : la barrière ne se ferme que
-// pendant le combat, que la victoire termine en rouvrant les deux. Un second parcours, avec le double saut
-// (compétence apprise : loadout.skills.doubleJump) depuis toutes les positions déjà atteintes, repère les
-// « secrets de compétence ».
+// pendant le combat, que la victoire termine en rouvrant les deux. Champignon 'o' (case pleine) : on ne s'y tient
+// pas, toute arrivée au-dessus relance Kaï (Player.mushroomBounce) : depuis cette position, seuls les arcs
+// « champignon » de MUSHROOM_RULES (Saut tenu, ≈ 8 tuiles), comme le moteur ; sous un plafond, le rebond bute et
+// retombe plus tôt (bounceTravel). Un second parcours, avec le double saut (compétence apprise :
+// loadout.skills.doubleJump) depuis toutes les positions déjà atteintes, repère les « secrets de compétence ». Ces
+// règles, prudentes, disent qu'une case s'atteint ; pour prouver le contraire (sauvetage garanti du naufragé), une
+// borne haute (ReachGraph `bound` : saut puis double saut à leur hauteur exacte, bonus de vitesse).
 
-import { DESIGN_RULES } from '../../src/game2d/constants.ts';
+import {
+  DESIGN_RULES,
+  DOUBLE_JUMP_HEIGHT_TILES,
+  DOUBLE_JUMP_VELOCITY,
+  GRAVITY,
+  JUMP_HEIGHT_TILES,
+  JUMP_VELOCITY,
+  MUSHROOM_BOUNCE_HELD_TILES,
+  MUSHROOM_BOUNCE_TILES,
+  MUSHROOM_RULES,
+  PLAYER_BODY,
+  RUN_SPEED,
+  SPEED_BOOST_MUL,
+  TILE,
+} from '../../src/game2d/constants.ts';
 
 /** Cases pleines (les bornes '|' n'y sont pas : la barrière n'existe que pendant le combat). */
-export const SOLID_CHARS = '#B?123';
+export const SOLID_CHARS = '#B?123o';
 
 /** Accessibilité : 0 = non atteinte, 1 = atteinte normalement, 2 = seulement avec le double saut (compétence). */
 export const REACH_NONE = 0;
@@ -27,8 +45,22 @@ const CRYSTAL_UP_DJ = 8;
 /** Bloc le plus haut frappé par dessous (la tête atteint le bas de la ligne r-5). */
 const HIT_UP = 5;
 const HIT_UP_DJ = 8;
+/** Depuis un champignon (rebond de 8 tuiles, 11 avec le double saut ; tête à ≈ 8,1 lignes) : cristaux et blocs. */
+const MUSH_UP = 8;
+const MUSH_UP_DJ = 11;
+/** Arcs du double saut au sommet d'un rebond (secrets) : seulement avec cette hauteur libre au-dessus. */
+const BOUNCE_ROOM_DJ = MUSH_UP_DJ;
+/** Rebond (6,5 ou 8 tuiles, au choix du joueur) : pieds au-dessus de l'arrivée au sommet, course horizontale
+ *  au-delà de l'écart (tuiles). Mêmes marges que le saut normal : 4,2 - 3 au plus haut, 5,46 - 4 à plat. */
+const BOUNCE_TILES = [MUSHROOM_BOUNCE_TILES, MUSHROOM_BOUNCE_HELD_TILES] as const;
+const BOUNCE_CLEAR = JUMP_HEIGHT_TILES - DESIGN_RULES.maxRise;
+const BOUNCE_GAP_MARGIN = 1.5;
 /** Positions par plateforme mobile dans le graphe : 3 cases x 4 décalages (0..3 tuiles). */
 const MOVER_NODES = 12;
+/** Borne haute (ReachGraph `bound`) : montée la plus haute, saut tenu (ou rebond tenu) puis double saut, sans marge. */
+const BOUND_RISE = Math.floor(JUMP_HEIGHT_TILES + DOUBLE_JUMP_HEIGHT_TILES);
+const BOUND_RISE_MUSH = Math.floor(MUSHROOM_BOUNCE_HELD_TILES + DOUBLE_JUMP_HEIGHT_TILES);
+const MUSH_HELD_VELOCITY = Math.sqrt(2 * GRAVITY * MUSHROOM_BOUNCE_HELD_TILES * TILE);
 
 export interface Mover {
   col: number;
@@ -97,9 +129,14 @@ export class LevelGrid {
     return !this.hazard(c, r) && !this.hazard(c, r - 1);
   }
 
-  /** Kaï peut-il se tenir debout dans cette case sur un appui fixe ? */
+  /** Kaï peut-il se tenir debout dans cette case sur un appui fixe ? (Sur un champignon : il y rebondit.) */
   standable(c: number, r: number): boolean {
     return this.roomFor(c, r) && this.supported(c, r);
+  }
+
+  /** Position juste au-dessus d'un champignon : Kaï y arrive, et rebondit aussitôt. */
+  bounce(c: number, r: number): boolean {
+    return this.ch(c, r + 1) === 'o';
   }
 
   /** Même découpage que le moteur : 'mmm' / 'vvv' consécutifs = une plateforme de 3 tuiles. */
@@ -155,6 +192,25 @@ function jumpAllowed(rise: number, gap: number, dj: boolean): boolean {
   return gap <= 6;
 }
 
+/** Rebond sur un champignon (MUSHROOM_RULES, Saut tenu ; double saut au sommet : secrets de compétence). */
+function mushroomAllowed(rise: number, gap: number, dj: boolean): boolean {
+  const M = MUSHROOM_RULES;
+  if (!dj) {
+    if (rise > M.maxRise) return false;
+    if (rise >= 5) return gap <= M.maxGapUp6;
+    if (rise >= 3) return gap <= M.maxGapUp4;
+    if (rise >= 1) return gap <= M.maxGapUp2;
+    if (rise >= -1) return gap <= M.maxGapFlat;
+    return gap <= M.maxGapDown;
+  }
+  if (rise > 9) return false;
+  if (rise >= 7) return gap <= 2;
+  if (rise >= 4) return gap <= 3;
+  if (rise >= 1) return gap <= 5;
+  if (rise >= -1) return gap <= 6;
+  return gap <= 7;
+}
+
 /** Le couloir du saut est-il libre (plafonds, murs) ? Plateformes traversables = libres. */
 function corridorClear(g: LevelGrid, c0: number, r0: number, c1: number, r1: number, gap: number): boolean {
   const rise = r0 - r1;
@@ -173,16 +229,95 @@ function corridorClear(g: LevelGrid, c0: number, r0: number, c1: number, r1: num
   return true;
 }
 
-/** Marche / saut / chute permis entre deux positions debout ? */
-function edgeAllowed(g: LevelGrid, c0: number, r0: number, c1: number, r1: number, dj: boolean): boolean {
+/**
+ * Lignes libres au-dessus de r0 dans le couloir d'un rebond de (c0, r0) vers (c1, r1), `max` au plus : colonne de
+ * départ, colonnes traversées (au-dessus de la plus haute des deux lignes) et d'arrivée (au-dessus de r1). Le rebond
+ * monte droit : la tête bute sous la ligne r0 - room - 1. Négatif : couloir bouché.
+ */
+function bounceRoom(g: LevelGrid, c0: number, r0: number, c1: number, r1: number, max: number): number {
+  let room = 0;
+  while (room < max && !g.solid(c0, r0 - room - 1)) room++;
+  if (c1 === c0) return room;
+  const hi = Math.min(r0, r1);
+  const dir = c1 > c0 ? 1 : -1;
+  for (let c = c0 + dir; ; c += dir) {
+    const base = c === c1 ? r1 : hi;
+    for (let r = base; r >= r0 - room; r--) {
+      if (g.solid(c, r)) {
+        room = r0 - r - 1;
+        break;
+      }
+    }
+    if (c === c1 || room < 0) return room;
+  }
+}
+
+/**
+ * Course horizontale (tuiles, à RUN_SPEED) d'un rebond jusqu'à une arrivée `rise` lignes plus haut, la tête butant
+ * sous un plafond `room` lignes au-dessus (montée puis chute depuis l'arrêt, comme le moteur) ; le meilleur des
+ * deux rebonds. -1 : sommet trop bas pour l'arrivée.
+ */
+function bounceTravel(room: number, rise: number): number {
+  const ceil = room * TILE - (PLAYER_BODY.height - TILE);
+  const land = rise * TILE;
+  let best = -1;
+  for (const tiles of BOUNCE_TILES) {
+    const apex = tiles * TILE;
+    const top = Math.min(ceil, apex);
+    if (top - land < (rise > 0 ? BOUNCE_CLEAR * TILE : 0)) continue;
+    const v = Math.sqrt(2 * GRAVITY * apex);
+    const up = top < apex ? (v - Math.sqrt(v * v - 2 * GRAVITY * top)) / GRAVITY : v / GRAVITY;
+    const down = Math.sqrt((2 * (top - land)) / GRAVITY);
+    best = Math.max(best, ((up + down) * RUN_SPEED) / TILE);
+  }
+  return best;
+}
+
+/** Arc d'un rebond permis : MUSHROOM_RULES, écourtées par le plafond du couloir (double saut : couloir entier). */
+function bounceAllowed(g: LevelGrid, c0: number, r0: number, c1: number, r1: number, dj: boolean): boolean {
+  const rise = r0 - r1;
+  const gap = c1 === c0 ? 0 : Math.abs(c1 - c0) - 1;
+  const room = bounceRoom(g, c0, r0, c1, r1, BOUNCE_ROOM_DJ);
+  if (room < 0) return false;
+  if (mushroomAllowed(rise, gap, false)) {
+    const travel = bounceTravel(room, rise);
+    if (travel >= 0 && (c1 === c0 || travel >= gap + BOUNCE_GAP_MARGIN)) return true;
+  }
+  return dj && room >= BOUNCE_ROOM_DJ && mushroomAllowed(rise, gap, true);
+}
+
+/**
+ * Borne haute de l'écart (colonnes vides) d'un saut lancé à `v` suivi d'un double saut, vers une arrivée `rise`
+ * lignes plus haut : en l'air au plus 2 (v + v2) / g (double saut au plus tard), plus la chute sous le départ, à la
+ * vitesse du bonus, le corps débordant des deux appuis, et une colonne de plus (temps de grâce au bord).
+ */
+function boundGap(v: number, rise: number): number {
+  const t = (2 * (v + DOUBLE_JUMP_VELOCITY)) / GRAVITY + (rise < 0 ? Math.sqrt((-2 * rise * TILE) / GRAVITY) : 0);
+  return Math.floor((RUN_SPEED * SPEED_BOOST_MUL * t + PLAYER_BODY.width) / TILE) + 1;
+}
+
+/** Arc permis par la borne haute (saut ou rebond tenu, double saut ; murs et plafonds comme les autres arcs). */
+function boundAllowed(g: LevelGrid, c0: number, r0: number, c1: number, r1: number, bounce: boolean): boolean {
+  const rise = r0 - r1;
+  const gap = c1 === c0 ? 0 : Math.abs(c1 - c0) - 1;
+  if (bounce) return rise <= BOUND_RISE_MUSH && gap <= boundGap(MUSH_HELD_VELOCITY, rise) && bounceRoom(g, c0, r0, c1, r1, 1) >= 0;
+  if (rise > BOUND_RISE || gap > boundGap(JUMP_VELOCITY, rise)) return false;
+  return c1 === c0 || corridorClear(g, c0, r0, c1, r1, gap);
+}
+
+/** Marche / saut / chute permis entre deux positions debout ? `bounce` : départ d'un champignon ; `bound` : borne haute. */
+function edgeAllowed(g: LevelGrid, c0: number, r0: number, c1: number, r1: number, dj: boolean, bounce = false, bound = false): boolean {
   const dc = c1 - c0;
   const rise = r0 - r1;
   if (dc === 0) {
     // Saut vertical à travers une plateforme traversable (on ne redescend jamais à travers).
-    if (rise < 1 || !jumpAllowed(rise, 0, dj)) return false;
+    if (rise < 1) return false;
     for (let r = r1 - 1; r <= r0 - 1; r++) if (g.solid(c0, r)) return false;
-    return true;
+    if (bound) return boundAllowed(g, c0, r0, c1, r1, bounce);
+    return bounce ? bounceAllowed(g, c0, r0, c1, r1, dj) : jumpAllowed(rise, 0, dj);
   }
+  if (bound) return boundAllowed(g, c0, r0, c1, r1, bounce);
+  if (bounce) return bounceAllowed(g, c0, r0, c1, r1, dj);
   const gap = Math.abs(dc) - 1;
   if (!jumpAllowed(rise, gap, dj)) return false;
   return corridorClear(g, c0, r0, c1, r1, gap);
@@ -212,12 +347,26 @@ export class ReachGraph {
   readonly beam: Pos | null;
   /** Nœud de la balise : où mène tout trajet qui traverse son faisceau. */
   private readonly beamNode: number;
+  /** Portes dont le passage est ignoré (cases, g.key). */
+  private readonly skipDoors: ReadonlySet<number> | null;
+  /** Borne haute : arcs du saut et du rebond tenus suivis du double saut, sans les marges des règles (dj ignoré). */
+  private readonly bound: boolean;
+  /** Borne haute : écart le plus grand (chute sur toute la hauteur de la carte), depuis un sol et un champignon. */
+  private readonly boundDx: number;
+  private readonly boundDxMush: number;
   private readonly tmp: Pos = { col: 0, row: 0 };
 
-  /** `beam` : case de la balise 'L' (null pour une Comète ou sans sortie). */
-  constructor(g: LevelGrid, beam: Pos | null) {
+  /**
+   * `beam` : case de la balise 'L' (null pour une Comète ou sans sortie) ; `skipDoors` : portes sans passage ;
+   * `bound` : borne haute, pour prouver qu'une case est hors d'atteinte (les rebonds sur les ennemis n'y sont pas).
+   */
+  constructor(g: LevelGrid, beam: Pos | null, skipDoors: ReadonlySet<number> | null = null, bound = false) {
     this.g = g;
     this.beam = beam;
+    this.skipDoors = skipDoors;
+    this.bound = bound;
+    this.boundDx = boundGap(JUMP_VELOCITY, -g.rows) + 1;
+    this.boundDxMush = boundGap(MUSH_HELD_VELOCITY, -g.rows) + 1;
     this.beamNode = beam ? g.key(beam.col, beam.row) : -1;
     this.n = g.rows * g.cols;
     this.total = this.n + g.movers.length * MOVER_NODES;
@@ -266,18 +415,25 @@ export class ReachGraph {
     if (inBeam(this.beam, c0, r0)) return;
     const mi = this.moverOf(id);
     const oi = this.offsetOf(id);
-    const maxDx = (dj ? 6 : DESIGN_RULES.maxGapDown) + 1;
-    const maxUp = dj ? 6 : DESIGN_RULES.maxRise;
+    // Au-dessus d'un champignon : seulement ses rebonds (ni marche, ni saut, ni porte).
+    const bounce = mi < 0 && g.bounce(c0, r0);
+    const bound = this.bound;
+    let maxDx = bounce ? (dj ? 7 : MUSHROOM_RULES.maxGapDown) + 1 : (dj ? 6 : DESIGN_RULES.maxGapDown) + 1;
+    let maxUp = bounce ? (dj ? 9 : MUSHROOM_RULES.maxRise) : dj ? 6 : DESIGN_RULES.maxRise;
+    if (bound) {
+      maxDx = bounce ? this.boundDxMush : this.boundDx;
+      maxUp = bounce ? BOUND_RISE_MUSH : BOUND_RISE;
+    }
     // Cibles fixes
     for (let c1 = Math.max(0, c0 - maxDx); c1 <= Math.min(g.cols - 1, c0 + maxDx); c1++) {
       for (let r1 = Math.max(0, r0 - maxUp); r1 < g.rows; r1++) {
         if (c1 === c0 && r1 === r0) continue;
         if (!g.standable(c1, r1)) continue;
-        if (edgeAllowed(g, c0, r0, c1, r1, dj)) out.push(this.target(c0, r0, c1, r1, g.key(c1, r1)));
+        if (edgeAllowed(g, c0, r0, c1, r1, dj, bounce, bound)) out.push(this.target(c0, r0, c1, r1, g.key(c1, r1)));
       }
     }
     // Porte : on entre debout devant elle, on ressort devant l'autre porte de la paire.
-    const link = mi < 0 ? g.doorLink.get(id) : undefined;
+    const link = mi < 0 && !bounce && !(this.skipDoors && this.skipDoors.has(id)) ? g.doorLink.get(id) : undefined;
     if (link !== undefined && g.standable(c0, r0)) {
       const c1 = link % g.cols;
       if (g.standable(c1, (link - c1) / g.cols)) out.push(link);
@@ -296,7 +452,7 @@ export class ReachGraph {
           }
           if (mi >= 0 && oj !== oi) continue; // plateformes synchronisées
           if (Math.abs(q.col - c0) > maxDx) continue;
-          if (edgeAllowed(g, c0, r0, q.col, q.row, dj)) out.push(this.target(c0, r0, q.col, q.row, id2));
+          if (edgeAllowed(g, c0, r0, q.col, q.row, dj, bounce, bound)) out.push(this.target(c0, r0, q.col, q.row, id2));
         }
       }
     }
@@ -344,14 +500,18 @@ export class ReachGraph {
  *  le faisceau de la balise `beam`, ni en le traversant. */
 export function touchable(g: LevelGrid, reach: Uint8Array, beam: Pos | null, c: number, r: number, level: number): boolean {
   if (inBeam(beam, c, r)) return false;
-  const up = level === REACH_DJ ? CRYSTAL_UP_DJ : CRYSTAL_UP;
-  const maxDx = level === REACH_DJ ? 3 : 2;
+  const dj = level === REACH_DJ;
+  const up = dj ? CRYSTAL_UP_DJ : CRYSTAL_UP;
+  const upMax = dj ? MUSH_UP_DJ : MUSH_UP;
+  const maxDx = dj ? 3 : 2;
   for (let dc = -maxDx; dc <= maxDx; dc++) {
     const cs = c + dc;
     if (cs < 0 || cs >= g.cols || crossesBeam(beam, cs, c, r)) continue;
-    for (let rs = r; rs <= Math.min(g.rows - 1, r + up); rs++) {
+    for (let rs = r; rs <= Math.min(g.rows - 1, r + upMax); rs++) {
       const v = reach[g.key(cs, rs)];
       if (v === REACH_NONE || v > level || inBeam(beam, cs, rs)) continue;
+      // Plus haut que le saut : seulement en rebondissant sur un champignon.
+      if (rs - r > up && !g.bounce(cs, rs)) continue;
       let clear = true;
       for (let k = r; k <= rs && clear; k++) if (g.solid(cs, k)) clear = false;
       const dir = dc > 0 ? -1 : 1;
@@ -367,11 +527,13 @@ export function touchable(g: LevelGrid, reach: Uint8Array, beam: Pos | null, c: 
 
 /** Un bloc bonus peut-il être frappé par dessous depuis une case debout atteinte ? */
 export function hittable(g: LevelGrid, reach: Uint8Array, c: number, r: number, level: number): boolean {
-  const up = level === REACH_DJ ? HIT_UP_DJ : HIT_UP;
-  for (let rs = r + 2; rs <= Math.min(g.rows - 1, r + up); rs++) {
+  const dj = level === REACH_DJ;
+  const up = dj ? HIT_UP_DJ : HIT_UP;
+  const upMax = dj ? MUSH_UP_DJ : MUSH_UP;
+  for (let rs = r + 2; rs <= Math.min(g.rows - 1, r + upMax); rs++) {
     if (g.solid(c, rs - 1)) return false;
     const v = reach[g.key(c, rs)];
-    if (v !== REACH_NONE && v <= level) return true;
+    if (v !== REACH_NONE && v <= level && (rs - r <= up || g.bounce(c, rs))) return true;
   }
   return false;
 }

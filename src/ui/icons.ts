@@ -159,10 +159,37 @@ const STAGE_ASTEROIDS = `<svg ${V64}>
 <circle cx="24" cy="10" r="1.1" fill="#fff"/><circle cx="58" cy="30" r="1" fill="#fff"/>
 </svg>`;
 
-/** Icône des étapes de plateforme, par thème. */
+/** Canopée des spores (j2) : couronne d'arbre, spores qui tombent, champignon qui fait rebondir. */
+const STAGE_CANOPY = `<svg ${V64}>
+<path d="M4 20c4-9 13-14 22-12 4-5 13-6 18-1 7-2 15 3 16 11-1 5-6 7-12 6-5 4-14 4-19 0-7 3-17 2-25-4z" fill="#5b2a8c"/>
+<path d="M10 18c6 2 12 2 17-1M31 15c5 3 11 3 16 0M47 18c3 1 6 1 9-1" fill="none" stroke="#9dff3f" stroke-width="2" stroke-linecap="round" opacity=".8"/>
+<path d="M18 27v-3M34 33v-3M45 25v-2.5" stroke="#c8ff3a" stroke-width="1.4" stroke-linecap="round" opacity=".6"/>
+<circle cx="18" cy="31" r="2.4" fill="#c8ff3a"/><circle cx="34" cy="37" r="2" fill="#c8ff3a"/><circle cx="45" cy="28.5" r="1.8" fill="#c8ff3a"/>
+<path d="M2 58c10-3 20-4 30-3.4S52 57 62 55" fill="none" stroke="#9dff3f" stroke-width="3" stroke-linecap="round"/>
+<path d="M28 56c.3-4-.3-6 .6-9h3.4c.9 3 .3 5 .6 9z" fill="#3ff7ff" opacity=".9"/>
+<path d="M19 48c0-6 6-10 11.5-10S42 42 42 48c-3.5 1.6-7.4 2.2-11.5 2.2S22.5 49.6 19 48z" fill="#ff3fd2"/>
+<circle cx="26" cy="44" r="1.8" fill="#ffd0f4"/><circle cx="34" cy="42" r="1.5" fill="#ffd0f4"/>
+<path d="M50 50c2-4 2-8 0-12M54.5 48c1.4-3 1.4-6 0-9" fill="none" stroke="#ff9adf" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
+</svg>`;
+
+/** Sanctuaire du gardien (j3) : la méduse-baleine grise du Vide (œil rouge, fissures), son cœur magenta pendu dessous. */
+const STAGE_SANCTUARY = `<svg ${V64}>
+<path d="M2 58c10-3 20-4 30-3.4S52 57 62 55" fill="none" stroke="#9dff3f" stroke-width="3" stroke-linecap="round"/>
+<path d="M13 31v10M19 33v11M25 34v9M39 34v9M45 33v8" stroke="#9c98ac" stroke-width="2.4" stroke-linecap="round"/>
+<path d="M32 32v7" stroke="#9c98ac" stroke-width="1.6"/>
+<path d="M5 21c4-9 14-13.5 26-12.5 10 .8 17 5.5 21 11l6-5.5-1.8 9.5 1.8 8.5-6-4c-5 5-13 7.5-22 7.5-12 0-21-5.5-25-14.5z" fill="#8d8a99"/>
+<path d="M12 27c6 3.5 14 5 22 4.5" fill="none" stroke="#c9c5d6" stroke-width="1.6" stroke-linecap="round" opacity=".7"/>
+<path d="M17 13.5l3 3.5-2.5 2.5M30 11l1.5 4.5 3.5-1M41 16.5l-3 3 2 3.5" fill="none" stroke="#2a2433" stroke-width="1.5" stroke-linecap="round"/>
+<circle cx="12" cy="19" r="2.2" fill="#ff3a4a"/>
+<circle cx="32" cy="44" r="5.5" fill="#ff4fd8"/><circle cx="32" cy="44" r="2.2" fill="#ffe6fa"/>
+</svg>`;
+
+/** Icône des étapes de plateforme, par thème ; quelques étapes ont la leur (par identifiant). */
 const PLATFORM_ICONS: Record<ThemeId, string> = { jungle: STAGE_JUNGLE, moon: STAGE_MOON };
+const STAGE_ICONS: Readonly<Record<string, string>> = { j2: STAGE_CANOPY, j3: STAGE_SANCTUARY };
 
 export function stageIcon(stage: StageDef): string {
+  if (Object.prototype.hasOwnProperty.call(STAGE_ICONS, stage.id)) return STAGE_ICONS[stage.id];
   if (stage.kind === 'platform') return PLATFORM_ICONS[stage.theme];
   return stage.levelId === 'asteroids' ? STAGE_ASTEROIDS : STAGE_NEBULA;
 }

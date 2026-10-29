@@ -25,19 +25,35 @@ export default async function (t) {
   await waitForScreen(t, 'select');
   let sel = await selectState(t);
   t.log('cartes', sel.order.map((id) => `${id} ${sel.cards[id].title}${sel.cards[id].locked ? ' (verrouillé)' : ''}`).join(' | '));
-  assertEq(sel.order, ['j1', 'f1', 'm1', 'f2'], 'cartes du choix du niveau (data-stage)');
+  // Ordre et nombre des étapes : ceux des pages (une par monde, dans l'ordre) ; le monde 1 a ses 3 niveaux et son vol.
+  const byWorld = (w) => sel.order.filter((id) => sel.cards[id].world === w);
+  assertEq(sel.order, sel.worlds.flatMap(byWorld), 'cartes rangées page par page, dans l’ordre des mondes');
+  assertEq(byWorld(1), ['j1', 'j2', 'j3', 'f1'], 'monde 1 : j1, j2, j3, f1 (cartes data-stage)');
+  assertEq(byWorld(2), ['m1', 'f2'], 'monde 2 : m1, f2');
   assert(sel.order.every((id) => sel.cards[id].title), 'chaque carte doit avoir un titre');
   assertEq(
     sel.order.map((id) => sel.cards[id].locked),
-    [false, true, true, true],
-    'verrous des cartes sur une sauvegarde neuve',
+    sel.order.map((_, i) => i > 0),
+    'verrous des cartes sur une sauvegarde neuve (seule la première ouverte)',
   );
   assertEq(
-    { worlds: sel.worlds, world: sel.world, name: sel.name, stars: sel.worldStars, prev: sel.prev, next: sel.next },
-    { worlds: [1, 2], world: 1, name: 'Monde 1 · Jungle de Xéna', stars: '0/6', prev: { disabled: true }, next: { disabled: false } },
+    { worlds: sel.worlds, world: sel.world, name: sel.name, stars: sel.worldStars, total: sel.total, prev: sel.prev, next: sel.next },
+    {
+      worlds: [1, 2],
+      world: 1,
+      name: 'Monde 1 · Jungle de Xéna',
+      stars: `0/${byWorld(1).length * 3}`,
+      total: `0/${sel.order.length * 3}`,
+      prev: { disabled: true },
+      next: { disabled: false },
+    },
     'pages des Niveaux : ouvert sur le monde 1',
   );
-  assertEq(sel.cards.j1.title, 'Lisière de Xéna', 'titre de j1');
+  assertEq(
+    [sel.cards.j1.title, sel.cards.j2.title, sel.cards.j3.title],
+    ['Lisière de Xéna', 'Canopée des spores', 'Sanctuaire du gardien'],
+    'titres de j1, j2 et j3',
+  );
   await t.shot('select');
   // ▶ : monde 2 (◀ actif, ▶ désactivé), puis ◀ : retour au monde 1.
   await t.page.locator('.screens [data-screen="select"].is-active .select-next').click();

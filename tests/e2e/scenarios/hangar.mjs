@@ -6,12 +6,16 @@
 //     premier enregistrement avec progression, record, réglages et équipement gardés.
 //  B. j1 terminé (cristaux ramassés par la fonction du jeu, __xr2d.win) : « +N cristaux » = cristaux de la partie,
 //     réserve = N ; record plus haut gardé ; score et étoiles finaux notés.
-//  C. SUIVANT → hangar (réserve affichée, Décoller vers le Vol 1) : laser (possédé) équipé et enregistré ; achat de
+//  C. SUIVANT → hangar (réserve affichée, Redescendre vers j2) : laser (possédé) équipé et enregistré ; achat de
 //     Dégâts niveau 1 du laser (confirmation : texte, prix, réserve avant → après ; le retour Android la ferme sans
 //     rien acheter ; Acheter : réserve débitée, pastille allumée, son « buy », sauvegarde) ; achats refusés (Demande
 //     Tess, réserve insuffisante, plan manquant, arme non possédée, Demande Mira : message du hangar (pas de toast),
 //     la carte tremble, sa note de verrou clignote, ni boîte ni débit) ; bouclier niveau 1 ; retour Android →
 //     résultats figés (score et étoiles finaux tout de suite, aucun son, réserve après achats, sans « +N ») →
+//     SUIVANT → hangar → Redescendre → j2 gagné (__xr2d.win, sans cristal ; « Équipière : Tess » aux résultats) →
+//     SUIVANT → hangar : Tess à l'Établi (mention et aperçu), Dégâts niveau 2 sans « Demande Tess » (seule la
+//     réserve manque) → Redescendre → j3 gagné (__xr2d.win : défaite du gardien ; double saut déjà appris en A : pas
+//     de ligne « Compétence ») →
 //     SUIVANT → hangar → Décoller → carte d'intro du Vol 1 → 4 boucliers (jeu et HUD).
 //  D. Rechargement : réserve et niveaux gardés ; Niveaux (bouton Hangar et sa réserve) → hangar sans Décoller ;
 //     bouclier niveau 2 (Max, plus de prix), turbo niveau 1 ; Échap ferme la confirmation, ◀ et Retour arrière
@@ -19,14 +23,16 @@
 //  E. Effets en jeu hors mode test : laser à dégâts ×1,25 (fiche et projectile tiré), cadence et refroidissement
 //     d'origine, 3 cœurs ; vol à 5 boucliers (jeu et HUD), turbo ×1,25 (jauge vidée de 0,32 et rechargée de 0,25 par
 //     seconde de jeu, contre 0,4 et 0,2).
-//  F. Mode test : réserve insuffisante toujours refusée (les prix restent) ; conditions levées (note « Mode test ») ;
+//  F. Mode test : réserve insuffisante toujours refusée (les prix restent) ; conditions levées (note « Mode test » ;
+//     Dégâts niveau 2 sans elle, Tess étant à bord depuis j2) ;
 //     pompe (non possédée) équipée pour la session puis achetée (rangée dans l'ordre des armes, devient l'arme
 //     enregistrée, focus sur Équiper) ; laser rééquipé (dernier choix gagnant) puis Cadence et Refroidissement ;
 //     Portée du fusil ; mitrailleuse de la Comète (effets réels, sans « bientôt ») ; cœur supplémentaire ; j1 : pompe,
 //     4 cœurs (HUD), cœur perdu puis réapparition à 4 cœurs, portée d'une balle du fusil, cadence et refroidissement
 //     du laser ; second cœur (Max) : 5 cœurs (HUD).
-//  G. Hors mode test, équipage et plan présents dans la sauvegarde : Dégâts 2 (Tess), mitrailleur (son plan) et cœur
-//     (Mira) achetables sans note ; mitrailleur acheté puis équipé (enregistré), ses améliorations débloquées.
+//  G. Hors mode test, équipage et plan présents dans la sauvegarde : Dégâts 2 et 3 (Tess), mitrailleur (son plan) et
+//     cœur (Mira) achetables sans note ; Dégâts niveau 2 acheté (niveau 3 ouvert) ; mitrailleur acheté puis équipé
+//     (enregistré), ses améliorations débloquées.
 //  H. Réinitialiser la progression : réserve, achats, équipage, plans, équipement et progression vidés, réglages gardés.
 //  Captures : résultats « +N », hangar (Établi, confirmation, verrous, Comète, Kaï, mode test), aperçu (Kaï et 3 armes,
 //  Comète sans puis avec mitrailleuse et bouclier), vol à 4 et 5 boucliers, Kaï à 5 cœurs.
@@ -399,7 +405,7 @@ export default async function (t) {
   await t.goto('?touch=0');
   await waitForScreen(t, 'title');
   const title = await screenText(t, 'title');
-  assert(/Continuer/i.test(title) && title.includes("Nébuleuse d'Azur"), `sauvegarde v1 : JOUER continue au Vol 1 (${title})`);
+  assert(/Continuer/i.test(title) && title.includes('Canopée des spores'), `sauvegarde v1 (j1 réussi) : JOUER continue à j2 (${title})`);
   sh = await shell(t);
   assertEq(sh.crystals, 0, 'sauvegarde v1 : réserve vide');
   assertEq(sh.loadout, V1.loadout, 'sauvegarde v1 : équipement gardé');
@@ -445,7 +451,7 @@ export default async function (t) {
   assert(final.score > 0 && final.stars >= 1, `résultats : score et étoiles finaux (${fmt(final)})`);
   await t.shot('results-gain');
 
-  // ---------------------------------------------------------------- C. Hangar entre j1 et f1
+  // ---------------------------------------------------------------- C. Hangar entre j1 et j2
   const bank = await addCrystals(t, 120 - picked);
   assertEq(bank, 120, 'réserve portée à 120 (aide DEV)');
   await press(t, 'results', 'Suivant');
@@ -456,7 +462,7 @@ export default async function (t) {
   assertEq(st.wallet, 120, 'hangar : réserve affichée');
   assert(st.tab === 'bench' && st.weapon === 'rifle', `hangar : Établi, arme équipée (fusil) choisie (${fmt({ tab: st.tab, weapon: st.weapon })})`);
   assertEq(st.weapons, { laser: 'Possédé', machinegun: 'Plan manquant', shotgun: 'Plan manquant', rifle: 'Équipé' }, 'hangar : état des 4 armes (accordé au nom)');
-  assert(st.depart && /Décoller/i.test(st.depart) && st.depart.includes("Nébuleuse d'Azur"), `hangar : départ vers le Vol 1 (${st.depart})`);
+  assert(st.depart && /Redescendre/i.test(st.depart) && st.depart.includes('Canopée des spores'), `hangar : départ vers j2 (${st.depart})`);
   await previewShot(t, 'preview-kai-rifle');
 
   // Laser possédé : équipé et enregistré
@@ -515,7 +521,8 @@ export default async function (t) {
   await t.shot('hangar-kai');
 
   // Retour Android : résultats figés (score et étoiles finaux tout de suite, aucun son, réserve après achats,
-  // sans « +N ») ; SUIVANT → hangar → Décoller → Vol 1
+  // sans « +N ») ; SUIVANT → hangar → Redescendre → j2 gagné → SUIVANT → hangar → Redescendre → j3 gagné → SUIVANT →
+  // hangar → Décoller → Vol 1
   await recordSfx(t);
   await back(t, 'android', 'results');
   const res = await resultsFinal(t);
@@ -530,7 +537,44 @@ export default async function (t) {
   assertEq((await hangarState(t)).wallet, 10, 'hangar rouvert : réserve');
   await hgClick(t, '.hg-depart');
   await waitIntroCard(t);
-  const intro = await screenText(t, 'intro');
+  let intro = await screenText(t, 'intro');
+  assert(intro.includes('Canopée des spores'), `Redescendre : carte d'intro de j2 (${intro.slice(0, 120)})`);
+  await waitFor2dPlay(t);
+  await t.ev(() => window.__xr2d.win());
+  await waitForScreen(t, 'results', { timeout: 25000 });
+  // j2 réussie : Tess rejoint l'équipage (récompense de l'étape).
+  assertEq((await resultDetails(t))['Équipière'], 'Tess', 'j2 gagné : « Équipière : Tess » sur les résultats');
+  assertEq((await readSave(t)).crew, ['tess'], 'j2 gagné : Tess dans l’équipage');
+  await press(t, 'results', 'Suivant');
+  await waitForScreen(t, 'hangar');
+  await waitCanvas(t);
+  st = await hangarState(t);
+  assert(st.wallet === 10 && st.depart && /Redescendre/i.test(st.depart) && st.depart.includes('Sanctuaire du gardien'), `hangar après j2 : réserve 10, départ vers j3 (${fmt({ wallet: st.wallet, depart: st.depart })})`);
+  // Tess à l'Établi : mention sous le nom de l'arme, niveau 2 ouvert (seule la réserve manque).
+  const dmgTess = st.items['upgrade.laser.damage'];
+  assert(
+    st.tab === 'bench' && /Tess à l’établi/.test(st.caption) && dmgTess.price === 60 && dmgTess.locked && dmgTess.notes.length === 0,
+    `hangar après j2 : Tess à l’Établi, Dégâts niveau 2 sans « Demande Tess » (${fmt({ caption: st.caption, dmgTess })})`,
+  );
+  await previewShot(t, 'preview-kai-tess');
+  await t.shot('hangar-tess');
+  await hgClick(t, '.hg-depart');
+  await waitIntroCard(t);
+  intro = await screenText(t, 'intro');
+  assert(intro.includes('Sanctuaire du gardien'), `Redescendre : carte d'intro de j3 (${intro.slice(0, 120)})`);
+  await waitFor2dPlay(t);
+  await t.ev(() => window.__xr2d.win());
+  await waitForScreen(t, 'results', { timeout: 25000 });
+  // Double saut déjà appris (sauvegarde version 1 de A) : la récompense n'est pas nouvelle, pas de ligne.
+  assertEq((await resultDetails(t))['Compétence'], undefined, 'j3 gagné : double saut déjà appris, pas de ligne « Compétence »');
+  assertEq((await readSave(t)).loadout.skills.doubleJump, true, 'j3 gagné : double saut toujours enregistré');
+  await press(t, 'results', 'Suivant');
+  await waitForScreen(t, 'hangar');
+  st = await hangarState(t);
+  assert(st.wallet === 10 && st.depart && /Décoller/i.test(st.depart) && st.depart.includes("Nébuleuse d'Azur"), `hangar après j3 : réserve 10, départ vers le Vol 1 (${fmt({ wallet: st.wallet, depart: st.depart })})`);
+  await hgClick(t, '.hg-depart');
+  await waitIntroCard(t);
+  intro = await screenText(t, 'intro');
   assert(intro.includes("Nébuleuse d'Azur"), `Décoller : carte d'intro du Vol 1 (${intro.slice(0, 120)})`);
   await waitFor3dPhase(t, 'fly', { timeout: 60000 });
   let fl = await t.ev(() => window.__xr3d.info());
@@ -629,8 +673,9 @@ export default async function (t) {
   await hangarFromSelectScreen(t);
   await waitCanvas(t);
   st = await hangarState(t);
+  // Tess à bord (j2 réussie en C) : Dégâts niveau 2 n'a plus de condition à lever.
   const dmgT = st.items['upgrade.laser.damage'];
-  assert(dmgT.price === 60 && !dmgT.locked && dmgT.notes.includes('Mode test'), `mode test : Dégâts niveau 2 achetable, 60, note Mode test (${fmt(dmgT)})`);
+  assert(dmgT.price === 60 && !dmgT.locked && dmgT.notes.length === 0, `mode test, Tess à bord : Dégâts niveau 2 achetable, 60, sans note (${fmt(dmgT)})`);
   st = await selectWeapon(t, 'shotgun');
   const sg = st.items['weapon.shotgun'];
   assert(sg.price === 100 && !sg.locked && sg.notes.includes('Mode test') && st.equip.shotgun === false, `mode test : pompe à 100, note Mode test, Équiper (${fmt({ sg, equip: st.equip })})`);
@@ -701,7 +746,7 @@ export default async function (t) {
       ship: { gun: 1, shield: 2, boost: 1 },
       laser: { damage: 1, fireRate: 1, range: 0, cooling: 1 },
       rifle: { damage: 0, fireRate: 0, range: 1, cooling: 0 },
-      crew: [],
+      crew: ['tess'],
       blueprints: [],
       owned: ['laser', 'shotgun', 'rifle'],
       equipped: 'shotgun',
@@ -785,6 +830,9 @@ export default async function (t) {
   st = await hangarState(t);
   const dmgC = st.items['upgrade.laser.damage'];
   assert(dmgC.price === 60 && !dmgC.locked && dmgC.notes.length === 0, `Tess à bord : Dégâts niveau 2 achetable à 60, sans note (${fmt(dmgC)})`);
+  st = await buy(t, 'upgrade.laser.damage', 60, 'Améliorer les dégâts du Pistolet laser (×1,5)', 2);
+  const dmgC3 = st.items['upgrade.laser.damage'];
+  assert(dmgC3.price === 100 && !dmgC3.locked && dmgC3.notes.length === 0, `Tess à bord : Dégâts niveau 3 achetable à 100, sans note (${fmt(dmgC3)})`);
   assertEq(st.weapons, { laser: 'Équipé', machinegun: '80', shotgun: 'Plan manquant', rifle: 'Plan manquant' }, 'plan du mitrailleur : achetable, les autres armes sans plan');
   st = await selectWeapon(t, 'machinegun');
   const mgC = st.items['weapon.machinegun'];
@@ -806,7 +854,11 @@ export default async function (t) {
   assert(heartC.price === 150 && !heartC.locked && heartC.notes.length === 0, `Mira à bord : cœur achetable à 150, sans note (${fmt(heartC)})`);
   st = await buy(t, 'kai.heart', 150, 'Acheter un cœur supplémentaire (4 cœurs)', 1);
   save = await readSave(t);
-  assertEq({ crystals: save.crystals, extraHearts: save.extraHearts, crew: save.crew, blueprints: save.blueprints }, { crystals: 170, extraHearts: 1, crew: ['tess', 'mira'], blueprints: ['machinegun'] }, 'achats hors mode test enregistrés');
+  assertEq(
+    { crystals: save.crystals, damage: save.upgrades.laser.damage, extraHearts: save.extraHearts, crew: save.crew, blueprints: save.blueprints },
+    { crystals: 110, damage: 2, extraHearts: 1, crew: ['tess', 'mira'], blueprints: ['machinegun'] },
+    'achats hors mode test enregistrés',
+  );
   await back(t, 'android', 'select');
   await back(t, 'Escape', 'title');
 

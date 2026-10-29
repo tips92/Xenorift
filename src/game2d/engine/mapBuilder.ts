@@ -1,6 +1,6 @@
 import type * as Phaser from 'phaser';
 import type { PowerUpKind } from '../../core/types';
-import { TEX, TILESET, TILE_FRAME } from '../art/keys';
+import { TEX, TILESET, TILE_FRAME, WALKWAY_FAMILY_COUNT, WALKWAY_VARIANTS } from '../art/keys';
 import { DEPTH, TILE } from '../constants';
 import type { LevelData } from '../levels/types';
 
@@ -70,6 +70,12 @@ export interface ParsedLevel {
   arena: ArenaSpot | null;
   /** Case du boss ('M', la première lue). */
   boss: GridPos | null;
+  /** Glyphes astréens 'G' (cases vides, décor du mur du fond), par colonne puis par ligne. */
+  glyphs: GridPos[];
+  /** Champignons 'o' (cases pleines, tuile invisible : engine/mushrooms.ts les dessine), par colonne puis par ligne. */
+  mushrooms: GridPos[];
+  /** Naufragé 'N' (le premier lu ; engine/npc.ts), null sans naufragé. */
+  castaway: GridPos | null;
   /** Cristaux posés + blocs « ? ». */
   crystalsTotal: number;
 }
@@ -79,6 +85,15 @@ export function cellHash(col: number, row: number): number {
   let h = Math.imul(col + 1, 73856093) ^ Math.imul(row + 7, 19349663);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return (h ^ (h >>> 16)) >>> 0;
+}
+
+/**
+ * Tuile d'une case '=' : une famille par rangée (d'après la case de son début, `runCol` : les familles ne se
+ * raccordent pas entre elles), une variante par case (elles se raccordent toutes).
+ */
+export function walkwayFrame(runCol: number, col: number, row: number): number {
+  const family = cellHash(runCol, row) % WALKWAY_FAMILY_COUNT;
+  return TILE_FRAME.WALKWAY + family * WALKWAY_VARIANTS + (cellHash(col, row) % WALKWAY_VARIANTS);
 }
 
 export function parseLevel(level: LevelData): ParsedLevel {
@@ -111,18 +126,24 @@ export function parseLevel(level: LevelData): ParsedLevel {
   const movers: MoverSpawn[] = [];
   const doors: GridPos[] = [];
   const bounds: GridPos[] = [];
+  const glyphs: GridPos[] = [];
+  const mushrooms: GridPos[] = [];
   let start: GridPos | null = null;
   let exit: ExitSpot | null = null;
   let boss: GridPos | null = null;
+  let castaway: GridPos | null = null;
   let bonusCrystals = 0;
 
   for (let row = 0; row < rows; row++) {
     let moverRun = 0; // plusieurs 'm' / 'v' consécutifs = une seule plateforme de 3 tuiles
     let moverRunChar = '';
+    let walkwayRun = -1; // colonne où commence la rangée de '=' en cours
     for (let col = 0; col < cols; col++) {
       const ch = charAt(col, row);
       const i = row * cols + col;
       if (ch !== moverRunChar) moverRun = 0;
+      if (ch !== '=') walkwayRun = -1;
+      else if (walkwayRun < 0) walkwayRun = col;
       switch (ch) {
         case '#': {
           cells[i] = CELL_SOLID;
@@ -149,6 +170,12 @@ export function parseLevel(level: LevelData): ParsedLevel {
           cells[i] = CELL_SOLID;
           tiles[i] = TILE_FRAME.BLOCK;
           break;
+        case 'o':
+          // Case pleine ; la tuile (bloc) est cachée sous le dessin animé du champignon.
+          cells[i] = CELL_SOLID;
+          tiles[i] = TILE_FRAME.BLOCK;
+          mushrooms.push({ col, row });
+          break;
         case '?':
         case '1':
         case '2':
@@ -161,7 +188,7 @@ export function parseLevel(level: LevelData): ParsedLevel {
           break;
         case '=':
           cells[i] = CELL_ONEWAY;
-          tiles[i] = TILE_FRAME.PLATFORM;
+          tiles[i] = walkwayFrame(walkwayRun, col, row);
           break;
         case '^':
           cells[i] = CELL_HAZARD;
@@ -208,6 +235,12 @@ export function parseLevel(level: LevelData): ParsedLevel {
         case 'M':
           if (!boss) boss = { col, row };
           break;
+        case 'G':
+          glyphs.push({ col, row });
+          break;
+        case 'N':
+          if (!castaway) castaway = { col, row };
+          break;
         default:
           break;
       }
@@ -224,6 +257,8 @@ export function parseLevel(level: LevelData): ParsedLevel {
   // Lecture ligne par ligne : on remet les portes dans l'ordre des paires (colonne, puis ligne).
   doors.sort((a, b) => a.col - b.col || a.row - b.row);
   bounds.sort((a, b) => a.col - b.col);
+  glyphs.sort((a, b) => a.col - b.col || a.row - b.row);
+  mushrooms.sort((a, b) => a.col - b.col || a.row - b.row);
   const arena: ArenaSpot | null = bounds.length >= 2 ? { col0: bounds[0].col, col1: bounds[1].col, row: bounds[0].row } : null;
 
   return {
@@ -245,6 +280,9 @@ export function parseLevel(level: LevelData): ParsedLevel {
     exit,
     arena,
     boss,
+    glyphs,
+    mushrooms,
+    castaway,
     crystalsTotal: crystals.length + bonusCrystals,
   };
 }

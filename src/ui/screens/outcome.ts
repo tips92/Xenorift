@@ -6,11 +6,15 @@ import { button, screenRoot, type Screen } from './common';
 
 // Écrans de fin : mission échouée, fin de la démo, erreur de lancement.
 
+/**
+ * Mission échouée. `retryFight` : échec en plein combat de boss (le mode a rendu un point de reprise) → bouton
+ * « Réessayer le combat » en premier, « Réessayer » (tout le niveau) devient secondaire.
+ */
 export function createFailScreen(
   ctx: UiCtx,
   stage: StageDef,
   reason: string,
-  a: { retry(): void; menu(): void },
+  a: { retry(): void; retryFight: (() => void) | null; menu(): void },
 ): Screen {
   const root = screenRoot('fail');
   const panel = div('panel fail-panel');
@@ -23,8 +27,11 @@ export function createFailScreen(
     el('p', 'fail-stage', `${stage.subtitle} · ${stage.title}`),
   );
   const actions = div('fail-actions');
+  if (a.retryFight) {
+    actions.append(button(ctx, { label: 'Réessayer le combat', icon: ICONS.aim, cls: 'btn-primary fail-fight', onPress: a.retryFight }));
+  }
   actions.append(
-    button(ctx, { label: 'Réessayer', icon: ICONS.restart, cls: 'btn-primary', onPress: a.retry }),
+    button(ctx, { label: 'Réessayer', icon: ICONS.restart, cls: a.retryFight ? '' : 'btn-primary', onPress: a.retry }),
     button(ctx, { label: 'Menu', icon: ICONS.home, onPress: a.menu }),
   );
   panel.append(actions);

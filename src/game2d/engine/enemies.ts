@@ -222,6 +222,33 @@ export class EnemyManager {
     return false;
   }
 
+  /**
+   * Appelle un volant de réserve (guêpe de la méduse-baleine), centré en (x, y), tourné vers `dir`, qui ondule autour
+   * de ce point ; faux si la réserve est vide.
+   */
+  summonFlyer(x: number, y: number, dir: number): boolean {
+    for (let i = 0; i < this.list.length; i++) {
+      const e = this.list[i];
+      if (!e.summoned || e.alive || e.dying !== DEATH_NONE || e.kind !== 'f') continue;
+      const s = e.sprite;
+      e.alive = true;
+      e.awake = true;
+      e.hp = ENEMY_HP;
+      e.dir = dir < 0 ? -1 : 1;
+      e.flashMs = 0;
+      e.t = 0;
+      e.homeX = x;
+      e.homeY = y;
+      s.setPosition(x, y).setVisible(true).setActive(true).setAlpha(1).setScale(1).setAngle(0).setDepth(DEPTH.enemies);
+      s.flipY = false;
+      s.flipX = e.dir < 0;
+      s.clearTint();
+      if (this.scene.anims.exists(SPECS.f.anim)) s.anims.play(SPECS.f.anim);
+      return true;
+    }
+    return false;
+  }
+
   /** Renforts renvoyés en réserve (boss remis à neuf) ; `pop` : avec une gerbe (boss vaincu). */
   recall(pop: boolean): void {
     const box = this.box;
@@ -444,6 +471,17 @@ export class EnemyManager {
     }
   }
 
+  /** Ennemis vivants pris dans le rectangle (px) : écrasés (tronc abattu). */
+  crushIn(left: number, top: number, right: number, bottom: number): void {
+    const box = this.box;
+    for (let i = 0; i < this.list.length; i++) {
+      const e = this.list[i];
+      if (!e.alive) continue;
+      this.bounds(e, box);
+      if (box.r > left && box.l < right && box.b > top && box.t < bottom) this.kill(e, DEATH_FALL);
+    }
+  }
+
   private flash(e: Enemy): void {
     e.sprite.setTintFill(0xffffff);
     e.flashMs = 80;
@@ -499,6 +537,21 @@ export class EnemyManager {
     if (e.dieMs <= 0) {
       e.dying = DEATH_NONE;
       s.setVisible(false).setActive(false);
+    }
+  }
+
+  /** Ennemis de la carte morts (rangs dans `list`, renforts exclus) : état noté au point de contrôle d'avant l'arène. */
+  snapshot(): number[] {
+    const dead: number[] = [];
+    for (let i = 0; i < this.list.length; i++) if (!this.list[i].summoned && !this.list[i].alive) dead.push(i);
+    return dead;
+  }
+
+  /** Reprise d'un combat : ces ennemis de la carte retirés d'emblée (sans points, ni effet). */
+  restore(dead: readonly number[]): void {
+    for (const i of dead) {
+      const e = this.list[i];
+      if (e && !e.summoned) this.remove(e);
     }
   }
 

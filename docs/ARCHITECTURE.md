@@ -11,44 +11,52 @@ explique **comment les morceaux tiennent ensemble** et **où ranger le code à v
 ```
                      main.ts  →  ui/App.ts   (point d'entrée, assemble tout)
                                     │
-          ┌─────────────────────────┼──────────────────────────────┐
-          │                         │                              │ import dynamique
-          ▼                         ▼                              ▼
-   input/  audio/            ui/ (écrans, HUD,             game2d/      game3d/
-   (adaptateurs :            enchaînement)                 (Phaser)     (three)
-    clavier, tactile,                                     moteurs de jeu
-    Web Audio…)                                                │
-          │                         │                          │
-          └─────────────────────────┴──────────────┬───────────┘
-                                                   ▼
+          ┌─────────────────────────┼─────────────────────┬────────────────────────┐
+          │                         │                     │ import dynamique       │ import dynamique
+          ▼                         ▼                     ▼                        ▼
+   input/  audio/            ui/ (écrans, HUD,      story/ (bulle de       game2d/      game3d/
+   (adaptateurs :            radio, enchaînement)   LUMA, cinématiques)    (Phaser)     (three)
+    clavier, tactile,                                     │                moteurs de jeu
+    Web Audio…)                                           └─ dessins purs ─▶ game2d/art/draw/…
+          │                         │                     │                     │
+          └─────────────────────────┴─────────────────────┴──────────┬──────────┘
+                                                                     ▼
                                     core/  (contrats et données — ne dépend de rien)
 ```
 
 **Règle de dépendance : tout pointe vers `core/`.**
 
-- `core/` n'importe rien. C'est le contrat commun : types, liste des étapes, format de sauvegarde.
+- `core/` n'importe rien (hors de lui-même). C'est le contrat commun : types, identifiants (`ids.ts`), table des
+  mondes et liste des étapes, textes de l'histoire, format de sauvegarde.
 - `input/`, `audio/`, `game2d/`, `game3d/` n'importent que `core/`.
 - Les moteurs de jeu ne connaissent ni l'interface, ni le clavier, ni le son en direct : ils reçoivent
   `InputApi`, `AudioApi`, `HudApi` et les réglages par `ModeHooks` (inversion de dépendance). On peut ainsi
   tester un mode avec de faux branchements (`preview/flight.ts` le fait).
 - `ui/` charge les moteurs par `import()` dynamique et ne leur parle que par `StartMode` / `ModeHandle` :
-  Phaser et three ne ralentissent pas l'écran d'accueil.
+  Phaser et three ne ralentissent pas l'écran d'accueil. Il charge de même `story/` (`ui/radio.ts` →
+  `story/bubble.ts`).
+- `story/` (bulle de LUMA, portraits, cinématiques) n'importe que `core/` (ses textes) et des dessins purs du jeu 2D.
+- **Exception des dessins** : `story/` et `ui/hangarPreview.ts` peuvent importer les dessins Canvas 2D du jeu 2D
+  (`game2d/art/draw/*`, `art/util`, `art/keys`, `art/palette`) : fonctions pures, sans Phaser ni moteur. Rien
+  d'autre de `game2d/`.
 
-Vérifié le 27/10/2026. Pour revérifier :
+Vérifié le 29/10/2026. Pour revérifier :
 
 ```bash
-for m in core input audio game2d game3d; do echo "== $m"; grep -rhoE "from '(\.\./)+[a-zA-Z0-9]+" src/$m | sort | uniq -c; done
+for m in core input audio game2d game3d story; do echo "== $m"; grep -rhoE "from '(\.\./)+[a-zA-Z0-9]+" src/$m | sort | uniq -c; done
+grep -rnE "from '(\.\./)+game2d/" src/ui src/story | grep -vE "game2d/art/(draw/|util|keys|palette)"
 ```
 
 Sous `== core`, rien ne doit s'afficher. Ailleurs, seuls `core` et des fichiers du module lui-même
-(`constants`, `art`… pour `game2d`) sont permis : jamais `ui`, `input`, `audio`, ni l'autre moteur.
+(`constants`, `art`… pour `game2d`) sont permis : jamais `ui`, `input`, `audio`, ni l'autre moteur ; pour
+`story`, aussi `game2d` (dessins seulement). La seconde commande ne doit rien afficher (exception des dessins).
 
 ### Correspondance avec une « clean architecture »
 
 | Couche classique | Dans Xeno Rift |
 |---|---|
-| Domaine (entités, règles) | `core/` (types, étapes, sauvegarde), données de niveaux (`game2d/levels/`), constantes de gameplay (`game2d/constants.ts`) |
-| Cas d'usage | `ui/App.ts` (déroulement d'une étape, progression), `core/save.ts` (`recordResult`, déblocage) |
+| Domaine (entités, règles) | `core/` (types, table des mondes, étapes, textes, sauvegarde), données de niveaux (`game2d/levels/`), constantes de gameplay (`game2d/constants.ts`) |
+| Cas d'usage | `ui/App.ts` (déroulement d'une étape), `ui/flow.ts` (décisions pures de l'enchaînement), `core/save.ts` (`recordResult`, récompenses, progression : `isUnlocked`, `nextToPlay`) |
 | Adaptateurs | `input/`, `audio/`, `ui/services.ts`, les rendus (`game2d/engine/game.ts`, `game3d/renderer.ts`) |
 | Frameworks | Phaser, three.js, DOM, Web Audio, Capacitor |
 
@@ -68,16 +76,27 @@ ennemi en « règle pure + rendu ». La rigueur s'applique là où elle paie :
 ```
 src/
   main.ts          point d'entrée → startApp()
-  core/            contrats (types.ts), étapes (stages.ts), sauvegarde (save.ts), fiches des armes (weapons.ts),
-                   canons de la Comète (shipGuns.ts), catalogue et calculs du hangar (hangar.ts)
-  ui/              coquille : App.ts, HUD, écrans (screens/), fondu, icônes, utilitaires DOM
+  core/            contrats (types.ts), identifiants (ids.ts), table des mondes (worlds.ts), étapes (stages.ts),
+                   textes de l'histoire et radio de LUMA (story.ts), sauvegarde (save.ts), fiches des armes
+                   (weapons.ts), canons de la Comète (shipGuns.ts), catalogue et calculs du hangar (hangar.ts)
+  ui/              coquille : App.ts, enchaînement pur (flow.ts), HUD (hud.ts), radio de LUMA (radio.ts),
+                   écrans (screens/), fondu, icônes, utilitaires DOM
+  story/           bulle de LUMA (bubble.ts), portraits, lecteur de cinématiques (player.ts), scènes (scenes/),
+                   décors des cinématiques (art/) ; chargé à la demande
   input/           clavier, commandes tactiles, inclinaison → un état d'entrée unique
-  audio/           moteur Web Audio, effets (sfx), musiques procédurales
-  game2d/          mode plateforme : engine/ (scène, Kaï, ennemis, tirs…), art/ (dessins), levels/
+  audio/           moteur Web Audio, effets (sfx), musiques procédurales ; sons du monde 1 (world1Sfx.ts,
+                   world1Tracks.ts)
+  game2d/          mode plateforme : engine/ (scène, Kaï, ennemis, tirs, sorties et arrivées exit.ts, arène
+                   arena.ts, boss bosses/ (Blob-roi, Scarabée-titan, méduse-baleine), événements levelEvents.ts,
+                   glyphes glyphs.ts, champignons mushrooms.ts, tronc trunk.ts, pluie de spores sporeRain.ts,
+                   naufragé npc.ts, instantané du combat snapshot.ts…), art/ (dessins, dont draw/beacon.ts,
+                   draw/bosses.ts, draw/world1.ts ; créature du décor dans parallax.ts), levels/ (un dossier par
+                   monde : jungle/j1.ts, j2.ts, j3.ts)
   game3d/          mode vol : flight.ts (partie), parcours et vagues, portails, astéroïdes, tir (shots.ts),
                    ennemis (enemies.ts), cristaux (pickups.ts), créatures, ciel
-preview/           pages d'outil du serveur de dev (aperçu des graphismes 2D, vol simulé)
-scripts/           check-levels.ts (validation des niveaux 2D)
+preview/           pages d'outil du serveur de dev : graphismes 2D (art), vol simulé (flight), sons du monde 1
+                   (audio), cinématiques (story), boss (bosses), dessins du monde 1 (props)
+scripts/           check-levels.ts (validation des niveaux 2D), lib/reach.ts (graphe d'accessibilité)
 tests/e2e/         tests navigateur (lanceur run.mjs, lib/, scenarios/)
 tools/             scripts Windows : environnement, SDK Android, APK
 android/           projet natif Capacitor
@@ -91,11 +110,20 @@ Le détail fichier par fichier est dans la section « Architecture » de [CLAUDE
 ## 3. Les flux principaux
 
 - **Démarrage** : `main.ts` → `startApp()` crée les entrées, le son, le HUD, puis affiche l'accueil.
+- **La campagne** : `core/worlds.ts` (`WORLDS`) → `core/stages.ts` (`STAGES`) ; textes dans `core/story.ts`.
+  La progression se lit dans la sauvegarde par identifiants (`core/save.ts` : `isUnlocked`, `nextToPlay`).
 - **Une étape** : `startStage` (fondu, carte d'intro) → `loadMode` (import dynamique du moteur) →
   `StartMode(conteneur, étape, hooks)` → `ModeHandle`. L'interface appelle `pause` / `resume` / `destroy` ;
-  le mode appelle **une seule fois** `onComplete(résultat)` ou `onFail(raison)`. `endRun` enregistre le
-  résultat (et ajoute les cristaux à la réserve) et affiche l'écran de résultats ou d'échec ; « Suivant »
-  ouvre le hangar, dont le bouton de départ lance l'étape suivante.
+  le mode appelle **une seule fois** `onComplete(résultat)` ou `onFail(raison, point de reprise?)`. `endRun`
+  enregistre le résultat (cristaux ajoutés à la réserve, récompenses de l'étape) et affiche l'écran de résultats ou
+  d'échec ; « Suivant » ouvre le hangar (`ui/flow.ts` : étape suivante, libellé du départ), dont le bouton de départ
+  lance l'étape suivante.
+- **Réessayer le combat** : un échec en plein combat de boss rend un point de reprise (`StartAt` : `{ at: 'boss' }`
+  et un instantané opaque pour l'interface, noté par le moteur 2D au point de contrôle d'avant l'arène :
+  `game2d/engine/snapshot.ts`). L'écran d'échec le repasse tel quel dans `ModeHooks.startAt` au nouvel essai.
+- **Radio de LUMA** : le mode appelle `HudApi.radio(id)` (fenêtres et déclencheurs du niveau :
+  `game2d/engine/levelEvents.ts`) → `ui/radio.ts` (file, bulle de `story/bubble.ts`, bips) ; textes dans
+  `core/story.ts` (`RADIO`).
 - **Entrées** : événements → `InputManager` met à jour **un seul objet d'état**, modifié sur place (aucune
   allocation). Les modes lisent `hooks.input.state` à chaque image et `consumePress()` pour les appuis.
 - **HUD** : les modes envoient des mises à jour partielles par `HudApi` (le 2D les regroupe avec
@@ -116,10 +144,13 @@ Le détail fichier par fichier est dans la section « Architecture » de [CLAUDE
 - **Graphismes et sons procéduraux** : dessinés par code (`game2d/art/draw/`, géométries three) et
   synthétisés (`audio/`). Les clés de textures (`game2d/art/keys.ts`) découplent le dessin du moteur : on
   pourra remplacer un dessin par une image sans toucher au moteur.
-- **Données lisibles par Node** (niveaux, constantes, futures données de `core/`) : TypeScript « effaçable »
-  (ni `enum` ni `namespace`), imports de valeurs avec l'extension `.ts`, rien qui dépende du navigateur.
+- **Données lisibles par Node** (niveaux, constantes, données de `core/` : identifiants, mondes, textes, armes,
+  hangar) : TypeScript « effaçable » (ni `enum` ni `namespace`), imports de valeurs avec l'extension `.ts`, rien
+  qui dépende du navigateur. Les listes d'identifiants vivent à l'exécution (`core/ids.ts`, `as const`) et les
+  unions en découlent : check-levels les lit au lieu de les recopier.
 - **Tables plutôt que conditions** : un `Record<ThemeId, …>` fait échouer la compilation s'il manque un
-  monde, alors qu'un `theme === 'jungle' ? … : …` donne silencieusement l'aspect d'un autre monde.
+  monde, alors qu'un `theme === 'jungle' ? … : …` donne silencieusement l'aspect d'un autre monde. Une table par
+  fichier de dessin (pas de fichier central des thèmes) : tsc donne la liste des fichiers à compléter.
 - **Aides de développement** (`window.__xr2d`, `__xr3d`, `__xrShell`) seulement sous
   `import.meta.env.DEV` ; elles servent aux tests navigateur.
 - **Erreurs** : le son et les entrées ne doivent jamais faire planter le jeu (`ui/services.ts` avale leurs
@@ -167,7 +198,7 @@ Le détail fichier par fichier est dans la section « Architecture » de [CLAUDE
 ## 6. Où ranger le code à venir
 
 Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de-travail). Ceux des étapes 1,
-2, 3a et 3b sont les emplacements réels (étapes codées).
+2, 3a, 3b, 4a et 4b sont les emplacements réels (étapes codées).
 
 | Besoin | Emplacement | Étape |
 |---|---|---|
@@ -181,35 +212,61 @@ Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de
 | Bonus vitesse et cadence | `game2d/engine/PlatformScene.ts` (`speedLeftMs`, `rapidLeftMs`), `Player.ts` (`speedMul`), `effects.ts` ; `ui/hud.ts` (anneaux) | 2 |
 | Équipement (`Loadout` : arme, armes possédées, compétences ; `PlayLoadout` : équipement effectif d'une partie) | `core/save.ts` (`getLoadout`, `equipWeapon`, `setSessionWeapon`, `playLoadout`), `core/hangar.ts` (`buildPlayLoadout`), `ModeHooks.loadout` ; `?weapon=` (`ui/App.ts`) | 2 et 3a |
 | Sauvegarde v2 (réserve, migration) | `core/save.ts` (`load`, `readBase`, `readV2`, `recordResult`, `purchase`), `core/types.ts` | 3a |
-| Prix, conditions et effets du hangar | `core/hangar.ts` (catalogue `HANGAR_ITEMS`, `itemState`, `applyPurchase`, `departLabel` ; pur) | 3a |
+| Prix, conditions et effets du hangar | `core/hangar.ts` (catalogue `HANGAR_ITEMS`, `itemState`, `applyPurchase` ; pur) | 3a |
 | Écran du hangar, aperçu | `ui/screens/hangar.ts`, `ui/hangarPreview.ts` (chargé à la demande) ; enchaînement dans `ui/App.ts` (`goHangar`, `makeResults`) | 3a |
 | Effets des achats en jeu | `game2d/engine/weapons.ts` (`Gun` : `mods`), `PlatformScene.ts` (`maxHearts`), `game3d/flight.ts` (`maxShield`, `boostDrain`, `boostFill`, `gunLevel`) ; `ui/hud.ts` (4-5 cœurs / boucliers) | 3a et 3b |
 | Canons de la Comète (fiches) | `core/shipGuns.ts` (`SHIP_GUNS`, `SHIP_GUN_MULS`, `SHIP_AIM`, `resolveShipGun` ; pur) ; canons du modèle dans `game3d/ship.ts` | 3b |
 | Tir, ennemis et cristaux en vol | `game3d/shots.ts` (canon, visée, projectiles), `game3d/enemies.ts` (chasseur, mine, essaim, orbes), `game3d/pickups.ts` (cristaux), `game3d/courses.ts` (`genWaves`), `game3d/asteroids.ts` (PV, cristal) ; branchés dans `game3d/flight.ts` (`updateGun`, `shotHit`) | 3b |
 | Tir manuel en vol | `Settings.manualFire`, `ui/screens/options.ts` (`TOGGLES`), `input/touch.ts` (`.xr-shoot`) ; HUD du vol `ui/hud.ts` (`.fl-heat`, `.fl-crystals`) | 3b |
-| Table des mondes, liste des 20 étapes | `core/worlds.ts` (données) → `STAGES` construit à partir d'elle | 4 |
-| Niveaux par monde | `game2d/levels/<monde>/` | 4 |
-| Mini-boss et boss 2D | `game2d/bosses/` : un fichier par boss, un contrat `Boss` commun | 4 |
-| Boss des vols | `game3d/bosses/` | 4 |
-| Textes de l'histoire, radio de LUMA | `core/story.ts` (données) ; bulle de radio dans `ui/` | 4 |
-| Cinématiques | `src/story/` : un lecteur commun + une description par cinématique | 4 |
+| Listes d'identifiants (thèmes, parcours, musiques, boss) | `core/ids.ts` (`as const`) → unions de `core/types.ts` | 4a |
+| Table des mondes et des étapes | `core/worlds.ts` (`WORLDS` : gardien, naufragé, boss du vol, étapes, récompenses) → `STAGES` (`core/stages.ts`) | 4a |
+| Progression par identifiants, récompenses | `core/save.ts` (`isCleared`, `isUnlocked`, `nextToPlay`, `isFresh`, `recordResult`, `story.seen`) | 4a |
+| Décisions pures de l'enchaînement | `ui/flow.ts` (`stageAfter`, `departLabel`, `playSubtitle`) | 4a |
+| Écran Niveaux en pages, récompenses aux résultats | `ui/screens/select.ts`, `ui/screens/results.ts` | 4a |
+| Tables par thème côté 2D | une table `Record<ThemeId, …>` par fichier de `game2d/art/` (`TILE_STYLES`, `BG_STYLES`, `PARALLAX_STYLES`, `ENEMIES`, `MOVERS`, `DOOR_STYLES`), `ui/icons.ts` (`PLATFORM_ICONS`) | 4a |
+| Niveaux par monde | `game2d/levels/<monde>/` (`levels/jungle/j1.ts`, `j2.ts`, `j3.ts`) | 4a et 4b |
+| Sorties (Comète, balise) et arrivées | `game2d/engine/exit.ts` (`createExit`, `createArrival`) ; dessin `art/draw/beacon.ts` | 4a |
+| Arène, mini-boss et boss 2D (en touches) | `game2d/engine/arena.ts` ; `game2d/engine/bosses/` (contrat `types.ts`, registre `index.ts`, un fichier par boss : `blobKing.ts`, `beetleTitan.ts`, `whale.ts`) ; dessins `art/draw/bosses.ts` ; barre `ui/hud.ts` | 4a et 4b |
+| Défaite du gardien en sortie | `game2d/engine/PlatformScene.ts` (`startGuardianExit`, `landKai`) ; `LevelData.ending: 'guardian'` | 4b |
+| Événements d'un niveau (radio, ombre, secousse, spores) | `game2d/engine/levelEvents.ts` ; joués par `PlatformScene.playLevelEvent` : `art/parallax.ts` (`shadowPass`), `engine/trunk.ts`, `engine/sporeRain.ts` | 4a et 4b |
+| Créature du décor (distance, ombre) | `game2d/art/parallax.ts` (`CREATURES`, `setCreature`, `shadowPass`) ; `createParallax(scene, theme, opts?)` | 4b |
+| Champignons | `game2d/engine/mushrooms.ts` ; rebond dans `Player.ts` ; `MUSHROOM_*` de `constants.ts` ; graphe `scripts/lib/reach.ts` | 4b |
+| Naufragé (Tess) | `game2d/engine/npc.ts` ; récompense `crew` de `core/worlds.ts` ; `PlayLoadout.crew` ; hangar `ui/screens/hangar.ts`, `ui/hangarPreview.ts` | 4b |
+| Glyphes des ruines, dessins du monde 1 (champignon, tronc, Tess, `=`) | `game2d/engine/glyphs.ts` ; dessins `art/draw/world1.ts`, objets générés par `art/index.ts` (`generateLevelArt`) | 4a et 4b |
+| « Réessayer le combat » | `game2d/engine/snapshot.ts` (`FightSnapshot`) et `snapshot()` / `restore()` des modules ; `PlatformScene.ts` (`noteFight`, `restoreFight`, `fightRetryPoint`) ; `ui/App.ts`, `ui/screens/outcome.ts` | 4b |
+| Textes de l'histoire, radio de LUMA | `core/story.ts` (données) ; `ui/radio.ts` (file, bips) ; bulle `story/bubble.ts` | 4a |
+| Sons et musiques du monde 1 | `audio/world1Sfx.ts`, `audio/world1Tracks.ts` (intensités : `musicLevel`) | 4a |
+| Graphe d'accessibilité des niveaux | `scripts/lib/reach.ts` (lu par `scripts/check-levels.ts`) | 4a |
+| Cinématiques | `src/story/` : lecteur `player.ts` + une scène par cinématique (`scenes/`) ; écran `ui/screens/cutscene.ts` | 4c |
+| Boss des vols | `game3d/bosses/` | 4c |
 | Carte galactique | `ui/screens/galaxy.ts` | 6 |
 
 ### Points de vigilance avant de grandir
 
-- **Mondes codés en dur** : 63 tests `'jungle'` / `'moon'` dans 14 fichiers, et des choix `'nebula'` /
-  `'asteroids'` dans 6. Les remplacer par des tables par monde (`Record<ThemeId, …>`) **avant** d'ajouter
-  Boréa, sinon le nouveau monde prendra l'aspect d'un ancien sans erreur de compilation.
-- **Progression des joueurs** : `save.unlocked` est un **index** dans `STAGES`. Passer de 4 à 20 étapes
-  en insérant des niveaux au milieu impose une migration (retrouver l'étape par son `id`). Ne jamais
-  renommer les `id` existants (`j1`, `f1`, `m1`, `f2`) : ce sont les clés des meilleurs scores.
-- **Tests qui supposent 4 étapes et 16 / 22 portails** : les faire lire `STAGES` et `COURSES`.
-- **Gros fichiers** : `game3d/enemies.ts` (~1510 lignes), `game3d/flight.ts` (~1410), `ui/App.ts` (~870),
-  `game2d/engine/PlatformScene.ts` (~840), `ui/screens/hangar.ts` (~840), `game2d/engine/Player.ts` (~640). Y
-  sortir les nouveautés dans leurs propres fichiers (boss ; les portes l'ont été dans `engine/doors.ts`, les
-  règles du hangar dans `core/hangar.ts`, son aperçu dans `ui/hangarPreview.ts`, le tir, les ennemis et les
-  cristaux du vol dans `shots.ts`, `enemies.ts` et `pickups.ts`) plutôt que de les allonger. Les
-  décisions pures de l'enchaînement (étape suivante, libellé du départ) iront hors d'`App.ts` (`departLabel`
-  est déjà dans `core/hangar.ts`).
+- **Mondes codés en dur** : résolu côté 2D en 4a (tables `Record<ThemeId, …>` dans chaque fichier de dessin,
+  `PLATFORM_ICONS`, `THEME_IDS` lu par check-levels et `preview/art.ts` ; rendu inchangé, vérifié au pixel par
+  `theme-captures`). Restent : les choix `'nebula'` / `'asteroids'` du vol (`game3d/flight.ts`,
+  `environment.ts`, `planets.ts`, `ui/icons.ts`, `preview/flight.ts` : tables en 4c), les CSS `.card--moon` /
+  `.intro--moon` (un thème inconnu prend les couleurs de la jungle), et `art/draw/world1.ts`, dessiné pour la Jungle.
+- **Progression des joueurs** : résolu en 4a. Une étape est réussie si son `id` figure dans `best`, ouverte si
+  c'est la première, une réussie ou la suivante d'une réussie : j2 et j3, insérés au milieu en 4b, n'ont demandé
+  aucune migration. `save.unlocked` (index) est encore écrit mais plus lu. Ne jamais renommer les `id` existants
+  (`j1`, `j2`, `j3`, `f1`, `m1`, `f2`) : ce sont les clés des meilleurs scores.
+- **Tests et nombre d'étapes** : résolu en 4b pour l'essentiel (`menu` et `progress-ids` lisent l'ordre des cartes,
+  `campaign-flow` compare à la règle d'ouverture, `stress-laps` et `theme-captures` suivent `STAGES`, `stageBefore`
+  donne l'étape d'avant un vol). Restent écrits en dur : l'ordre et les titres du monde 1 (`menu`), le parcours de
+  `campaign-flow` et de `hangar`, et 16 / 22 portails (`flight-look`, `flight-autopilot`).
+- **Gros fichiers** : `game3d/enemies.ts` (~1510 lignes), `game3d/flight.ts` (~1410),
+  `game2d/engine/PlatformScene.ts` (~1440), `game2d/engine/bosses/whale.ts` (~1150), `bosses/beetleTitan.ts`
+  (~800), `ui/App.ts` (~900), `ui/screens/hangar.ts` (~850), `game2d/engine/Player.ts` (~680),
+  `scripts/check-levels.ts` (~1050) ; dessins `art/draw/bosses.ts` (~2320) et `world1.ts` (~2070), longs mais
+  faits de fonctions indépendantes. Y sortir les nouveautés dans leurs propres fichiers (les sorties l'ont été dans
+  `engine/exit.ts`, l'arène dans `arena.ts`, les boss dans `bosses/`, les événements dans `levelEvents.ts`, les
+  glyphes dans `glyphs.ts`, en 4b les champignons, le tronc, la pluie de spores, le naufragé et l'instantané du
+  combat dans `mushrooms.ts`, `trunk.ts`, `sporeRain.ts`, `npc.ts`, `snapshot.ts` ; les décisions pures de
+  l'enchaînement dans `ui/flow.ts`, la radio dans `ui/radio.ts` ; avant : portes, hangar, tir et ennemis du vol)
+  plutôt que de les allonger. `PlatformScene.ts` a encore pris ≈ 290 lignes en 4b (branchements des objets, de la
+  défaite du gardien et du nouvel essai) : le prochain monde devra en sortir une part (par exemple le combat de
+  boss et l'instantané dans un module à part).
 - **Un seul contexte WebGL par moteur** : pas de second rendu 3D pour un aperçu ou une cinématique.
-  Les cinématiques se jouent dans le moteur déjà ouvert, ou en DOM.
+  Les cinématiques se jouent sur un `<canvas>` 2D de l'interface (`story/player.ts`), avec les dessins du jeu 2D.

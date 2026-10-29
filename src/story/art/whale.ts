@@ -3,8 +3,9 @@ import { PALETTES, type ThemePalette } from '../../game2d/art/palette';
 import { type Ctx, circle, glow, glowDot, rgba, rng, smoothPoly, softDot } from '../../game2d/art/util';
 import { type Sprite, canvas, makeSprite } from '../scenes/common';
 
-// La méduse-baleine des cinématiques. Son dessin est COPIÉ de drawWhale (src/game2d/art/draw/backgrounds.ts,
-// non exporté ; le plan 04 prévoit de l'exporter au point 18 : remplacer alors cette copie par l'import), avec
+// La méduse-baleine des cinématiques. Son dessin est COPIÉ de l'ancien drawWhale de src/game2d/art/draw/backgrounds.ts
+// (le décor dessine maintenant la sienne avec drawWhaleBody de draw/bosses.ts, même tracé : cette copie peut lui
+// céder la place), avec
 // des variantes : grise (le Vide : couleurs éteintes, fissures noires, reflets rouges, œil rouge) et tachée
 // (quelques plaques grises, comme au niveau 1). Les tentacules sont des chapelets de petites lueurs animées.
 

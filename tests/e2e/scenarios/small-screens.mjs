@@ -11,11 +11,14 @@
 // Plan 02 : en jeu, avec les trois bonus actifs (vitesse, cadence, bouclier), jauge de chauffe, anneaux et bouton
 // pause ne se chevauchent pas (aides DEV : sautés avec --prod).
 // Plan 04 : barre de boss à 640x320 (?at=boss, Kaï posé dans l'arène de j1 ; commandes moyennes, grandes, grandes en
-// mode gaucher) sans chevauchement avec les commandes, le HUD ni la bulle de LUMA (aides DEV : sautée avec --prod).
+// mode gaucher ; puis j2, nom le plus long, grandes commandes) sans chevauchement avec les commandes, le HUD ni la
+// bulle de LUMA (aides DEV : sautée avec --prod). Choix 7 : vies épuisées en plein combat → écran d'échec avec
+// « Réessayer le combat » au-dessus de Réessayer et Menu, entier et sans défilement à 640x320 et 568x320 (dev).
 // Plan 03 (hangar) : sauvegarde version 2 avec 2 cœurs et 2 boucliers achetés (640x320, 740x360) : HUD à 5 cœurs
 // (avec les trois bonus en dev) et vol à 5 boucliers sans chevauchement ; résultats avec « +53 cristaux » et une
 // grosse réserve (ligne Réserve entière, dev). Hangar à 844x390, 740x360, 640x320 et 568x320 : ouvert depuis les
-// Niveaux hors mode test (verrous) et, en dev, depuis les résultats en mode test (bouton Décoller, Équiper et prix) :
+// Niveaux hors mode test (verrous) et, en dev, depuis les résultats de j1 en mode test (bouton Redescendre, le plus
+// long, vers j2 ; Équiper et prix ; Tess dans l'équipage : mention « Tess à l’établi » et Tess dans l'aperçu) :
 // en-tête, aperçu (zone de dessin d'au moins 100x60 px, canvas à sa taille, dans la baie), onglets, chaque carte de
 // la liste (amenée à l'écran, la liste défile) entière et sans chevauchement, sur l'Établi une première amélioration
 // entière sans défiler, cibles tactiles d'au moins 40 px, boîte de confirmation ; captures aux 4 tailles.
@@ -27,6 +30,7 @@
 // production (--prod).
 import { assert, assertEq, clickText, fmt, waitFor, waitFor2dPlay, waitForScreen } from '../lib/helpers.mjs';
 import { assertLayout, overlaps, press, pressPause, rects, waitHud, waitPause, waitSelectPage } from '../lib/core.mjs';
+import { loseFight } from '../lib/game2d.mjs';
 
 export const meta = {
   title: 'Petits écrans (740x360, 640x320, 568x320) et portrait : menus, hangar, commandes, HUD (5 cœurs, 5 boucliers), pause, rotation',
@@ -206,8 +210,12 @@ async function checkSize(t, w, h) {
   await t.shot(`pause-${tag}`);
 }
 
-/** Trois bonus donnés (aides DEV) : jauge de chauffe, anneaux, bouton pause et pastille du HUD disjoints. */
+/**
+ * Trois bonus donnés (aides DEV) : jauge de chauffe, anneaux, bouton pause et pastille du HUD disjoints. Partie
+ * jouable d'abord : pendant l'arrivée de Kaï (état « enter », Comète du départ de j1), __xr2d.power est ignoré.
+ */
 async function checkPowers(t, label) {
+  await waitFor2dPlay(t);
   await t.ev(() => ['speed', 'rapid', 'shield'].forEach((k) => window.__xr2d.power(k)));
   await waitFor(t, () => document.querySelectorAll('.hud-powers .hud-power.is-on').length === 3, { timeout: 3000, label: `${label} : trois anneaux de bonus` });
   await t.wait(350); // apparition des anneaux (mise à l'échelle)
@@ -225,14 +233,14 @@ async function checkPowers(t, label) {
 }
 
 /**
- * Plan 04 : barre de boss (aides DEV : ?at=boss, Kaï posé dans l'arène de j1) avec les réglages `settings` des
- * commandes : barre entière, sans chevauchement avec le stick, SAUT, TIR, PAUSE, la pastille du HUD, la jauge, ni
- * la bulle de LUMA (message du boss, s'il est affiché).
+ * Plan 04 : barre de boss (aides DEV : ?at=boss, Kaï posé dans l'arène de j1, ou de j2 pour le nom le plus long,
+ * « Scarabée-titan ») avec les réglages `settings` des commandes : barre entière, sans chevauchement avec le stick,
+ * SAUT, TIR, PAUSE, la pastille du HUD, la jauge, ni la bulle de LUMA (message du boss, s'il est affiché).
  */
-async function checkBossBar(t, w, h, tag, settings) {
+async function checkBossBar(t, w, h, tag, settings, stage = 'j1') {
   await t.page.setViewportSize({ width: w, height: h });
   await patchSavedSettings(t, settings);
-  await t.goto('?touch=1&unlock=1&stage=j1&at=boss');
+  await t.goto(`?touch=1&unlock=1&stage=${stage}&at=boss`);
   await waitHud(t, 'platform');
   await waitFor2dPlay(t);
   await t.ev(() => {
@@ -262,6 +270,48 @@ async function checkBossBar(t, w, h, tag, settings) {
   await assertParts(t, parts, tag);
   t.log(`${tag} : barre de boss sans chevauchement${bubble ? ' (bulle de LUMA comprise)' : ''}`);
   await t.shot(`boss-bar-${tag.replace(/[^\w-]+/g, '-')}`);
+}
+
+/**
+ * Plan 04 (choix 7) : vies épuisées en plein combat (j1, ?at=boss) → écran d'échec avec « Réessayer le combat » sur sa
+ * rangée, au-dessus de Réessayer et Menu : panneau entier sans défilement, boutons et libellés entiers, sans
+ * chevauchement, cibles tactiles d'au moins 40 px (640x320 puis 568x320).
+ */
+async function checkFailFight(t) {
+  await t.page.setViewportSize({ width: 640, height: 320 });
+  await t.goto('?touch=1&unlock=1&stage=j1&at=boss');
+  await waitFor2dPlay(t);
+  await t.ev(() => window.__xr2d.god(true));
+  await loseFight(t, 'échec en combat');
+  const F = '.screens [data-screen="fail"].is-active';
+  for (const [w, h] of [
+    [640, 320],
+    [568, 320],
+  ]) {
+    const tag = `échec en combat ${w}x${h}`;
+    await t.page.setViewportSize({ width: w, height: h });
+    await t.wait(300);
+    await assertNoPageScroll(t, tag);
+    await assertLayout(t, [`${F} .fail-title`, `${F} .fail-reason`, `${F} .fail-stage`, `${F} .fail-actions .btn`, `${F} .btn-label`], tag);
+    const scroll = await t.ev((sel) => {
+      const p = document.querySelector(`${sel} .fail-panel`);
+      return { sh: p.scrollHeight, ch: p.clientHeight };
+    }, F);
+    assert(scroll.sh <= scroll.ch + 1, `${tag} : panneau entier, sans défilement (${fmt(scroll)})`);
+    const parts = await assertParts(
+      t,
+      [
+        ['Réessayer le combat', `${F} .fail-fight`],
+        ['Réessayer', `${F} .fail-actions .btn:nth-child(2)`],
+        ['Menu', `${F} .fail-actions .btn:nth-child(3)`],
+      ],
+      tag,
+    );
+    const [fight, retry, menu] = parts.map((p) => p.r);
+    assert(fight.y + fight.h <= retry.y && Math.abs(retry.y - menu.y) <= 1, `${tag} : « Réessayer le combat » au-dessus, Réessayer et Menu côte à côte (${fmt(parts)})`);
+    assert(parts.every((p) => p.r.h >= MIN_TARGET && p.r.w >= MIN_TARGET), `${tag} : cibles tactiles d'au moins ${MIN_TARGET} px (${fmt(parts)})`);
+    await t.shot(`fail-fight-${w}x${h}`);
+  }
 }
 
 /**
@@ -696,8 +746,10 @@ async function checkHangar(t, w, h) {
   await checkHangarTabs(t, `${tag}`, 'machinegun', shots);
   await checkHangarConfirm(t, tag, shots);
 
-  // Mode test, depuis les résultats (aides DEV) : Décoller, Équiper et prix sur la même carte, notes « Mode test ».
+  // Mode test, depuis les résultats de j1 (aides DEV) : Redescendre (vers j2), Équiper et prix sur la même carte,
+  // notes « Mode test » ; Tess à bord (mention sous le nom de l'arme, Tess dans l'aperçu de l'Établi).
   if (t.dev) {
+    await patchSave(t, { crew: ['tess'] });
     await t.goto('?touch=1&unlock=1&stage=j1');
     // Partie vraiment lancée (phase, run sans pause, enchaînement fini) : un win() trop tôt peut être perdu.
     await waitFor2dPlay(t);
@@ -710,7 +762,12 @@ async function checkHangar(t, w, h) {
       const d = document.querySelector(`${s} .hg-depart`);
       return d ? d.innerText.replace(/\s+/g, ' ').trim() : null;
     }, HG);
-    assert(depart && /Décoller/i.test(depart), `hangar ${tag} depuis les résultats : bouton Décoller (${fmt(depart)})`);
+    assert(depart && /Redescendre/i.test(depart), `hangar ${tag} depuis les résultats de j1 : bouton Redescendre (${fmt(depart)})`);
+    const crew = await t.ev((s) => {
+      const e = document.querySelector(`${s} .hg-caption .hg-crew`);
+      return e ? e.textContent.trim() : null;
+    }, HG);
+    assertEq(crew, 'Tess à l’établi', `hangar ${tag} : Tess à l’Établi`);
     await checkHangarTabs(t, `${tag}-test`, 'shotgun', shots);
   }
 }
@@ -756,9 +813,12 @@ export default async function (t) {
     for (const v of [{ tag: 'normal', settings: { leftHanded: false, touchSize: 1 } }, ...TOUCH_VARIANTS.slice(1)]) {
       await checkBossBar(t, 640, 320, `boss ${v.tag} 640x320`, v.settings);
     }
+    // Nom le plus long (Scarabée-titan, j2), grandes commandes.
+    await checkBossBar(t, 640, 320, 'boss titan big 640x320', TOUCH_VARIANTS[1].settings, 'j2');
     await patchSavedSettings(t, { leftHanded: false, touchSize: 1 });
+    await checkFailFight(t);
   } else {
-    t.log('barre de boss non testée (aides DEV absentes du build de production)');
+    t.log('barre de boss et échec en combat non testés (aides DEV absentes du build de production)');
   }
 
   // --- Plan 03 : HUD à 5 cœurs et 5 boucliers, ligne Réserve des résultats, hangar

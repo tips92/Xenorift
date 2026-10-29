@@ -42,7 +42,8 @@ export const WORLDS: readonly WorldDef[] = [
     flightBoss: { name: 'Léviathan de la nébuleuse', blueprint: 'machinegun' },
     stages: [
       { id: 'j1', part: 1, levelId: 'jungle', boss: 'blobKing' },
-      // 4b : j2 (part 2, rewards Tess) et j3 (part 3, rewards double saut), insérés ici.
+      { id: 'j2', part: 2, levelId: 'jungle2', boss: 'beetleTitan', rewards: [{ kind: 'crew', id: 'tess' }] },
+      { id: 'j3', part: 3, levelId: 'jungle3', boss: 'whale', rewards: [{ kind: 'skill', id: 'doubleJump' }] },
       { id: 'f1', part: 4, levelId: 'nebula', rewards: [{ kind: 'blueprint', id: 'machinegun' }] },
     ],
   },

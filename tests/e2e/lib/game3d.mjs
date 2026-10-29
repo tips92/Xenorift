@@ -1,7 +1,7 @@
 // Outils des scénarios du vol 3D : parties successives (__xr3d), perte / restauration du contexte WebGL
 // du renderer partagé (src/game3d/renderer.ts, src/game3d/flight.ts), journal des écrans et des messages.
 // Les aides de partie (runId, waitFlying, loseFlight…) utilisent __xr3d : serveur de dev uniquement (meta.dev).
-import { AssertionError, assert, fmt, waitFor, waitForScreen } from './helpers.mjs';
+import { AssertionError, assert, fmt, screenButton, waitFor, waitForScreen } from './helpers.mjs';
 
 /** Motif de l'échec d'étape quand le contexte n'est pas restauré (CONTEXT_LOST_REASON). */
 export const LOST_REASON = 'Liaison graphique perdue';
@@ -250,7 +250,7 @@ export async function waitFail(t, { timeout = 15000 } = {}) {
 /** Clique le bouton `label` de l'écran actif `screen` (attend d'abord que l'écran soit utilisable). */
 export async function pressScreen(t, screen, label) {
   await waitForScreen(t, screen);
-  await t.page.locator(`.screens [data-screen="${screen}"].is-active button`, { hasText: label }).first().click({ timeout: 5000 });
+  await (await screenButton(t, screen, label)).click({ timeout: 5000 });
 }
 
 /** Échap : attend le menu Pause ouvert et la partie en pause. */

@@ -89,7 +89,7 @@ export default async function (t) {
   const hit = await t.ev(
     () =>
       new Promise((done) => {
-        window.__xr2d.boss.hit(2);
+        window.__xr2d.boss.hit(1);
         // Une image dessinée avec la copie additive, puis la scène figée.
         requestAnimationFrame(() => {
           window.__xr2d.scene.scene.pause();
@@ -97,7 +97,7 @@ export default async function (t) {
         });
       }),
   );
-  assert(hit.flashing && hit.life === 22, `Canvas : boss touché, clignotement visible (${fmt(hit)})`);
+  assert(hit.flashing && hit.life === hit.maxLife - 1, `Canvas : boss touché, clignotement visible (${fmt(hit)})`);
   await t.shot('canvas-boss-flash');
   await t.ev(() => window.__xr2d.scene.scene.resume());
   await waitFor(t, () => !window.__xr2d.boss.info().flashing, { timeout: 2000, label: 'Canvas : fin du clignotement' });

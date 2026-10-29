@@ -129,6 +129,8 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
     row.dataset.reward = `${r.kind}:${r.id}`;
     row.setAttribute('aria-label', `${line.label} : ${line.value}`);
   }
+  // 5 lignes et plus (récompense d'un niveau 2D) : resserrées sur les écrans bas (styles.css).
+  if (details.childElementCount >= 5) details.classList.add('is-dense');
 
   const actions = div('results-actions');
   actions.append(

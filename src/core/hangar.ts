@@ -341,6 +341,7 @@ export function buildPlayLoadout(save: Readonly<SaveData>, test: boolean, overri
     mods,
     maxHearts: maxHeartsFor(save.extraHearts),
     ship: shipLoadout(save.ship),
+    crew: [...save.crew],
   };
 }
 
@@ -355,6 +356,7 @@ export function defaultPlayLoadout(): PlayLoadout {
     mods,
     maxHearts: BASE_HEARTS,
     ship: shipLoadout(defaultShipModules()),
+    crew: [],
   };
 }
 

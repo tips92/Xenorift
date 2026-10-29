@@ -1,17 +1,23 @@
 // Campagne complète depuis l'accueil, sauvegarde neuve : JOUER → carte d'intro → Lisière de Xéna (4 cristaux, pause
 // → RECOMMENCER : la partie repart du début, compte de cristaux remis à zéro ; 3 cristaux) → Blob-roi vaincu dans son
 // arène, puis Kaï court jusqu'à la balise de LUMA (« Boss vaincu +2 000 », « +3 cristaux ») → SUIVANT → hangar
-// (réserve 3, DÉCOLLER vers le Vol 1 ; Échap ramène aux résultats,
-// figés) → Vol 1 gagné aussitôt (réserve + cristaux ramassés avant la victoire, 0 en général ; récompense « Plan :
-// mitrailleur ») → SUIVANT → hangar
+// (réserve 3, REDESCENDRE vers la Canopée des spores ; Échap ramène aux résultats, figés) → j2 (arrivée par le
+// faisceau, victoire par la balise, aucun cristal ; « Équipière : Tess ») → SUIVANT → hangar (Tess à l'Établi,
+// REDESCENDRE vers le Sanctuaire du gardien) → j3 (faisceau ; victoire = défaite de la méduse-baleine dans la scène,
+// à sa hauteur et dans la vue, sans sortie : « Compétence : double saut », « Boss vaincu +5 000 ») → SUIVANT → hangar (DÉCOLLER vers le Vol 1) → Vol 1
+// gagné
+// aussitôt (réserve + cristaux ramassés avant la victoire, 0 en général ; récompense « Plan : mitrailleur ») →
+// SUIVANT → hangar
 // (ATTERRIR vers la Lune) → Lune : 5 cristaux ramassés, 3 vies perdues → « MISSION ÉCHOUÉE » (Plus de vies ! ;
 // réserve inchangée, les cristaux de la tentative sont perdus) → RÉESSAYER (3 vies, 2 cristaux) → victoire par la
 // Comète (réserve + cristaux de la nouvelle tentative seulement) → SUIVANT → hangar (DÉCOLLER vers le Vol 2) → Vol 2
 // → SUIVANT (pas de hangar après la dernière étape) → « FIN DE LA DÉMO » avec le score total (somme des records) et
 // les étoiles (3 par étape) → MENU → accueil qui propose de continuer. Étapes réussies et ouvertes lues dans
-// __xrShell.info().stages, au départ et après chaque victoire (hors mode test : seule la suivante d'une étape
-// réussie s'ouvre). Les victoires et les morts passent par les aides DEV (__xr2d.boss.enter / win en j1 ; __xr2d.win,
-// qui mène à la sortie du niveau : Comète en m1 ; kill ; __xr3d.win).
+// __xrShell.info().stages, au départ et après chaque victoire, comparées à la règle (hors mode test : ouverte = la
+// première, une réussie ou la suivante d'une réussie) ; la fin vérifie que le parcours a joué toutes les étapes. Les
+// victoires et les morts passent par les aides DEV (__xr2d.boss.enter / win en j1 ; __xr2d.win, qui mène à la sortie
+// du niveau : balise en j2, Comète en m1, et en j3 amène Kaï dans l'arène puis termine par la défaite du gardien ;
+// kill ; __xr3d.win).
 import {
   activeScreen,
   assert,
@@ -27,7 +33,7 @@ import {
 import { hudPlatform, nextViaHangar, press, pressPause, resultDetails, waitPause } from '../lib/core.mjs';
 
 export const meta = {
-  title: 'Campagne : accueil → j1 → f1 → m1 (échec, RÉESSAYER) → f2 → fin de la démo',
+  title: 'Campagne : accueil → j1 → j2 → j3 → f1 → m1 (échec, RÉESSAYER) → f2 → fin de la démo',
   suites: ['full'],
   dev: true,
   timeoutMs: 240000,
@@ -60,9 +66,13 @@ function collect(t, n) {
 
 const bankNow = (t) => t.ev(() => window.__xrShell.info().crystals);
 
-/** Étapes réussies et ouvertes : `[[id, cleared, unlocked], …]` comparé à `want`. */
-async function assertProgress(t, want, label) {
+/**
+ * Étapes réussies et ouvertes (`__xrShell.info().stages`, `[[id, cleared, unlocked], …]`) : réussies = `cleared`,
+ * ouvertes = la première, une réussie ou la suivante d'une réussie (core/save.ts, hors mode test).
+ */
+async function assertProgress(t, cleared, label) {
   const got = await t.ev(() => window.__xrShell.info().stages.map((s) => [s.id, s.cleared, s.unlocked]));
+  const want = got.map(([id], i) => [id, cleared.includes(id), i === 0 || cleared.includes(id) || cleared.includes(got[i - 1][0])]);
   assertEq(got, want, `progression ${label}`);
 }
 
@@ -151,7 +161,9 @@ export default async function (t) {
   await waitForScreen(t, 'title');
   const title = await screenText(t, 'title');
   assert(/Nouvelle aventure/i.test(title), `sauvegarde neuve : JOUER doit annoncer « Nouvelle aventure » (texte : ${title})`);
-  await assertProgress(t, [['j1', false, true], ['f1', false, false], ['m1', false, false], ['f2', false, false]], 'au départ');
+  /** Étapes jouées et réussies par le parcours, dans l'ordre. */
+  const played = [];
+  await assertProgress(t, played, 'au départ');
 
   // ---------------------------------------------------------------- Jungle (j1)
   await press(t, 'title', 'Jouer');
@@ -180,10 +192,11 @@ export default async function (t) {
   await bossWin(t, 'j1');
   const j1Bank = await resultsBank(t);
   assertEq(j1Bank, { gain: '+3 cristaux', bank: 3 }, 'j1 : gain de la partie recommencée seulement, réserve 3');
-  await assertProgress(t, [['j1', true, true], ['f1', false, true], ['m1', false, false], ['f2', false, false]], 'après j1');
+  played.push('j1');
+  await assertProgress(t, played, 'après j1');
   await t.shot('j1-results');
 
-  // ---------------------------------------------------------------- Hangar entre j1 et f1
+  // ---------------------------------------------------------------- Hangar entre j1 et j2
   await press(t, 'results', 'Suivant');
   await waitForScreen(t, 'hangar');
   const hg = await t.ev(() => {
@@ -197,7 +210,7 @@ export default async function (t) {
   });
   t.log(`hangar après j1 : ${JSON.stringify(hg)}`);
   assertEq({ wallet: hg.wallet, crystals: hg.crystals }, { wallet: 3, crystals: 3 }, 'hangar : réserve affichée = réserve enregistrée = 3');
-  assert(hg.depart && /Décoller/i.test(hg.depart) && hg.depart.includes("Nébuleuse d'Azur"), `hangar : bouton « Décoller » vers le Vol 1 (${hg.depart})`);
+  assert(hg.depart && /Redescendre/i.test(hg.depart) && hg.depart.includes('Canopée des spores'), `hangar : bouton « Redescendre » vers j2 (${hg.depart})`);
   await t.shot('hangar-j1');
   // Échap : retour aux résultats, valeurs finales (réserve affichée tout de suite), puis de nouveau le hangar.
   await t.key('Escape', 60);
@@ -205,6 +218,60 @@ export default async function (t) {
   const back = await resultDetails(t);
   assertEq(Number(String(back['Réserve']).replace(/\D/g, '')), 3, `retour du hangar : réserve des résultats (${JSON.stringify(back)})`);
   await nextViaHangar(t);
+
+  // ---------------------------------------------------------------- Canopée des spores (j2) : faisceau, balise
+  await waitIntro(t, 'Canopée des spores');
+  await waitFor2dPlay(t);
+  assertEq(await t.ev(() => window.__xr2d.scene.arrival && window.__xr2d.scene.arrival.kind), 'beam', 'j2 : arrivée par le faisceau de LUMA');
+  await win2d(t, 'j2', 'beacon');
+  assertEq(await resultsBank(t), { gain: null, bank: 3 }, 'j2 gagné sans cristal : réserve 3');
+  assertEq((await resultDetails(t))['Équipière'], 'Tess', 'j2 réussi la première fois : « Équipière : Tess »');
+  played.push('j2');
+  await assertProgress(t, played, 'après j2');
+  await t.shot('j2-results');
+  await press(t, 'results', 'Suivant');
+  await waitForScreen(t, 'hangar');
+  const tess = await t.ev(() => {
+    const e = document.querySelector('.screens [data-screen="hangar"].is-active .hg-crew');
+    return e ? e.textContent.trim() : null;
+  });
+  assertEq(tess, 'Tess à l’établi', 'hangar après j2 : Tess à l’Établi');
+  await t.key('Escape', 60);
+  await waitForScreen(t, 'results');
+  await departTo(t, 'Redescendre', 'Sanctuaire du gardien');
+
+  // ---------------------------------------------------------------- Sanctuaire du gardien (j3) : défaite du gardien
+  await waitIntro(t, 'Sanctuaire du gardien');
+  await waitFor2dPlay(t);
+  assertEq(await t.ev(() => window.__xr2d.scene.arrival && window.__xr2d.scene.arrival.kind), 'beam', 'j3 : arrivée par le faisceau de LUMA');
+  const guardian = await t.ev(() => {
+    window.__xr2d.win();
+    const s = window.__xr2d.scene;
+    return { exit: s.exit, state: s.state, boss: s.boss.state, atHover: s.boss.y === s.boss.hoverY };
+  });
+  assertEq(guardian, { exit: null, state: 'exit', boss: 'beaten', atHover: true }, 'j3 : sans sortie, défaite du gardien dans l’arène, à sa hauteur (état exit)');
+  // win() la bat pendant son arrivée : sa défaite se joue quand même dans la vue.
+  await t.wait(1200);
+  const seen = await t.ev(() => {
+    const s = window.__xr2d.scene;
+    const b = s.boss;
+    return { state: s.state, boss: b.state, visible: b.body.visible, inView: b.y + 81 > s.cameras.main.worldView.y };
+  });
+  assertEq(seen, { state: 'exit', boss: 'beaten', visible: true, inView: true }, 'j3 : défaite visible, gardienne dans la vue 1,2 s après');
+  await waitForScreen(t, 'results', { timeout: 25000 });
+  const j3Text = await screenText(t, 'results');
+  assert(/NIVEAU TERMIN/i.test(j3Text), `j3 : écran « NIVEAU TERMINÉ » attendu (texte : ${j3Text.slice(0, 160)})`);
+  assertEq(await resultsBank(t), { gain: null, bank: 3 }, 'j3 gagné sans cristal : réserve 3');
+  assertEq((await resultDetails(t))['Compétence'], 'double saut', 'j3 réussi la première fois : « Compétence : double saut »');
+  const j3Prime = await t.ev(() => {
+    const e = document.querySelector('.screens [data-screen="results"].is-active .results-bonus-value');
+    return e ? e.textContent.replace(/\s/g, '') : null;
+  });
+  assertEq(j3Prime, '+5000', 'j3 : prime du gardien sur les résultats');
+  played.push('j3');
+  await assertProgress(t, played, 'après j3');
+  await t.shot('j3-results');
+  await departTo(t, 'Décoller', "Nébuleuse d'Azur");
 
   // ---------------------------------------------------------------- Vol 1 (f1)
   await waitIntro(t, "Nébuleuse d'Azur");
@@ -214,7 +281,8 @@ export default async function (t) {
   assertEq(await resultsBank(t), { gain: gainText(f1Got), bank: 3 + f1Got }, 'f1 : réserve = 3 + cristaux du vol');
   assertEq(await bankNow(t), 3 + f1Got, 'f1 : réserve enregistrée');
   assertEq((await resultDetails(t)).Plan, 'mitrailleur', 'f1 réussi la première fois : « Plan : mitrailleur »');
-  await assertProgress(t, [['j1', true, true], ['f1', true, true], ['m1', false, true], ['f2', false, false]], 'après f1');
+  played.push('f1');
+  await assertProgress(t, played, 'après f1');
   await t.shot('f1-results');
   await departTo(t, 'Atterrir', 'Lune Krator');
 
@@ -251,22 +319,26 @@ export default async function (t) {
   assertEq(m1Picked, 2, 'm1 : cristaux de la nouvelle tentative seulement');
   assertEq(await resultsBank(t), { gain: '+2 cristaux', bank: bank0 + m1Picked }, 'm1 : réserve = avant + nouvelle tentative (les 5 de l’échec perdus)');
   assertEq(await bankNow(t), bank0 + m1Picked, 'm1 : réserve enregistrée');
-  await assertProgress(t, [['j1', true, true], ['f1', true, true], ['m1', true, true], ['f2', false, true]], 'après m1');
+  played.push('m1');
+  await assertProgress(t, played, 'après m1');
   await departTo(t, 'Décoller', "Ceinture d'Orak");
 
   // ---------------------------------------------------------------- Vol 2 (f2) puis fin de la démo
   await waitIntro(t, "Ceinture d'Orak");
   await fly(t, 'f2');
+  played.push('f2');
   await press(t, 'results', 'Suivant');
   await waitForScreen(t, 'end', { timeout: 20000 });
 
   const save = await readSave(t);
   const stages = await t.ev(() => window.__xrShell.info().stages);
   const ids = stages.map((s) => s.id);
-  assertEq(ids, ['j1', 'f1', 'm1', 'f2'], 'étapes de la campagne');
+  assertEq(ids, played, 'étapes de la campagne : toutes jouées par le parcours, dans l’ordre');
   for (const id of ids) assert(save.best[id] && save.best[id].score > 0, `record de ${id} sauvegardé (${JSON.stringify(save.best)})`);
   assert(stages.every((s) => s.cleared && s.unlocked), `toutes les étapes réussies et ouvertes (${JSON.stringify(stages)})`);
   assertEq(save.blueprints, ['machinegun'], 'plan du mitrailleur enregistré');
+  assertEq(save.crew, ['tess'], 'Tess dans l’équipage');
+  assertEq(save.loadout.skills.doubleJump, true, 'double saut appris');
   const maxStars = ids.length * 3;
   const total = ids.reduce((s, id) => s + save.best[id].score, 0);
   const stars = ids.reduce((s, id) => s + save.best[id].stars, 0);

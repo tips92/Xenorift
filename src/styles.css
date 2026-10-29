@@ -2097,6 +2097,18 @@ svg {
   color: #ffe7a0;
 }
 
+/* 5 lignes (niveau 2D avec une récompense) sur un écran bas : le panneau tient sans défiler à 640 x 320. */
+@media (max-height: 360px) {
+  .results-details.is-dense {
+    gap: 3px;
+  }
+
+  .results-details.is-dense .detail {
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+}
+
 .detail-gain {
   flex: 0 0 auto;
   font: 800 clamp(11px, 3.3vh, 14px) / 1.1 var(--font-title);
@@ -2276,6 +2288,19 @@ svg {
 
 .hg-caption-sub.is-on {
   color: var(--lime);
+}
+
+/* Équipière à bord (Tess à l'Établi) */
+.hg-crew {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ffd286;
+}
+
+.hg-crew-ico {
+  width: 13px;
+  height: 13px;
 }
 
 .hg-slots {
@@ -3067,6 +3092,11 @@ svg {
 
 .fail-actions .btn {
   flex: 1 1 160px;
+}
+
+/* « Réessayer le combat » (échec en plein combat de boss) : seul sur sa rangée, au-dessus de Réessayer et Menu. */
+.fail-actions .fail-fight {
+  flex-basis: 100%;
 }
 
 .error-msg {
@@ -4113,6 +4143,11 @@ svg {
   background: rgba(5, 1, 15, 0.9);
 }
 
+/* Cran d'une touche (boss en touches), plus discret que le repère de phase. */
+.boss-mark.is-step {
+  background: rgba(5, 1, 15, 0.55);
+}
+
 .boss-flash {
   position: absolute;
   inset: 0;
@@ -4266,6 +4301,11 @@ svg {
 
   .fl-boost-track {
     width: 64px;
+  }
+
+  /* Barre de boss à 38vw : « SCARABÉE-TITAN », le nom le plus long, tient à côté de « Phase 1/2 » dès 640 px. */
+  .boss-name {
+    letter-spacing: 0.06em;
   }
 }
 

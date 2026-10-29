@@ -1,15 +1,16 @@
-import type { LevelData } from './types';
-import { joinSegments } from './build.ts';
-import type { Segment } from './build.ts';
-import { stageText } from '../../core/story.ts';
+import type { LevelData } from '../types';
+import { joinSegments } from '../build.ts';
+import type { Segment } from '../build.ts';
+import { stageText } from '../../../core/story.ts';
 
-// Monde 1 — Jungle de Xéna : niveau d'apprentissage, à la manière d'un « 1-1 ».
+// Monde 1, niveau 1 (j1) — Lisière de Xéna : niveau d'apprentissage, à la manière d'un « 1-1 ».
 // Chaque mécanique est présentée seule, sans danger, puis combinée. Sol de base : lignes 12-13.
 // Repères de colonnes en commentaire (colonne absolue du premier caractère du segment).
 
 /** 0 — Départ : zone sûre, premiers cristaux à ramasser en marchant, premier bloc « ? ».
  *  Départ en colonne 8 : au repos, la caméra est calée à gauche et Kaï doit apparaître à droite du stick
- *  tactile (et du Tir en mode gaucher), même au cran « grand » sur un écran de 320 px de haut. */
+ *  tactile (et du Tir en mode gaucher), même au cran « grand » sur un écran de 320 px de haut. La Comète est
+ *  posée sur les colonnes 4 à 7 (start: 'ship') : Kaï en sort, elle repart en orbite. */
 const START: Segment = [
   '................',
   '................',
@@ -27,8 +28,10 @@ const START: Segment = [
   '################',
 ];
 
-/** 16 — Premier marcheur seul sur du plat, rangée de blocs avec le bonus de vitesse (« 1 »), premier pilier. */
-const FIRST_WALKER: Segment = [
+/** 16 — Rangée de blocs avec le bonus de vitesse (« 1 »), premier pilier (2 lignes). Aucun ennemi : le premier
+ *  marcheur attend derrière ce pilier, dans l'enclos 35-40, sans pouvoir venir jusqu'au départ (Kaï immobile ou
+ *  lent : LUMA a fini de parler avant de le croiser ; « tuto-stomp » quand il paraît à l'écran). */
+const FIRST_BLOCKS: Segment = [
   '......................',
   '......................',
   '......................',
@@ -40,12 +43,13 @@ const FIRST_WALKER: Segment = [
   '..........B?1?B.......',
   '......................',
   '.................##...',
-  '......w..........##.*.',
+  '.................##.*.',
   '######################',
   '######################',
 ];
 
-/** 38 — Piliers (2 et 3 lignes) avec un marcheur entre chaque, puis un petit trou de 2. */
+/** 38 — Deux piliers de 3 lignes ; un marcheur dans chaque enclos (35-40 : le premier ennemi du niveau, 43-48),
+ *  puis un petit trou de 2. */
 const PILLARS: Segment = [
   '....................',
   '....................',
@@ -118,18 +122,18 @@ const LIFT: Segment = [
 ];
 
 /** 124 — Blindé présenté sur un long plat : de la place pour lui tirer dessus (2 tirs de laser).
- *  Salle secrète murée tout en haut (ruine astréenne, 3 cristaux ; visible en haut de l'écran depuis le sol,
- *  mais fermée et hors d'atteinte) : on y entre par la porte posée sur le rocher (col. 144, ligne 9, sur une
- *  tuile plate), on ressort par celle de la salle (col. 128, ligne 5). Lignes 0 et 1 vides : le plafond et la
- *  flèche ▲ de la porte de la salle restent sous le HUD (caméra calée en haut de la carte). Le bloc « ? » de
- *  dessous laisse la place de se tenir debout dessus. Ses cristaux étaient sur le 2e pilier et sur le rocher
- *  du double saut. */
+ *  Ruine astréenne murée tout en haut (3 cristaux ; 6 glyphes 'G' sur la droite du mur du fond, que la bulle de
+ *  LUMA, en haut à gauche, ne cache pas quand elle parle de la ruine ; visible en haut de l'écran depuis le sol,
+ *  mais fermée et hors d'atteinte) : on y entre par la porte posée sur le rocher (col. 144, ligne 9, sur une tuile
+ *  plate), on ressort par celle de la salle (col. 128, ligne 5). Lignes 0 et 1 vides : le plafond et la flèche ▲ de
+ *  la porte de la salle restent sous le HUD (caméra calée en haut de la carte). Le bloc « ? » de dessous laisse la
+ *  place de se tenir debout dessus. Ses cristaux étaient sur le 2e pilier et sur le rocher du double saut. */
 const ARMORED: Segment = [
   '......................',
   '......................',
   '...BBBBBBBBBBB........',
-  '...B.........B........',
-  '...B.........B........',
+  '...B...G.G.G.B........',
+  '...B....G.G.GB........',
   '...BD.*ccc*..B........',
   '...BBBBBBBBBBB........',
   '......................',
@@ -225,7 +229,7 @@ export const JUNGLE: LevelData = {
   music: 'jungle',
   map: joinSegments('jungle', [
     START,
-    FIRST_WALKER,
+    FIRST_BLOCKS,
     PILLARS,
     ONE_WAY,
     ACID,
@@ -237,13 +241,32 @@ export const JUNGLE: LevelData = {
     ARENA,
   ]),
   boss: 'blobKing',
-  // Départ (LUMA brouillée), sous la ruine astréenne (salle murée 127-137), avant l'escalier final (arène : 220-239,
-  // balise : 244), à l'entrée dans l'arène.
+  start: 'ship',
+  creature: 'far',
+  parTimeS: 240,
+  // Tutoriel de LUMA là où il sert (muet une fois j1 réussi), et l'histoire : départ (LUMA brouillée), ruine
+  // astréenne (première porte), balise (avant l'escalier final ; arène : 220-239, balise : 244).
   radio: [
     { id: 'j1-start', cols: [0, 12] },
-    { id: 'j1-ruin', cols: [127, 137] },
-    { id: 'j1-beacon', cols: [193, 206] },
+    { id: 'tuto-move', cols: [0, 12] },
+    // Premier marcheur, dans l'enclos 35-40 derrière le pilier 33 ; message urgent : il passe devant « tuto-move »
+    // quand Kaï court déjà (fenêtre assez tôt pour qu'il arrive avant l'ouverture de « tuto-move »).
+    { id: 'tuto-stomp', cols: [16, 24] },
+    // Volants et plateformes traversables (58-81), point de contrôle 78.
+    { id: 'tuto-aim', cols: [55, 59] },
+    { id: 'tuto-drop', cols: [63, 67] },
+    { id: 'tuto-checkpoint', on: 'checkpoint' },
     { id: 'tuto-overheat', on: 'overheat' },
+    // Blocs « ? » au-dessus de l'acide (93, 95) : ceux du départ se découvrent en sautant, la file y est pleine.
+    { id: 'tuto-blocks', cols: [88, 92] },
+    // Blindé (138, réveillé vers la colonne 100, il descend jusqu'au bord de l'ascenseur, 116) : à l'atterrissage,
+    // avant de le croiser. Porte du rocher (144) vers la ruine.
+    { id: 'tuto-armored', cols: [116, 121] },
+    { id: 'tuto-door', cols: [139, 143] },
+    { id: 'j1-ruin', on: 'door' },
+    // Cache du double saut (157-161, ligne 3), au-dessus du point de contrôle 148.
+    { id: 'tuto-later', cols: [150, 154] },
+    { id: 'j1-beacon', cols: [193, 206] },
     { id: 'j1-boss', on: 'boss' },
   ],
 };

@@ -1,24 +1,18 @@
 import { getSave } from '../core/save';
-import { RADIO, TUTORIAL_MARK, type Mood, type RadioMessage, type Speaker } from '../core/story';
+import { BUBBLE_CPS, RADIO, RADIO_TIMING, TUTORIAL_MARK, radioHoldS, type Mood, type RadioMessage, type Speaker } from '../core/story';
 import type { AudioApi, RadioId } from '../core/types';
 import type { Bubble } from '../story/bubble';
 
 // Radio de LUMA en jeu (plan 04, point 7) : bulle de story/bubble.ts dans le HUD, sous les stats (styles.css),
-// jamais cliquable. File de 2 messages en attente au plus ; lettres écrites à 32 par seconde, un bip (lumaBip)
-// toutes les 125 ms au plus ; horloge propre (requestAnimationFrame) figée en pause et page cachée. Module des
-// bulles chargé à la demande (import dynamique : il n'alourdit pas l'accueil).
+// jamais cliquable. File de 2 messages en attente au plus (un message `urgent` passe devant, un message `interrupt`
+// remplace aussitôt celui de la bulle et fait oublier les autres ; un message `castaway` se tait une fois ce naufragé
+// dans l'équipage) ; lettres écrites à
+// 32 par seconde, un bip (lumaBip) toutes les 125 ms au plus ; horloge propre (requestAnimationFrame) figée en
+// pause et page cachée. Module des
+// bulles chargé à la demande (import dynamique : il n'alourdit pas l'accueil). Rythme : RADIO_TIMING de
+// core/story.ts (check-levels simule la file avec). Texte du clavier (`keys`) sans commandes tactiles.
 
-/** Messages en attente au plus : un nouveau message chasse le plus ancien. */
-const MAX_WAITING = 2;
-/** Ouverture de la radio (radioOpen) avant la première lettre (s). */
-const OPEN_S = 0.3;
-/** Lecture après la dernière lettre (s) : selon la longueur, bornée ; plus courte si un message attend. */
-const HOLD_PER_CHAR_S = 0.045;
-const HOLD_MIN_S = 2.2;
-const HOLD_MAX_S = 5;
-const HOLD_BUSY_S = 1.2;
-/** Bulle cachée avant le message suivant (s ; fondu de 160 ms). */
-const GAP_S = 0.35;
+const { openS: OPEN_S, holdBusyS: HOLD_BUSY_S, gapS: GAP_S, maxWaiting: MAX_WAITING } = RADIO_TIMING;
 /** Pas maximal (retour de pause ou d'arrière-plan : pas de saut). */
 const MAX_DT = 0.1;
 const VOWELS = 'aeiouyàâäéèêëîïôöùûüAEIOUYÀÂÄÉÈÊËÎÏÔÖÙÛÜ';
@@ -34,6 +28,8 @@ export interface RadioInfo {
   played: RadioId[];
   paused: boolean;
   typing: boolean;
+  /** Texte du message affiché (`keys` au clavier), '' sans message. */
+  text: string;
 }
 
 export interface Radio {
@@ -57,25 +53,29 @@ function letterPitch(c: number): number {
   return isVowel(c) ? 1.08 + (c % 3) * 0.04 : 0.9 + (c % 5) * 0.03;
 }
 
-function holdFor(m: RadioMessage): number {
-  return Math.min(HOLD_MAX_S, Math.max(HOLD_MIN_S, m.text.length * HOLD_PER_CHAR_S));
-}
-
 function tutorialDone(): boolean {
   return getSave().story.seen.includes(TUTORIAL_MARK);
 }
 
 /**
  * `parent` : couche du HUD ; `onLayout(h)` : hauteur de la bulle affichée (px), 0 quand elle se cache (les
- * messages de l'interface passent dessous).
+ * messages de l'interface passent dessous) ; `touchShown()` : commandes tactiles affichées (sinon texte `keys`).
  */
-export function createRadio(parent: HTMLElement, audio: AudioApi, onLayout: (height: number) => void): Radio {
+export function createRadio(
+  parent: HTMLElement,
+  audio: AudioApi,
+  onLayout: (height: number) => void,
+  touchShown: () => boolean,
+): Radio {
   let bubble: Bubble | null = null;
   let loading = false;
   const waiting: RadioId[] = [];
   const played: RadioId[] = [];
   let current: RadioMessage | null = null;
   let currentId: RadioId | null = null;
+  /** Texte affiché (tactile ou clavier) et sa lecture après la dernière lettre. */
+  let currentText = '';
+  let currentHold = 0;
   let phase: RadioPhase = 'idle';
   /** Temps écoulé dans la phase (s). */
   let inPhase = 0;
@@ -85,8 +85,9 @@ export function createRadio(parent: HTMLElement, audio: AudioApi, onLayout: (hei
   /** Options du bip (objet réutilisé). */
   const bip = { pitch: 1 };
 
-  function onBip(_who: Speaker, mood: Mood, letter: number): void {
-    bip.pitch = letterPitch(letter) * (mood === 'scrambled' ? 0.82 + Math.random() * 0.24 : 1);
+  function onBip(who: Speaker, mood: Mood, letter: number): void {
+    // Tess (naufragée de j2) : voix un peu plus aiguë que LUMA.
+    bip.pitch = letterPitch(letter) * (mood === 'scrambled' ? 0.82 + Math.random() * 0.24 : 1) * (who === 'tess' ? 1.2 : 1);
     audio.sfx('lumaBip', bip);
   }
 
@@ -95,7 +96,7 @@ export function createRadio(parent: HTMLElement, audio: AudioApi, onLayout: (hei
     loading = true;
     import('../story/bubble')
       .then((m) => {
-        bubble = m.createBubble(parent, { className: 'xr-bubble--radio', clock: 'manual', onBip });
+        bubble = m.createBubble(parent, { className: 'xr-bubble--radio', clock: 'manual', cps: BUBBLE_CPS, onBip });
         if (paused) bubble.pause();
         wake();
       })
@@ -128,12 +129,31 @@ export function createRadio(parent: HTMLElement, audio: AudioApi, onLayout: (hei
     const m: RadioMessage = RADIO[id];
     current = m;
     currentId = id;
+    currentText = m.keys && !touchShown() ? m.keys : m.text;
+    currentHold = radioHoldS(currentText);
     played.push(id);
     setPhase('open');
     audio.sfx('radioOpen');
-    void b.say(m.speaker, m.scrambled ? 'scrambled' : m.mood, m.text);
+    void b.say(m.speaker, m.scrambled ? 'scrambled' : m.mood, currentText);
     // Texte entier déjà en place (lettres transparentes) : hauteur finale.
     onLayout(b.el.offsetHeight);
+  }
+
+  /**
+   * Dialogue d'une action de Kaï (`interrupt`) : la file est oubliée (sauf ce dialogue) et le message en cours coupé,
+   * sans trou : la bulle passe au dialogue à l'image suivante (engine/npc.ts cale la dissolution sur ce départ).
+   */
+  function cutIn(): void {
+    for (let i = waiting.length - 1; i >= 0; i--) {
+      const w: RadioMessage = RADIO[waiting[i]];
+      if (!w.interrupt) waiting.splice(i, 1);
+    }
+    if (current && !current.interrupt) {
+      current = null;
+      currentId = null;
+      currentText = '';
+      setPhase('idle');
+    }
   }
 
   function step(b: Bubble, dt: number): void {
@@ -151,7 +171,7 @@ export function createRadio(parent: HTMLElement, audio: AudioApi, onLayout: (hei
         break;
       case 'hold': {
         b.advance(dt);
-        const hold = current ? holdFor(current) : 0;
+        const hold = current ? currentHold : 0;
         if (inPhase >= (waiting.length > 0 ? Math.min(hold, HOLD_BUSY_S) : hold)) {
           b.hide();
           onLayout(0);
@@ -163,6 +183,7 @@ export function createRadio(parent: HTMLElement, audio: AudioApi, onLayout: (hei
         if (inPhase >= GAP_S) {
           current = null;
           currentId = null;
+          currentText = '';
           setPhase('idle');
           if (waiting.length > 0) next();
         }
@@ -201,9 +222,18 @@ export function createRadio(parent: HTMLElement, audio: AudioApi, onLayout: (hei
       if (!Object.prototype.hasOwnProperty.call(RADIO, id)) return;
       const m: RadioMessage = RADIO[id];
       if (m.tutorial && tutorialDone()) return;
+      if (m.castaway && getSave().crew.includes(m.castaway)) return;
       if (currentId === id || waiting.includes(id)) return;
+      if (m.interrupt) cutIn();
       if (waiting.length >= MAX_WAITING) waiting.shift();
-      waiting.push(id);
+      if (m.urgent) {
+        // Devant les messages en attente, mais pas devant un dialogue (`interrupt`) commencé.
+        let i = 0;
+        while (i < waiting.length && (RADIO[waiting[i]] as RadioMessage).interrupt) i++;
+        waiting.splice(i, 0, id);
+      } else {
+        waiting.push(id);
+      }
       load();
       wake();
     },
@@ -213,6 +243,7 @@ export function createRadio(parent: HTMLElement, audio: AudioApi, onLayout: (hei
       played.length = 0;
       current = null;
       currentId = null;
+      currentText = '';
       setPhase('idle');
       paused = false;
       if (bubble) {
@@ -240,6 +271,7 @@ export function createRadio(parent: HTMLElement, audio: AudioApi, onLayout: (hei
         played: played.slice(),
         paused,
         typing: !!bubble && bubble.typing,
+        text: currentText,
       };
     },
   };

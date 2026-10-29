@@ -102,6 +102,17 @@ export async function waitForScreen(t, name, { timeout = 20000 } = {}) {
   if (mode === 'prod') await t.wait(SETTLE_MS);
 }
 
+/**
+ * Bouton `label` de l'écran `screen` affiché : celui dont le texte vaut exactement `label` (casse et espaces
+ * ignorés), sinon le premier qui le contient. Ainsi « Réessayer » ne prend pas « Réessayer le combat », placé avant.
+ */
+export async function screenButton(t, screen, label) {
+  const all = t.page.locator(`.screens [data-screen="${screen}"].is-active button`);
+  const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const exact = all.filter({ hasText: new RegExp(`^\\s*${esc}\\s*$`, 'i') });
+  return (await exact.count()) > 0 ? exact.first() : all.filter({ hasText: label }).first();
+}
+
 /** Texte visible (innerText, espaces normalisés) d'un écran, ou '' s'il est absent. */
 export function screenText(t, name) {
   return t.ev((n) => {

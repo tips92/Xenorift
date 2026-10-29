@@ -221,7 +221,9 @@ function giveUpSession(s: Session): void {
   const scene = sceneOf(s);
   // Kaï quittait déjà le niveau (Comète, balise) : il est gagné, inutile d'attendre la fin de l'animation.
   if (scene && scene.finishExitNow()) return;
-  endSession(s, () => s.hooks.onFail(GFX_LOST_REASON));
+  // En plein combat de boss : point de reprise (« Réessayer le combat »).
+  const retry = scene ? scene.fightRetryPoint() : null;
+  endSession(s, () => s.hooks.onFail(GFX_LOST_REASON, retry ?? undefined));
 }
 
 function onContextRestored(g: Phaser.Game): void {

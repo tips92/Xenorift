@@ -5,9 +5,10 @@ import type { WeaponStats } from '../../core/weapons';
 import { BULLET_ADDITIVE, BULLET_SIZE, BULLET_TEX, TEX } from '../art/keys';
 import { DEPTH, PROJECTILE_POOL_SIZE, TILE } from '../constants';
 import type { PlatformScene } from './PlatformScene';
-import { IMPACT_SFX_GAP_MS, SPORE_GRAVITY, SPORE_LIFE_S, SPORE_SPEED } from './tuning';
+import { IMPACT_SFX_GAP_MS, SPORE_DROP_VY, SPORE_GRAVITY, SPORE_LIFE_S, SPORE_SPEED } from './tuning';
 
-// Projectiles en pool, déplacés à la main (pas de corps Arcade) : tirs de Kaï (toutes armes) et spores des cracheurs.
+// Projectiles en pool, déplacés à la main (pas de corps Arcade) : tirs de Kaï (toutes armes), spores des cracheurs
+// et de la pluie de spores (engine/sporeRain.ts).
 
 /** Tir de Kaï en vol. Vitesse, portée, dégâts, pointe et couleur sont copiés de la fiche de l'arme au départ. */
 export interface Bolt {
@@ -134,12 +135,13 @@ export class ShotPool {
       this.kill(b);
       return true;
     }
-    // Boss : -1 raté, 0 partie blindée (arrêté, étincelle blanche), sinon touché (sons et clignotement : le boss).
+    // Boss (en touches : les dégâts de l'arme ne comptent pas) : -1 raté, 0 partie blindée (arrêté, étincelle
+    // blanche), sinon point faible atteint (sons et clignotement : le boss).
     const boss = scene.boss;
     if (boss) {
-      const dmg = boss.hitBy(tx, ty, b.damage);
-      if (dmg >= 0) {
-        fx.spark(tx - b.ux * 4, ty - b.uy * 4, dmg > 0 ? b.color : 0xffffff, dmg > 0 ? 9 : 5);
+      const hit = boss.hitBy(tx, ty);
+      if (hit >= 0) {
+        fx.spark(tx - b.ux * 4, ty - b.uy * 4, hit > 0 ? b.color : 0xffffff, hit > 0 ? 9 : 5);
         this.kill(b);
         return true;
       }
@@ -221,13 +223,15 @@ interface Spore {
 }
 
 const SPORE_RADIUS = 10;
+/** Spore de la pluie : plus grosse que celle d'un cracheur. */
+const SPORE_DROP_SCALE = 1.25;
 
 export class SporePool {
   private readonly spores: Spore[] = [];
 
   constructor(
     private readonly scene: PlatformScene,
-    size = 16,
+    size = 32,
   ) {
     for (let i = 0; i < size; i++) {
       const img = scene.add.image(-200, -200, TEX.spore);
@@ -236,20 +240,37 @@ export class SporePool {
     }
   }
 
-  /** Tir visé vers (tx, ty), en légère cloche. */
-  fire(x: number, y: number, tx: number, ty: number): void {
-    let spore: Spore | null = null;
+  /** Spore libre, sinon la plus proche de sa fin. */
+  private take(): Spore {
     let oldest: Spore = this.spores[0];
     for (let i = 0; i < this.spores.length; i++) {
       const s = this.spores[i];
-      if (!s.alive) {
-        spore = s;
-        break;
-      }
+      if (!s.alive) return s;
       if (s.life < oldest.life) oldest = s;
     }
-    if (!spore) spore = oldest;
+    return oldest;
+  }
 
+  /** Spore qui tombe du ciel depuis (x, y) (pluie de spores, annoncée par une tache au sol). */
+  drop(x: number, y: number): void {
+    const spore = this.take();
+    spore.vx = 0;
+    spore.vy = SPORE_DROP_VY;
+    spore.life = SPORE_LIFE_S;
+    spore.alive = true;
+    spore.img.setPosition(x, y).setVisible(true).setActive(true).setScale(SPORE_DROP_SCALE);
+  }
+
+  /** Spores en vol (tests). */
+  get active(): number {
+    let n = 0;
+    for (let i = 0; i < this.spores.length; i++) if (this.spores[i].alive) n++;
+    return n;
+  }
+
+  /** Tir visé vers (tx, ty), en légère cloche. */
+  fire(x: number, y: number, tx: number, ty: number): void {
+    const spore = this.take();
     const dx = tx - x;
     const dy = ty - y;
     const dist = Math.sqrt(dx * dx + dy * dy);

@@ -1,5 +1,51 @@
 # Étape 4 — monde 1 complet au nouveau format : plan technique
 
+> **État au 29/10/2026 : 4a et 4b faites** (étapes 1 à 12 de l'ordre de réalisation), vérifiées par typecheck,
+> check-levels, build, la suite e2e complète (39/39) et le diag (7/7) ; 4a essayée sur téléphone le 29/10
+> (décisions 20 et 21) ; essai sur téléphone de 4b à faire. **Prochaine action : 4c, étape 13.** 3b est fusionnée
+> dans la branche ; le tir au bouton du vol (décision 21) se fait à part et n'y est pas encore.
+>
+> Écarts de 4a au plan, tous dans le sens des décisions :
+> - Blob-roi complet dès l'étape 5, puis réglé à l'étape 6 (52 PV) ; converti en 4b en **4 touches** (décision 20) ;
+>   prime « Boss vaincu +2 000 » aux résultats ; barre de
+>   boss en bas au centre (le haut est pris par le HUD et la bulle) ; renforts enfermés hors de l'arène (`fence`).
+> - j1 : 252 colonnes (arène 220-239, balise en 244, K en 217), `levels/jungle/j1.ts` ; premier marcheur enfermé
+>   entre deux piliers ; 11 messages de tutoriel (courir et sauter réunis) + 3 d'histoire ; `RadioMessage.keys`
+>   (texte du clavier) et `urgent` ; déclencheurs `overheat`, `boss`, `checkpoint`, `door` ; check-levels simule
+>   la file de la radio. Pas de seconde ruine (glyphes dans la salle murée existante).
+> - Balise : son faisceau couvre toute sa colonne (on ne la saute pas) ; check-levels le sait (`scripts/lib/reach.ts`).
+> - `departLabel` dans `ui/flow.ts` (retiré de `core/hangar.ts`) ; `LevelData.parTimeS` remplace
+>   `TIME_BONUS_REF_S` ; `=` de la Jungle en branches, lianes, passerelles dès 4a.
+> - Lecteur de cinématiques prêt (`src/story/`), branché à l'étape 14.
+>
+> Écarts de 4b au plan :
+> - **Boss en touches** (décision 20) : contrat `Boss.hitBy(x, y)` sans `dmg` (point 16 : -1 raté, 0 blindé ou point
+>   faible fermé, 1 touche ; plombs de la même salve absorbés 120 ms), `takeDamage(n)` en touches, barre en crans
+>   (`BossHud.steps`) ; `BOSS_FIGHT_S` 25 / 30 / 60 s (IA `boss-bot` : Blob-roi ≈ 12 s, titan ≈ 16 s).
+> - **Scarabée-titan** : sur le dos, tout son corps prend les tirs (le tir debout atteint le dôme ; le ventre seul
+>   restait hors de portée), le ventre reste la cible des sauts ; sa charge s'arrête à la première case pleine (les
+>   champignons collés aux bornes, qu'il écrase) ; cailloux annoncés par une marque seule ; arène de j2 à 16 colonnes
+>   (206-221), champignons 207 et 220 contre les bornes.
+> - **Méduse-baleine** : corps inoffensif hors plongée (Kaï le traverse) ; cœur ouvert vulnérable en entier ;
+>   cachée avant le combat (elle arrive à la fermeture des barrières, la méduse du décor se cache) ; arène de j3 à
+>   18 colonnes (162-179), 3 passerelles à hauteur du cœur ; `Boss.defeatMs`, `SCORE_GUARDIAN` 5 000.
+> - **j2** (232 colonnes) : le tronc bouche l'entrée d'un tunnel sous un grand rocher ; la salle de Tess est creusée
+>   dans le rocher (pas au-dessus du tronc) ; sauvetage garanti par la carte (sa porte est le seul passage, prouvé
+>   par une borne haute du graphe, `ReachGraph` `bound`) ; portes fermées pendant le sauvetage ; radio :
+>   `RadioMessage.interrupt` (dialogue sans trou) et `castaway` (muet une fois Tess à bord) ; Tess déjà à bord :
+>   capsule seule (`PlayLoadout.crew`) ; message du titan avant l'arène (pas au déclencheur `boss` : bulle pendant
+>   le rebond d'entrée). Conseil d'intro « … et retrouve Tess ! » remis.
+> - **j3** (186 colonnes) : un seul point de contrôle (159), repères par partie dans check-levels
+>   (`PART_LIMITS.checkpoints`) ; radio brouillée de bout en bout (5 messages courts) ; pluie de spores, ni ombre ni
+>   secousse.
+> - Ajouts : `Effects.shake(force, ms?)` (durée réglable), `Mushrooms.squash`, registre des boss `flyers` / `music`,
+>   `EnemyManager.summonFlyer`, `PlatformScene.setMusicLevel`, icônes de j2 et j3, `.results-details.is-dense`,
+>   `Items.lightCheckpoint` (K contourné allumé sans message au nouvel essai), `screenButton` des tests. La
+>   méduse-baleine lointaine de j1 a ses taches grises (décision 9) : seul changement visible de j1 hors du boss.
+> - Restent pour plus tard : `boss-bot` ne joue pas la gardienne ; « Réessayer le combat » en vol (4c).
+> - Détail et mesures : journal de la séance (hors dépôt) ; résumé dans CLAUDE.md, recettes « Niveau 2D »,
+>   « Boss 2D » et « Message de LUMA ».
+
 Quatrième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). En cours de réalisation (branche `claude/world-1-completion-866505`, partie de `plans-etapes-1-3` après 3a). Elle s'appuie sur les
 étapes [1](01-controles.md) (visée, accroupi, portes), [2](02-armes.md) (arme générique, `loadout`, compétence
 `doubleJump`) et [3](03-hangar.md) (sauvegarde v2, hangar, balise, combat en vol) : 4a et 4b demandent 3a, 4c
@@ -104,6 +150,17 @@ solution retenue est toujours la première proposée, pas l'« Autre ».
 19. **Bouton du hangar** : « Atterrir » (niveau 1), « Redescendre » (niveaux 2 et 3), « Décoller » (vol), au lieu
     du « Décoller » unique du plan 03. Les cœurs demandent Mira (monde 3, étape 6). *Ces libellés ? Cœurs
     achetables sans Mira d'ici là ?*
+
+**Ajouts du 29/10/2026, après l'essai de 4a sur téléphone** (remplacent les vies « 24, 36, 3 × 20 » du point 16) :
+
+20. **Boss en touches** : un boss se bat en touches, pas en points de vie. Une touche = un tir qui atteint le point
+    faible exposé (ou un saut dessus quand le boss l'accepte), quelle que soit l'arme ; le point faible se referme
+    ensuite jusqu'à la fenêtre suivante. Blob-roi et Scarabée-titan : 4 touches (phase 2 après 2) ; méduse-baleine :
+    6 touches, 2 par phase. Les améliorations de dégâts ne changent rien contre les boss.
+21. **Vol : tir au bouton** (modifie la décision 3 du plan 03) : bouton TIR à la place du TURBO, tir continu tant
+    qu'on appuie, plus de tir automatique ni d'option « tir manuel » ; TURBO au-dessus ; une seule jauge d'énergie
+    que le tir et le turbo font chauffer ; en surchauffe, ni tir ni turbo jusqu'au refroidissement. Fait à part
+    (branche `claude/vol-tir-bouton`, partie de `plans-etapes-1-3`), puis fusionné.
 
 ## Modifications prévues
 
@@ -263,7 +320,7 @@ solution retenue est toujours la première proposée, pas l'« Autre ».
 **P** ≈ une séance (une demi-journée avec les vérifications), **M** ≈ 2 à 3, **G** ≈ 4 à 6 : ≈ 42 à 62
 séances. Chaque étape apporte ses tests ; chaque partie finit par la documentation et un essai sur téléphone.
 
-**4a — fondations** (après 3a ; toujours 4 étapes, j1 au nouveau format)
+**4a — fondations** (après 3a ; toujours 4 étapes, j1 au nouveau format) — **faite** (29/10/2026)
 
 1. Tables par monde côté 2D, `core/ids.ts`, scénario de captures (points 1, 26) — **M**.
 2. Table des mondes, progression, `story` et `rewards`, écran Niveaux, résultats (points 1 à 3, 5, 6) — **M**.
@@ -273,10 +330,10 @@ séances. Chaque étape apporte ses tests ; chaque partie finit par la documenta
    — **M**.
 6. j1 au nouveau format : légende, départ, tutoriel, ruine, Blob-roi définitif (points 8, 9, 11, 17) — **M**.
 
-**4b — la Jungle** (après 3a)
+**4b — la Jungle** (après 3a) — **faite** (29/10/2026)
 
 7. Champignons, créature proche et événements, dans une ébauche de j2 (points 14, 15, 19) — **M**.
-8. j2 complet, Tess, hangar avec Tess (points 7, 10, 15) — **M**.
+8. j2 complet, Tess, hangar avec Tess (points 7, 10, 15) — **M**. Conseil de j2 remis (« … et retrouve Tess ! »).
 9. Scarabée-titan (point 17) — **M**.
 10. j3 réduit à son arène, dans `WORLDS` ; méduse-baleine et défaite en sortie (points 12, 18) — **G**.
 11. j3 complet (point 10) — **M**.

@@ -1,7 +1,7 @@
 // Outils des scénarios « core » (vol, campagne, tactile, petits écrans, endurance, build de production).
 // Complète helpers.mjs. Sauf mention contraire, rien ici ne dépend des aides DEV : ces fonctions
 // marchent aussi sur le build de production.
-import { AssertionError, fmt, waitFor, waitForScreen } from './helpers.mjs';
+import { AssertionError, fmt, screenButton, waitFor, waitForScreen } from './helpers.mjs';
 
 // ---------------------------------------------------------------- Vaisseau 3D (crochet des outils de dev de three.js)
 
@@ -124,13 +124,10 @@ export function resultDetails(t) {
 
 // ---------------------------------------------------------------- Écrans et pause
 
-/** Clique le bouton `label` de l'écran `screen` une fois celui-ci utilisable (voir waitForScreen). */
+/** Clique le bouton `label` de l'écran `screen` une fois celui-ci utilisable (voir waitForScreen, screenButton). */
 export async function press(t, screen, label, { timeout = 20000 } = {}) {
   await waitForScreen(t, screen, { timeout });
-  await t.page
-    .locator(`.screens [data-screen="${screen}"].is-active button`, { hasText: label })
-    .first()
-    .click({ timeout: 5000 });
+  await (await screenButton(t, screen, label)).click({ timeout: 5000 });
 }
 
 /**
@@ -142,6 +139,18 @@ export async function nextViaHangar(t, { timeout = 20000 } = {}) {
   await press(t, 'results', 'Suivant', { timeout });
   await waitForScreen(t, 'hangar', { timeout });
   await t.page.locator('.screens [data-screen="hangar"].is-active .hg-depart').click({ timeout: 5000 });
+}
+
+/**
+ * Étape qui précède `id` dans la campagne (`__xrShell.info().stages`, dans l'ordre de STAGES), null pour la
+ * première. Aide DEV (`__xrShell`), page déjà chargée.
+ */
+export function stageBefore(t, id) {
+  return t.ev((sid) => {
+    const st = window.__xrShell.info().stages;
+    const i = st.findIndex((s) => s.id === sid);
+    return i > 0 ? st[i - 1].id : null;
+  }, id);
 }
 
 // ---------------------------------------------------------------- Écran Niveaux (une page par monde)

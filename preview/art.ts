@@ -5,8 +5,24 @@ import type { ThemeId, WeaponId } from '../src/core/types';
 import { PELLET_SPEED_JITTER, WEAPON_IDS, WEAPONS } from '../src/core/weapons';
 import { createParallax, generatePlatformArt, PLAYER_SHOULDER, type ParallaxHandle } from '../src/game2d/art';
 import { PLAYER_FRAME_COUNT } from '../src/game2d/art/draw/player';
-import { ANIM, ARM_MUZZLE, ARM_RIG, ARM_TEX, BULLET_ADDITIVE, BULLET_SIZE, BULLET_TEX, FRAMES, FRAME_SIZE, TEX, TILESET, TILE_FRAME } from '../src/game2d/art/keys';
+import {
+  ANIM,
+  ARM_MUZZLE,
+  ARM_RIG,
+  ARM_TEX,
+  BULLET_ADDITIVE,
+  BULLET_SIZE,
+  BULLET_TEX,
+  FRAMES,
+  FRAME_SIZE,
+  TEX,
+  TILESET,
+  TILE_FRAME,
+  WALKWAY_FAMILY_COUNT,
+  WALKWAY_VARIANTS,
+} from '../src/game2d/art/keys';
 import { AIM_ANGLE, type AimDir, DEPTH, LEVEL_ROWS, TILE, VIEW_H } from '../src/game2d/constants';
+import { walkwayFrame } from '../src/game2d/engine/mapBuilder';
 
 // Page d'aperçu du module graphique 2D (outil de développement, hors jeu).
 // Paramètres : ?theme=jungle|moon (THEME_IDS) &view=world|sheet|weapons &w=1080..1600 &speed=90 &x=0 &vy=1 &regen=1 &ff=0
@@ -171,15 +187,16 @@ class ArtScene extends Phaser.Scene {
 
   private buildSheet(): void {
     this.cameras.main.setBackgroundColor('#140e26');
-    // Tileset complet + frames 0..15
-    this.add.image(10, 26, TEX.tiles).setOrigin(0, 0);
-    this.label(274, 160, `tileset ${TILESET.width}x${TILESET.height}`);
-    for (let i = 0; i < 16; i++) {
-      const x = 560 + (i % 8) * 88;
-      const y = 26 + Math.floor(i / 8) * 76;
-      this.add.image(x, y, TEX.tiles, i).setOrigin(0, 0);
-      const name = Object.entries(TILE_FRAME).find(([, v]) => v === i)?.[0] ?? String(i);
-      this.label(x + 32, y + 62, name.replace('GROUND_', 'G_'));
+    // Tileset complet (à demi-taille) + chaque tuile (x0,75), plateformes à motifs comprises (W0..W8)
+    this.add.image(10, 26, TEX.tiles, '__BASE').setOrigin(0, 0).setScale(0.5);
+    this.label(142, 160, `tileset ${TILESET.width}x${TILESET.height} (x0,5)`);
+    const tileCount = TILE_FRAME.WALKWAY + WALKWAY_FAMILY_COUNT * WALKWAY_VARIANTS;
+    for (let i = 0; i < tileCount; i++) {
+      const x = 290 + (i % 13) * 76;
+      const y = 26 + Math.floor(i / 13) * 76;
+      this.add.image(x, y, TEX.tiles, i).setOrigin(0, 0).setScale(0.75);
+      const name = i >= TILE_FRAME.WALKWAY ? `W${i - TILE_FRAME.WALKWAY}` : (Object.entries(TILE_FRAME).find(([, v]) => v === i)?.[0] ?? String(i));
+      this.label(x + 24, y + 50, name.replace('GROUND_', 'G_'));
     }
     // Joueur (corps sans le bras armé ; 11 = accroupi, 12 = accroupi qui tire), flèche ▲ ; bras armés plus bas
     let x = this.frames(TEX.player, PLAYER_FRAME_COUNT, 10, 186, 64, 80, 'p');
@@ -457,9 +474,13 @@ class ArtScene extends Phaser.Scene {
     const isG = (r: number, c: number) => r >= 0 && r < rows && c >= 0 && c < cols && grid[r][c] === '#';
     for (let r = 0; r < rows; r++) {
       const row: number[] = [];
+      let run = -1;
       for (let c = 0; c < cols; c++) {
         const ch = grid[r][c];
         let t = -1;
+        // Plateformes à motifs : une famille par rangée de '=' (comme le moteur, engine/mapBuilder.ts).
+        if (ch !== '=') run = -1;
+        else if (run < 0) run = c;
         if (ch === '#') {
           const top = !isG(r - 1, c);
           const l = c > 0 && !isG(r, c - 1);
@@ -475,7 +496,7 @@ class ArtScene extends Phaser.Scene {
         } else if (ch === 'B') t = TILE_FRAME.BLOCK;
         else if (ch === '?') t = TILE_FRAME.BONUS;
         else if (ch === 'U') t = TILE_FRAME.BONUS_USED;
-        else if (ch === '=') t = TILE_FRAME.PLATFORM;
+        else if (ch === '=') t = walkwayFrame(run, c, r);
         else if (ch === '^') t = TILE_FRAME.HAZARD;
         else if (ch === 'a') t = TILE_FRAME.DECOR_A;
         else if (ch === 'b') t = TILE_FRAME.DECOR_B;

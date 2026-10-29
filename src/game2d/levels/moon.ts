@@ -207,4 +207,6 @@ export const MOON: LevelData = {
     SQUEEZE,
     LANDING,
   ]),
+  // Ancien format (monde 2 refait à l'étape 5) : ni arrivée ni gardien dans le décor.
+  parTimeS: 240,
 };

@@ -30,6 +30,9 @@ import {
   JUMP_V,
   KNOCKBACK_X,
   KNOCKBACK_Y,
+  MAX_RISE_V,
+  MUSHROOM_HELD_V,
+  MUSHROOM_V,
   STOMP_BOUNCE,
   STOMP_BOUNCE_HELD,
 } from './tuning';
@@ -117,7 +120,8 @@ export class Player {
     this.body = this.zone.body as Phaser.Physics.Arcade.Body;
     this.body.setSize(PLAYER_BODY.width, PLAYER_BODY.height, true);
     this.body.setCollideWorldBounds(true);
-    this.body.setMaxVelocity(4000, MAX_FALL_SPEED);
+    // Arcade borne aussi la montée : plafond relevé pour les champignons, chute bornée à la main (controlUpdate).
+    this.body.setMaxVelocity(4000, MAX_RISE_V);
     this.body.setBounce(0, 0);
 
     this.sprite = scene.add.sprite(x, feetY, TEX.player, 0);
@@ -226,8 +230,11 @@ export class Player {
     const move = left === right ? 0 : right ? 1 : -1;
     // ↓ seul : les diagonales basses comptent comme ← → (pas d'accroupi par accident en courant).
     const downOnly = down && !left && !right;
-    // Contact au sol (tuiles ou plateforme mobile, y compris quand elle monte).
-    const grounded = (b.blocked.down || b.touching.down) && now >= this.ignoreGroundUntil;
+    // Chute bornée (maxVelocity.y est relevé pour les champignons) : moins de TILE_BIAS par pas.
+    if (b.velocity.y > MAX_FALL_SPEED) b.velocity.y = MAX_FALL_SPEED;
+    // Contact au sol (tuiles ou plateforme mobile, y compris quand elle monte) ; sur un champignon : rebond.
+    let grounded = (b.blocked.down || b.touching.down) && now >= this.ignoreGroundUntil;
+    if (grounded && b.blocked.down && this.mushroomBounce(input, now)) grounded = false;
 
     if (grounded) {
       if (!this.wasGrounded) this.land();
@@ -401,6 +408,40 @@ export class Player {
       this.squashY = 1 - 0.22 * k;
       this.scene.fx.puff(this.x, this.feetY - 2, 2 + Math.round(3 * k));
     }
+  }
+
+  /**
+   * Champignon sous Kaï (sous son centre, ou sous un bord si le centre est dans le vide) : rebond, plus haut si
+   * Saut est tenu (ou vient d'être appuyé). L'appui est consommé : ni saut ni double saut à la même image.
+   */
+  private mushroomBounce(input: InputApi, now: number): boolean {
+    const m = this.scene.mushrooms;
+    if (!m) return false;
+    const b = this.body;
+    const row = Math.floor((b.y + b.height + 2) / TILE);
+    const grid = this.scene.grid;
+    let col = Math.floor(this.x / TILE);
+    if (!m.at(col, row)) {
+      const mid = grid.at(col, row);
+      if (mid === CELL_SOLID || mid === CELL_ONEWAY) return false;
+      const cL = Math.floor((b.x + 1) / TILE);
+      const cR = Math.floor((b.x + b.width - 1) / TILE);
+      if (m.at(cL, row)) col = cL;
+      else if (m.at(cR, row)) col = cR;
+      else return false;
+    }
+    const pressed = input.consumePress('jump');
+    const held = input.state.jump || pressed || now - this.jumpBufferAt <= JUMP_BUFFER_MS;
+    b.velocity.y = -(held ? MUSHROOM_HELD_V : MUSHROOM_V);
+    this.jumping = false;
+    this.airJumpUsed = false;
+    this.jumpBufferAt = -1e9;
+    this.lastGroundAt = -1e9;
+    this.leaveGround();
+    this.squashX = 0.78;
+    this.squashY = 1.24;
+    m.bounce(col, row, held);
+    return true;
   }
 
   /** Rebond après avoir écrasé un ennemi (plus haut si le saut est maintenu). */

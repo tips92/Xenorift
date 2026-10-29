@@ -161,8 +161,11 @@ export interface ShellHud extends HudApi {
   radioInfo(): RadioInfo;
 }
 
-/** `onPauseClick` est appelé par le bouton pause du HUD ; `audio` : bips de la radio. */
-export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: AudioApi): ShellHud {
+/**
+ * `onPauseClick` est appelé par le bouton pause du HUD ; `audio` : bips de la radio ; `touchShown()` : commandes
+ * tactiles affichées (la radio nomme sinon les touches du clavier).
+ */
+export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: AudioApi, touchShown: () => boolean): ShellHud {
   ensureSvgDefs();
 
   const root = div('hud is-hidden');
@@ -291,13 +294,18 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
 
   // Radio de LUMA : bulle dans le HUD (masquée avec lui), sous les stats ; les messages passent sous la bulle, un
   // seul à la fois (plus nombreux, ils descendraient jusqu'à Kaï).
-  const radio = createRadio(root, audio, (h) => {
-    toasts.classList.toggle('is-below-radio', h > 0);
-    if (h > 0) {
-      toasts.style.setProperty('--radio-h', `${h}px`);
-      trimToasts();
-    }
-  });
+  const radio = createRadio(
+    root,
+    audio,
+    (h) => {
+      toasts.classList.toggle('is-below-radio', h > 0);
+      if (h > 0) {
+        toasts.style.setProperty('--radio-h', `${h}px`);
+        trimToasts();
+      }
+    },
+    touchShown,
+  );
 
   // ---------------------------------------------------------------- Plateforme : état affiché
 
@@ -617,6 +625,7 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
   let bLifeQ = -1;
   let bPhase = -1;
   let bPhases = -1;
+  let bSteps = -1;
 
   function setBoss(s: BossHud | null): void {
     if (!s) {
@@ -636,13 +645,22 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
       bossName.textContent = name;
     }
     const phases = intOr(s.phases, 1, 1, 9);
-    if (phases !== bPhases) {
+    const steps = intOr(s.steps ?? 0, 0, 0, 24);
+    if (phases !== bPhases || steps !== bSteps) {
       bPhases = phases;
+      bSteps = steps;
       bossMarks.textContent = '';
-      // Repère de changement de phase : la barre est partagée en parts égales.
+      // Repère de changement de phase : la barre est partagée en parts égales ; boss en touches : un cran fin par
+      // touche (sauf où tombe un repère de phase).
       for (let k = 1; k < phases; k++) {
         const m = div('boss-mark');
         m.style.left = `${(k * 100) / phases}%`;
+        bossMarks.append(m);
+      }
+      for (let k = 1; k < steps; k++) {
+        if ((k * phases) % steps === 0) continue;
+        const m = div('boss-mark is-step');
+        m.style.left = `${(k * 100) / steps}%`;
         bossMarks.append(m);
       }
       bPhase = -1;
@@ -671,6 +689,7 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
     bLifeQ = -1;
     bPhase = -1;
     bPhases = -1;
+    bSteps = -1;
     bossEl.classList.remove('is-on');
     bossName.textContent = '';
     bossPhase.textContent = '';

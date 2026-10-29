@@ -135,9 +135,11 @@ async function oldSaves(t) {
   const cards = await cardLabels(t);
   t.log('ancienne sauvegarde : cartes', JSON.stringify(cards));
   assert(/record 1\s?234/.test(cards.j1), `ancienne sauvegarde : record de j1 conservé (${cards.j1})`);
-  // Étapes ouvertes d'après les étapes réussies (plan 04) : l'ancien index `unlocked: 2` n'ouvre plus m1.
-  assert(!/verrouillé/.test(cards.f1), `ancienne sauvegarde : étape f1 (après j1 réussie) ouverte (${cards.f1})`);
-  assert(/verrouillé/.test(cards.m1) && /verrouillé/.test(cards.f2), `ancienne sauvegarde : m1 et f2 verrouillées (${cards.m1} / ${cards.f2})`);
+  // Étapes ouvertes d'après les étapes réussies (plan 04 : la première, une réussie ou la suivante d'une réussie),
+  // ordre de la campagne lu dans __xrShell : l'ancien index `unlocked: 2` est ignoré.
+  const order = await t.ev(() => window.__xrShell.info().stages.map((s) => s.id));
+  const locked = order.map((id, i) => !(i === 0 || id === 'j1' || order[i - 1] === 'j1'));
+  assertEq(order.map((id) => /verrouillé/.test(cards[id])), locked, `ancienne sauvegarde, j1 réussie : verrous (${order.join(' ')})`);
   await press(t, 'title', 'Options');
   await waitForScreen(t, 'options');
   let st = await controlsState(t, O);

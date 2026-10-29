@@ -1,3 +1,4 @@
+import { BUBBLE_CPS, letterGap } from '../core/story';
 import { PORTRAIT_FRAME, PORTRAIT_FRAMES, SPEAKER_NAME, renderPortraitStrip } from './portraits';
 import { ensureStoryStyles } from './styles';
 import type { Mood, Speaker } from './types';
@@ -39,40 +40,21 @@ export interface Bubble {
   readonly visible: boolean;
 }
 
-export const BUBBLE_CPS = 32;
+// Rythme de l'écriture (lettres par seconde, pauses après la ponctuation) : core/story.ts.
+export { BUBBLE_CPS, typingDuration } from '../core/story';
 /** Écart minimal entre deux bips (s) : 8 par seconde au plus. */
 export const BIP_GAP_S = 0.125;
 /** Dernier bip, toutes bulles confondues (ms, horloge réelle) : une seule voix même si deux bulles parlent. */
 let lastBipAtMs = -1e9;
-/** Pauses après la ponctuation (s). */
-const STOP_PAUSE = 0.22;
-const COMMA_PAUSE = 0.09;
 /** Pas maximal de l'horloge propre (retour d'arrière-plan : pas de saut). */
 const MAX_DT = 0.1;
 const DPR_MAX = 1.5;
-
-/** Délai après le caractère de code `c` avant le suivant. */
-function gapAfter(c: number, cps: number): number {
-  const base = 1 / cps;
-  // . ! ? …
-  if (c === 46 || c === 33 || c === 63 || c === 8230) return base + STOP_PAUSE;
-  // , ; :
-  if (c === 44 || c === 59 || c === 58) return base + COMMA_PAUSE;
-  return base;
-}
 
 /** Lettres et chiffres : un bip ; espaces (insécables compris) et ponctuation (. , ; : ! ? … ’ « » –) : aucun. */
 function isSpoken(c: number): boolean {
   if (c < 128) return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122);
   // Latin-1 : lettres à partir de À (sauf × et ÷) ; au-delà de U+2000 : espaces fines et ponctuation.
   return c >= 192 && c < 0x2000 && c !== 215 && c !== 247;
-}
-
-/** Durée d'écriture d'une réplique (s), pour caler une chronologie. */
-export function typingDuration(text: string, cps = BUBBLE_CPS): number {
-  let d = 0;
-  for (let i = 0; i < text.length - 1; i++) d += gapAfter(text.charCodeAt(i), cps);
-  return d;
 }
 
 export function createBubble(parent: HTMLElement, opts: BubbleOptions = {}): Bubble {
@@ -195,7 +177,7 @@ export function createBubble(parent: HTMLElement, opts: BubbleOptions = {}): Bub
         spans[revealed].className = 'is-on';
         const c = text.charCodeAt(revealed);
         revealed++;
-        nextAt += gapAfter(c, cps);
+        nextAt += letterGap(c, cps);
         if (isSpoken(c)) {
           letters++;
           letter = c;

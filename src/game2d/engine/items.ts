@@ -58,6 +58,18 @@ const POWER_TEX: Record<PowerUpKind, string> = {
   rapid: TEX.powerRapid,
 };
 
+/**
+ * État des objets noté au point de contrôle d'avant l'arène (« Réessayer le combat ») : cristaux pris et points de
+ * contrôle allumés (rangs dans la carte), blocs bonus frappés (cases), bonus sortis d'un bloc et pas encore pris
+ * (posés flottants à leur place, ou au-dessus de leur bloc s'ils glissaient encore).
+ */
+export interface ItemsSnapshot {
+  readonly crystals: readonly number[];
+  readonly bonus: readonly number[];
+  readonly powers: readonly { readonly kind: PowerUpKind; readonly x: number; readonly y: number }[];
+  readonly checkpoints: readonly number[];
+}
+
 export class Items {
   private readonly crystals: Crystal[] = [];
   private readonly powers: PowerItem[] = [];
@@ -144,9 +156,7 @@ export class Items {
         if (k.on) continue;
         // Fenêtre limitée : une balise contournée très loin (autre chemin) ne s'allume pas à retardement.
         if (p.x >= k.x - 12 && p.x <= k.x + 3 * TILE && pb > k.feetY - 4 * TILE && pt < k.feetY + TILE) {
-          k.on = true;
-          if (scene.anims.exists(ANIM.checkpointOn)) k.sprite.anims.play(ANIM.checkpointOn);
-          else k.sprite.setFrame(FRAMES.checkpoint.on[0]);
+          this.lightCheckpoint(i);
           scene.reachCheckpoint(k.x, k.feetY);
         }
       }
@@ -292,5 +302,67 @@ export class Items {
         sprite.setDepth(DEPTH.items);
       },
     });
+  }
+
+  /** État noté au point de contrôle d'avant l'arène (copies : la partie continue). */
+  snapshot(): ItemsSnapshot {
+    const crystals: number[] = [];
+    for (let i = 0; i < this.crystals.length; i++) if (this.crystals[i].taken) crystals.push(i);
+    const powers: { kind: PowerUpKind; x: number; y: number }[] = [];
+    for (const it of this.powers) {
+      if (it.taken) continue;
+      const floating = it.state === POWER_FLOATING;
+      powers.push({ kind: it.kind, x: floating ? it.sprite.x : it.homeX, y: floating ? it.baseY : it.homeY });
+    }
+    const checkpoints: number[] = [];
+    for (let i = 0; i < this.checkpoints.length; i++) if (this.checkpoints[i].on) checkpoints.push(i);
+    return { crystals, bonus: [...this.usedBonus], powers, checkpoints };
+  }
+
+  /** Reprise d'un combat : objets remis dans l'état noté, sans son ni effet (au chargement du niveau). */
+  restore(s: ItemsSnapshot): void {
+    const scene = this.scene;
+    for (const i of s.crystals) {
+      const c = this.crystals[i];
+      if (!c) continue;
+      c.taken = true;
+      c.sprite.setVisible(false).setActive(false);
+    }
+    const cols = this.level.cols;
+    for (const i of s.bonus) {
+      if (!this.level.bonus.has(i)) continue;
+      this.usedBonus.add(i);
+      const tile = scene.layer.getTileAt(i % cols, Math.floor(i / cols));
+      if (tile) tile.index = TILE_FRAME.BONUS_USED;
+    }
+    for (const p of s.powers) {
+      if (!Object.prototype.hasOwnProperty.call(POWER_TEX, p.kind)) continue;
+      const sprite = scene.add.image(p.x, p.y, POWER_TEX[p.kind]);
+      sprite.setDepth(DEPTH.items);
+      this.powers.push({
+        sprite,
+        kind: p.kind,
+        state: POWER_FLOATING,
+        baseY: p.y,
+        phase: (p.x / TILE) * 0.9,
+        vx: 0,
+        vy: 0,
+        slideS: 0,
+        fell: false,
+        homeX: p.x,
+        homeY: p.y,
+        taken: false,
+      });
+    }
+    for (const i of s.checkpoints) this.lightCheckpoint(i);
+  }
+
+  /** Point de contrôle `i` (rang dans la carte) allumé, sans son ni effet. */
+  lightCheckpoint(i: number): void {
+    const k = this.checkpoints[i];
+    if (!k || k.on) return;
+    k.on = true;
+    if (this.scene.anims.exists(ANIM.checkpointOn)) k.sprite.anims.play(ANIM.checkpointOn);
+    else k.sprite.setFrame(FRAMES.checkpoint.on[0]);
   }
 }

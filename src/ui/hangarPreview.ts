@@ -1,20 +1,23 @@
 import type { WeaponId } from '../core/types';
 import { drawArmFrame, drawPlayerFrame, PLAYER_SHOULDER } from '../game2d/art/draw/player';
 import { drawShip, drawShipFlame, SHIP_NOZZLE } from '../game2d/art/draw/ship';
+import { drawTess } from '../game2d/art/draw/world1';
 import { ARM_RIG, FRAMES, FRAME_SIZE } from '../game2d/art/keys';
 import { type Ctx, fillOutlined, glow, glowDot, linGrad, poly, roundRect } from '../game2d/art/util';
 import { prefersReducedMotion } from './dom';
 
 // Aperçu du hangar (docs/plans/03-hangar.md, point 7) : un canvas 2D dessiné avec les fonctions du jeu 2D
-// (Kaï et son bras armé, la Comète de profil), sans Phaser ni three (imports de valeurs : dessins purs).
+// (Kaï et son bras armé, Tess à l'établi une fois à bord, la Comète de profil), sans Phaser ni three (imports de
+// valeurs : dessins purs).
 // Chargé à la demande par l'écran du hangar : hors du bundle de l'accueil. Redessiné seulement quand la scène,
 // la taille ou l'étape d'animation changent ; animation (Kaï au repos, flamme du réacteur) arrêtée écran fermé,
 // page cachée ou mouvements réduits.
 
-/** Kaï debout, l'arme en main. */
+/** Kaï debout, l'arme en main ; Tess derrière lui (établi, mécanicienne à bord). */
 export interface KaiView {
   readonly kind: 'kai';
   readonly weapon: WeaponId;
+  readonly tess?: boolean;
 }
 
 /** La Comète posée, avec ses modules (niveaux achetés). */
@@ -55,6 +58,9 @@ interface Box {
 
 /** Kaï : origine aux pieds ; corps (casque vers y = -72), bras armé (fusil et éclair compris) et socle. */
 const KAI_BOX: Box = { x: -44, y: -80, w: 112, h: 90 };
+/** Avec Tess, à gauche de Kaï (pieds à TESS_X), tournée vers lui. */
+const TESS_X = -58;
+const KAI_TESS_BOX: Box = { x: -98, y: -80, w: 166, h: 90 };
 /** Comète : repère de sa frame (192x112) ; flamme du turbo à gauche, bulle du bouclier autour. */
 const SHIP_BOX: Box = { x: -46, y: -2, w: 250, h: 124 };
 /** Marge autour de la scène (fraction de la place disponible). */
@@ -172,7 +178,7 @@ function drawShipBody(c: Ctx, v: ShipView): void {
 
 function sameView(a: PreviewView | null, b: PreviewView): boolean {
   if (!a || a.kind !== b.kind) return false;
-  if (a.kind === 'kai') return b.kind === 'kai' && a.weapon === b.weapon;
+  if (a.kind === 'kai') return b.kind === 'kai' && a.weapon === b.weapon && !a.tess === !b.tess;
   return b.kind === 'ship' && a.gun === b.gun && a.shield === b.shield && a.boost === b.boost;
 }
 
@@ -222,13 +228,20 @@ export function createHangarPreview(host: HTMLElement): HangarPreview {
   }
 
   function renderKai(c: Ctx, v: KaiView, now: number): void {
-    fit(KAI_BOX);
+    fit(v.tess ? KAI_TESS_BOX : KAI_BOX);
     prep(c);
     const key = frameKey();
     const idle = key & 1;
     const shoot = now < pulseUntil || (key & 2) !== 0;
-    drawPad(c);
     const P = FRAME_SIZE.player;
+    if (v.tess) {
+      // Tess, au repos (à contretemps de Kaï), derrière lui.
+      c.save();
+      c.translate(TESS_X - P.w / 2, -P.h);
+      drawTess(c, 'jungle', 1 - idle);
+      c.restore();
+    }
+    drawPad(c);
     c.save();
     c.translate(-P.w / 2, -P.h);
     drawPlayerFrame(c, idle);

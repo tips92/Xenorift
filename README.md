@@ -9,15 +9,26 @@ Conception détaillée : [docs/GDD.md](docs/GDD.md).
 
 | Étape | Type | Lieu |
 |---|---|---|
-| 1 | Plateforme 2D | Jungle de Xéna |
-| 2 | Vol spatial 3D | Nébuleuse d'Azur |
-| 3 | Plateforme 2D | Lune Krator |
-| 4 | Vol spatial 3D | Ceinture d'Orak |
+| 1 | Plateforme 2D | Jungle de Xéna (monde 1), niveau 1 : Lisière de Xéna |
+| 2 | Plateforme 2D | Jungle de Xéna, niveau 2 : Canopée des spores |
+| 3 | Plateforme 2D | Jungle de Xéna, niveau 3 : Sanctuaire du gardien |
+| 4 | Vol spatial 3D | Nébuleuse d'Azur |
+| 5 | Plateforme 2D | Lune Krator (monde 2) |
+| 6 | Vol spatial 3D | Ceinture d'Orak |
 
-Chaque étape se choisit dans le menu « Niveaux » (déblocage progressif, ou « Tout débloquer » dans les options).
-Entre deux étapes (« Suivant » sur les résultats) et depuis le menu « Niveaux », le **hangar** de la Comète
-dépense les cristaux ramassés (niveaux 2D et vols) : armes de Kaï et leurs améliorations, cœurs
-supplémentaires, mitrailleuse, bouclier et turbo de la Comète.
+La Jungle est au format de la future campagne en 5 mondes : LUMA, l'ordinateur de bord, y guide Kaï par radio
+(tutoriel au niveau 1) ; une ruine astréenne s'y visite ; des champignons font rebondir ; la méduse-baleine,
+grise du Vide, se rapproche d'un niveau à l'autre et agit au niveau 2 (ombre, secousse, pluie de spores) ; Kaï
+y secourt Tess, la mécanicienne ; deux mini-boss (le Blob-roi, le Scarabée-titan) gardent les balises de LUMA qui
+le remontent dans la Comète, et la méduse-baleine elle-même se bat au niveau 3, qui apprend le double saut. Les
+boss se battent en touches sur leur point faible ; perdu en plein combat, on peut « Réessayer le combat ». Les
+cinématiques et le boss du vol arrivent ensuite.
+
+Chaque étape se choisit dans le menu « Niveaux », une page par monde (déblocage progressif, ou « Tout
+débloquer » dans les options). Entre deux étapes (« Suivant » sur les résultats) et depuis le menu « Niveaux », le
+**hangar** de la Comète dépense les cristaux ramassés (niveaux 2D et vols) : armes de Kaï et leurs
+améliorations, cœurs supplémentaires, mitrailleuse, bouclier et turbo de la Comète. Une fois Tess à bord, elle
+ouvre les niveaux 2 et 3 des améliorations ; réussir le vol 1 donne le plan du mitrailleur.
 
 ## Technique
 
@@ -26,12 +37,15 @@ supplémentaires, mitrailleuse, bouclier et turbo de la Comète.
 - Tous les outils et caches sont sur `D:\DevTools` (le disque C: est plein).
 
 ```
-src/core      contrats partagés, étapes, sauvegarde, fiches des armes et des canons, catalogue du hangar
-src/ui        écrans (dont le hangar), HUD, enchaînement des étapes
+src/core      contrats partagés, table des mondes, étapes, textes de l'histoire, sauvegarde, fiches des armes
+              et des canons, catalogue du hangar
+src/ui        écrans (dont le hangar), HUD, radio de LUMA, enchaînement des étapes
+src/story     bulle de LUMA, portraits, cinématiques
 src/input     clavier, contrôles tactiles, inclinaison
 src/audio     sons et musiques synthétisés
-src/game2d    mode plateforme (moteur, graphismes, niveaux)
+src/game2d    mode plateforme (moteur, boss, graphismes, niveaux)
 src/game3d    mode vol spatial (parcours, tir, ennemis, cristaux)
+preview       pages d'aperçu pour le développement (graphismes, vol, sons, cinématiques, boss)
 android       projet Android natif (généré par Capacitor)
 tools         scripts d'installation et de build Android
 scripts       validation des niveaux 2D
@@ -51,11 +65,12 @@ traversable ou mobile. En vol, la Comète tire seule sur la cible devant elle ; 
 manuel » la fait tirer seulement sur appui (la touche de tir marche dans les deux cas). Sur téléphone : stick
 rond à 8 directions, boutons Saut et Tir ; en vol, joystick, Turbo et, en tir manuel, Tir ; taille, opacité
 et mode gaucher dans Options › Commandes.
-Raccourcis de test : `?stage=j1` (ou `f1`, `m1`, `f2`) lance directement une étape, `?unlock=1` débloque tout,
+Raccourcis de test : `?stage=j1` (ou `j2`, `j3`, `f1`, `m1`, `f2`) lance directement une étape, `?unlock=1` débloque tout,
 `?touch=1` affiche les boutons tactiles sur PC, `?weapon=machinegun` (ou `laser`, `shotgun`, `rifle`) impose
 l'arme pour la session, même si elle n'est pas possédée (rien n'est enregistré ; une valeur inconnue est
 ignorée, avec le message « Arme inconnue » sur l'accueil, ou en début de partie avec `?stage=`). Les
-paramètres se combinent : `?stage=m1&weapon=rifle`.
+paramètres se combinent : `?stage=m1&weapon=rifle`. Avec `npm run dev` seulement, `?at=boss` fait partir chaque
+niveau 2D du point de contrôle d'avant son boss (ex. `?stage=j3&at=boss&unlock=1` : la méduse-baleine).
 
 Mode test (« Tout débloquer » dans les options, ou `?unlock=1`) : les 4 armes et le double saut sont
 disponibles. Au hangar (après « Suivant » sur les résultats, ou bouton « Hangar » du choix du niveau), le mode

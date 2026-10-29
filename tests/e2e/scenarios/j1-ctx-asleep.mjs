@@ -1,11 +1,12 @@
-// Perte du contexte du jeu Phaser pendant qu'il dort (vol 3D f1 entre deux étapes 2D).
-//  A. j1 gagné -> SUIVANT -> hangar -> DÉCOLLER -> f1 : le jeu 2D est endormi (canvas masqué, boucle arrêtée) ;
+// Perte du contexte du jeu Phaser pendant qu'il dort (vol 3D f1 entre deux étapes 2D). Le niveau de la Jungle joué
+// est celui qui précède f1 dans la campagne (lu dans __xrShell.info().stages : j2 depuis le plan 04, étape 7).
+//  A. Jungle gagnée -> SUIVANT -> hangar -> DÉCOLLER -> f1 : le jeu 2D est endormi (canvas masqué, boucle arrêtée) ;
 //     son contexte est perdu pour de bon -> le vol continue sans message ni échec -> f1 gagné -> SUIVANT ->
 //     hangar -> DÉCOLLER -> m1 tourne sur un jeu Phaser NEUF (l'ancien canvas retiré), s'affiche et répond.
 //  B. même parcours, contexte restauré pendant le vol -> m1 réutilise le MÊME jeu, image identique à celle
 //     du jeu neuf de A (textures rechargées pendant le sommeil), et répond.
 import { assert, fmt, info3d, screenText, waitFor, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
-import { nextViaHangar } from '../lib/core.mjs';
+import { nextViaHangar, stageBefore } from '../lib/core.mjs';
 import {
   WEBGL,
   assertPlays,
@@ -30,7 +31,7 @@ export const meta = {
   timeoutMs: 300000,
 };
 
-/** j1 gagné -> résultats -> SUIVANT -> hangar -> DÉCOLLER -> carte d'intro -> vol f1 en phase 'fly' ; vérifie le jeu 2D endormi. */
+/** Jungle gagnée -> résultats -> SUIVANT -> hangar -> DÉCOLLER -> carte d'intro -> vol f1 en phase 'fly' ; vérifie le jeu 2D endormi. */
 async function toFlight(t, game, label) {
   await t.ev(() => window.__xr2d.win());
   await waitForScreen(t, 'results', { timeout: 25000 });
@@ -68,8 +69,13 @@ async function assertFlightUndisturbed(t, loss, label) {
 export default async function (t) {
   await recordUi(t);
 
+  await t.goto('?touch=1&unlock=1');
+  await waitFor(t, () => !!window.__xrShell, { timeout: 20000, label: 'coquille chargée' });
+  const jungle = await stageBefore(t, 'f1');
+  assert(jungle && jungle.startsWith('j'), `niveau de la Jungle avant f1 attendu, obtenu ${fmt(jungle)}`);
+
   // ---------- A. Perte définitive pendant le sommeil -> jeu neuf en m1
-  await t.goto('?touch=1&unlock=1&stage=j1');
+  await t.goto(`?touch=1&unlock=1&stage=${jungle}`);
   const ja = await waitPlay(t);
   await toFlight(t, ja.game, 'A');
   const la = await loseGameOk(t, ja.game, 'A : jeu 2D endormi');
@@ -93,7 +99,7 @@ export default async function (t) {
   assert((await ends(t)).every((e) => e.kind === 'complete'), `A : aucun échec attendu, obtenu ${fmt(await ends(t))}`);
 
   // ---------- B. Perte puis restauration pendant le sommeil -> même jeu en m1
-  await t.goto('?touch=1&unlock=1&stage=j1');
+  await t.goto(`?touch=1&unlock=1&stage=${jungle}`);
   const jb = await waitPlay(t);
   await toFlight(t, jb.game, 'B');
   const lb = await loseGameOk(t, jb.game, 'B : jeu 2D endormi');

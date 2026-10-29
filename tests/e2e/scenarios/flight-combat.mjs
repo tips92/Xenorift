@@ -497,19 +497,25 @@ async function measureGun(t, label, gun) {
  * `at` (ou quand l'expression `at` de __xrTrace devient vraie ; pilote automatique, tir automatique) ; trace jusqu'à la fin de la formation. 30 points par membre abattu ;
  * cristaux lâchés : 1 à la mort du dernier membre d'une vague abattue en entier, aucun aux autres morts ni à
  * aucune mort d'une vague incomplète (un membre a filé). Un autre ennemi abattu ou entré en scène pendant la trace
- * (vague du parcours) fausse les comptes : refusé si `strict`, sinon essai seulement journalisé. Renvoie
- * { placed, killed, rows, mixed }.
+ * (vague du parcours) fausse les comptes : refusé si `strict`, sinon essai seulement journalisé. Un avancement
+ * numérique doit être encore à venir au départ (sinon l'essaim serait posé ailleurs que là où sa variante a été
+ * mesurée). Renvoie { placed, killed, rows, mixed }.
  */
 async function swarmTrial(t, label, v, at, acc, strict = true) {
   const r = await t.ev(
     ([vv, p]) => {
       window.__xr3d.autopilot(true);
+      const p0 = window.__xr3d.info().progress;
       window.__xrTrace(60 * 60, typeof p === 'string' ? p : `i.progress >= ${p}`);
+      const p1 = window.__xr3d.info().progress;
       const placed = vv === null ? window.__xr3d.spawn('swarm', 95) : window.__xr3d.spawn('swarm', 95, vv);
-      return { placed, rows: window.__xrTrace(240, 'i.enemies.swarm === 0') };
+      return { placed, p0, p1, rows: window.__xrTrace(240, 'i.enemies.swarm === 0') };
     },
     [v, at],
   );
+  if (typeof at === 'number') {
+    assert(r.p0 < at, `${label} : vol déjà à l'avancement ${r.p0} au départ de l'essai (essaim à poser à ${at}) : trop de temps réel écoulé`);
+  }
   const rows = r.rows;
   const a = rows[0];
   const b = rows[rows.length - 1];
@@ -517,7 +523,7 @@ async function swarmTrial(t, label, v, at, acc, strict = true) {
   const complete = killed === r.placed;
   // Autre ennemi : un abattu sans membre d'essaim en moins, ou un essaim entré en scène
   const mixed = rows.some((x, k) => k > 0 && (x.killed - rows[k - 1].killed > rows[k - 1].swarm - x.swarm || x.swarm > rows[k - 1].swarm));
-  t.log(`${label} : ${killed} abattus sur ${r.placed} en ${((rows.length - 1) / 60).toFixed(2)} s de jeu (avancement ${at}), cristaux lâchés ${b.dropped - a.dropped}${mixed ? ', autre ennemi pendant la trace' : ''}`);
+  t.log(`${label} : ${killed} abattus sur ${r.placed} en ${((rows.length - 1) / 60).toFixed(2)} s de jeu (avancement ${at}, de ${r.p0} à ${r.p1}), cristaux lâchés ${b.dropped - a.dropped}${mixed ? ', autre ennemi pendant la trace' : ''}`);
   checkAutoFire(rows, label, acc);
   assert(!(strict && mixed), `${label} : aucun autre ennemi pendant la trace (avancement ${at} à revoir si les vagues changent)`);
   if (mixed) return { placed: r.placed, killed, rows, mixed };
@@ -731,6 +737,9 @@ async function partA(t) {
 async function partB(t) {
   // Tir manuel (mesure du canon sans tir automatique) ; le pilote automatique, lui, tire toujours en automatique
   const i0 = await startFlight(t, 'f1', { crystals: 0, ship: { gun: 1, shield: 2, boost: 0 }, settings: { manualFire: true } }, 1, 'b-comet-machinegun-intro');
+  // Vol ralenti entre deux relevés (les traces gardent le temps de jeu exact) : les essaims sont posés à un
+  // avancement fixé, qu'un vol à vitesse réelle dépassait si les allers-retours duraient plus de ≈ 4 s
+  await t.ev(() => window.__xr3d.timeScale(0.1));
   assertEq({ gunLevel: i0.gunLevel, waves: i0.waves, manualFire: i0.manualFire }, { gunLevel: 1, waves: 6, manualFire: true }, 'B : mitrailleuse installée');
   const h0 = await hudCombat(t);
   assertEq({ gun: h0.gun, step: h0.step }, { gun: 'machinegun', step: '33.33%' }, 'B : jauge de la mitrailleuse (graduations = 1 s de tir)');

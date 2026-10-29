@@ -134,6 +134,8 @@ export interface PlayLoadout extends Loadout {
   /** Cœurs de Kaï au départ, au point de contrôle et à la réapparition : 3 + cœurs supplémentaires (3 à 5). */
   maxHearts: number;
   ship: ShipLoadout;
+  /** Équipage à bord (SaveData.crew) : un naufragé déjà secouru n'attend plus dans son niveau. */
+  crew: readonly CrewId[];
 }
 
 // ---------------------------------------------------------------- HUD
@@ -211,11 +213,18 @@ export interface BossHud {
   /** Phase en cours, à partir de 1, sur `phases` (repères sur la barre). */
   phase: number;
   phases: number;
+  /** Boss en touches (plan 04, point 20) : nombre de touches, un cran fin par touche sur la barre ; absent ou ≤ 1 : non. */
+  steps?: number;
 }
 
-/** Point de départ imposé à un mode (aide de test `?at=boss`, serveur de dev) : 'boss' = point de contrôle avant l'arène. */
+/**
+ * Point de départ imposé à un mode : 'boss' = point de contrôle avant l'arène. Aide de test `?at=boss` (serveur de
+ * dev), ou point de reprise « Réessayer le combat » rendu par onFail : `snapshot` = état de la partie noté par le mode
+ * à ce point, opaque pour l'interface (repassé tel quel au nouvel essai).
+ */
 export interface StartAt {
   at: 'boss';
+  snapshot?: unknown;
 }
 
 // ---------------------------------------------------------------- Entrées
@@ -396,12 +405,15 @@ export interface ModeHooks {
    * ne le modifient pas.
    */
   loadout: Readonly<PlayLoadout>;
-  /** Départ imposé (serveur de dev seulement) ; ignoré par un niveau qui n'a pas ce point. */
+  /** Départ imposé (?at=boss, ou nouvel essai d'un combat) ; ignoré par un niveau qui n'a pas ce point. */
   startAt?: Readonly<StartAt>;
   /** Étape réussie. À appeler une seule fois, après l'animation de fin. */
   onComplete(result: StageResult): void;
-  /** Étape perdue (plus de vies, chrono à zéro, vaisseau détruit). */
-  onFail(reason: string): void;
+  /**
+   * Étape perdue (plus de vies, chrono à zéro, vaisseau détruit, liaison graphique perdue). `retry` : point de reprise
+   * d'un échec en plein combat de boss (« Réessayer le combat », choix 7 du plan 04), à repasser dans startAt.
+   */
+  onFail(reason: string, retry?: StartAt): void;
 }
 
 /** Poignée renvoyée par un mode démarré. Après onComplete/onFail, l'interface appelle destroy(). */

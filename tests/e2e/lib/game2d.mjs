@@ -2,7 +2,7 @@
 // perte / restauration de son contexte WebGL, fins d'étape (onFail / onComplete), journal des écrans et des
 // messages du HUD, image réellement affichée, vérification que Kaï répond (course, saut, tir).
 // Les aides de partie utilisent __xr2d / __xrShell : serveur de dev uniquement (meta.dev).
-import { AssertionError, assert, fmt, lasers2d, player2d, waitFor, waitFor2dPlay, waitForScreen } from './helpers.mjs';
+import { AssertionError, assert, fmt, lasers2d, player2d, screenButton, waitFor, waitFor2dPlay, waitForScreen } from './helpers.mjs';
 
 /** Motif de l'échec d'étape sans restauration du contexte (GFX_LOST_REASON, src/game2d/engine/game.ts). */
 export const LOST_REASON = 'Liaison graphique perdue';
@@ -64,7 +64,8 @@ export function toastVisible(t, text) {
 /**
  * Enregistre le jeu Phaser de la scène 2D courante (numéroté 1, 2… dans l'ordre d'apparition :
  * un nouveau numéro = une nouvelle instance Phaser) et branche un journal sur les fins d'étape de la session :
- * window.__ends2d : { kind: 'fail' | 'complete', reason, sid, game, at }.
+ * window.__ends2d : { kind: 'fail' | 'complete', reason, retry, sid, game, at } (`retry` : StartAt.at du point de
+ * reprise passé à onFail, « Réessayer le combat », sinon null ; l'enveloppe transmet le point de reprise tel quel).
  * Renvoie { game, sid, stage }.
  */
 export async function armGame(t) {
@@ -82,11 +83,18 @@ export async function armGame(t) {
       h.__xrArmed = true;
       const of = h.onFail;
       const oc = h.onComplete;
-      const log = (kind, reason) =>
-        window.__ends2d.push({ kind, reason: reason === undefined ? null : reason, sid: sess.id, game: n, at: Math.round(performance.now()) });
-      h.onFail = (reason) => {
-        log('fail', reason);
-        return of(reason);
+      const log = (kind, reason, retry) =>
+        window.__ends2d.push({
+          kind,
+          reason: reason === undefined ? null : reason,
+          retry: retry ? retry.at : null,
+          sid: sess.id,
+          game: n,
+          at: Math.round(performance.now()),
+        });
+      h.onFail = (reason, retry) => {
+        log('fail', reason, retry);
+        return of(reason, retry);
       };
       h.onComplete = (res) => {
         log('complete', null);
@@ -243,10 +251,111 @@ export async function waitFail(t, { timeout = 20000 } = {}) {
   });
 }
 
-/** Clique le bouton `label` de l'écran `screen` une fois celui-ci utilisable. */
+/** Clique le bouton `label` de l'écran `screen` une fois celui-ci utilisable (texte exact d'abord : screenButton). */
 export async function pressScreen(t, screen, label) {
   await waitForScreen(t, screen);
-  await t.page.locator(`.screens [data-screen="${screen}"].is-active button`, { hasText: label }).first().click({ timeout: 5000 });
+  await (await screenButton(t, screen, label)).click({ timeout: 5000 });
+}
+
+// ---------------------------------------------------------------- « Réessayer le combat » (plan 04, choix 7)
+
+/**
+ * Plus de vies en plein combat de boss : à chaque vie, Kaï posé dans l'arène (__xr2d.boss.enter), combat commencé
+ * (barrières fermées), puis __xr2d.kill(). Attend l'écran d'échec et renvoie son motif.
+ */
+export async function loseFight(t, label) {
+  for (;;) {
+    await waitFor(t, () => window.__xr2d && window.__xr2d.scene.state === 'play', { timeout: 10000, label: `${label} : Kaï en jeu` });
+    await t.ev(() => window.__xr2d.boss.enter());
+    await waitFor(
+      t,
+      () => {
+        const i = window.__xr2d.boss.info();
+        return i.state === 'fight' && i.arena.state === 'closed';
+      },
+      { timeout: 5000, label: `${label} : combat commencé` },
+    );
+    const lives = await t.ev(() => {
+      window.__xr2d.kill();
+      return window.__xr2d.scene.lives;
+    });
+    if (lives <= 0) break;
+    await waitFor(t, (n) => window.__xr2d.scene.state === 'play' && window.__xr2d.scene.lives === n, { timeout: 6000, label: `${label} : réapparition (${lives} vie(s))`, arg: lives });
+  }
+  return waitFail(t, { timeout: 20000 });
+}
+
+/**
+ * État de la partie 2D sous la forme d'un instantané « Réessayer le combat » (FightSnapshot de
+ * src/game2d/engine/snapshot.ts, relevé ici sans passer par le moteur), plus : sid, state, x, vies, cœurs, retry
+ * (scene.fightRetry), bonus flottants non pris (`powerKinds`), point de contrôle d'avant l'arène (`k` : x, allumé)
+ * et l'instantané noté par la scène (`snap`, copie, ou null).
+ */
+export function progress2d(t) {
+  return t.ev(() => {
+    const s = window.__xr2d.scene;
+    const it = s.items;
+    const idx = (arr, f) => arr.reduce((o, x, i) => (f(x) ? o.concat(i) : o), []);
+    const ev = s.levelEvents;
+    const ks = s.parsed.checkpoints.filter((c) => !s.arena || c.col < s.arena.col0);
+    const k = ks[ks.length - 1];
+    const ki = k ? s.parsed.checkpoints.indexOf(k) : -1;
+    return {
+      sid: s.session.id,
+      state: s.state,
+      x: Math.round(s.player.x),
+      lives: s.lives,
+      hearts: s.hearts,
+      maxHearts: s.maxHearts,
+      retry: s.fightRetry,
+      timeMs: s.elapsedMs,
+      crystals: s.crystals,
+      enemiesKilled: s.enemiesKilled,
+      speedLeftMs: s.speedLeftMs,
+      rapidLeftMs: s.rapidLeftMs,
+      shield: s.player.shield,
+      items: {
+        crystals: idx(it.crystals, (c) => c.taken),
+        bonus: [...it.usedBonus].sort((a, b) => a - b),
+        checkpoints: idx(it.checkpoints, (c) => c.on),
+      },
+      powerKinds: it.powers.filter((p) => !p.taken).map((p) => `${p.kind}:${p.state}`),
+      deadEnemies: idx(s.enemies.list, (e) => !e.summoned && !e.alive),
+      events: ev ? { windows: ev.windows.map((w) => w.state), events: ev.events.map((w) => w.state), fired: ev.onTrigger.map((x) => x.fired) } : null,
+      castaway: s.npc ? s.npc.state !== 'wait' : false,
+      trunks: s.trunks.map((x) => x.state !== 'stand'),
+      k: k ? { x: k.col * 64 + 32, on: ki >= 0 && it.checkpoints[ki].on } : null,
+      snap: s.fightSnap ? JSON.parse(JSON.stringify(s.fightSnap)) : null,
+    };
+  });
+}
+
+/** Champs d'un relevé progress2d comparables à un instantané (mêmes noms que FightSnapshot, bonus flottants à part). */
+export function snapFields(p) {
+  return {
+    crystals: p.crystals,
+    enemiesKilled: p.enemiesKilled,
+    shield: p.shield,
+    items: p.items,
+    deadEnemies: p.deadEnemies,
+    events: p.events,
+    castaway: p.castaway,
+    trunks: p.trunks,
+  };
+}
+
+/** Les mêmes champs lus dans un instantané (bonus flottants : liste `powers` à part, tris comme progress2d). */
+export function snapOf(s) {
+  return {
+    crystals: s.crystals,
+    enemiesKilled: s.enemiesKilled,
+    shield: s.shield,
+    items: { crystals: s.items.crystals, bonus: s.items.bonus.slice().sort((a, b) => a - b), checkpoints: s.items.checkpoints },
+    deadEnemies: s.deadEnemies,
+    events: s.events,
+    castaway: s.castaway,
+    trunks: s.trunks,
+  };
 }
 
 /** État du menu Pause : 'open', 'closing' ou 'none'. */

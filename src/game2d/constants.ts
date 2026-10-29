@@ -24,6 +24,15 @@ export const JUMP_VELOCITY = Math.sqrt(2 * GRAVITY * JUMP_HEIGHT_TILES * TILE);
 export const DOUBLE_JUMP_HEIGHT_TILES = 3;
 export const DOUBLE_JUMP_VELOCITY = Math.sqrt(2 * GRAVITY * DOUBLE_JUMP_HEIGHT_TILES * TILE);
 
+/**
+ * Champignon 'o' (case pleine) : Kaï qui s'y pose rebondit, en tuiles au-dessus du chapeau ; plus haut s'il tient
+ * Saut à l'impact. MUSHROOM_MAX_TILES au plus : au-delà, un pas de physique (1/60 s) frôle TILE_BIAS (32 px,
+ * engine/tuning.ts) et Kaï traverserait les tuiles. La chute reste bornée à MAX_FALL_SPEED.
+ */
+export const MUSHROOM_BOUNCE_TILES = 6.5;
+export const MUSHROOM_BOUNCE_HELD_TILES = 8;
+export const MUSHROOM_MAX_TILES = 9;
+
 /** Taille de la boîte de collision du joueur (il tient dans un couloir de 2 tuiles de haut). */
 export const PLAYER_BODY = { width: 34, height: 70 };
 /**
@@ -51,6 +60,22 @@ export const DESIGN_RULES = {
   maxRise: 3,
   /** Descente d'au moins 2 lignes : écart max. */
   maxGapDown: 5,
+} as const;
+
+/**
+ * Rebond sur un champignon (Saut tenu, MUSHROOM_BOUNCE_HELD_TILES) : on ne s'y tient pas, chaque arrivée relance
+ * Kaï. Mêmes notions que DESIGN_RULES, depuis la position au-dessus du chapeau.
+ */
+export const MUSHROOM_RULES = {
+  maxRise: 6,
+  /** Montée de 5 ou 6 lignes. */
+  maxGapUp6: 2,
+  /** Montée de 3 ou 4 lignes. */
+  maxGapUp4: 3,
+  /** Montée de 1 ou 2 lignes. */
+  maxGapUp2: 4,
+  maxGapFlat: 5,
+  maxGapDown: 6,
 } as const;
 
 // ---------------------------------------------------------------- Combat

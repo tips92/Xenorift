@@ -1,9 +1,11 @@
 import * as Phaser from 'phaser';
-import type { BossHud, BossId, PowerUpKind, RadioId, SfxId, StageResult, ToastKind, WeaponId } from '../../core/types';
+import { CREW } from '../../core/hangar';
+import { RADIO } from '../../core/story';
+import type { BossHud, BossId, CrewId, PowerUpKind, RadioId, SfxId, StageResult, StartAt, ToastKind, WeaponId } from '../../core/types';
 import { isWeaponId } from '../../core/weapons';
-import { createParallax, destroyArenaArt, generateArenaArt, generatePlatformArt } from '../art';
+import { createParallax, destroyArenaArt, destroyLevelArt, generateArenaArt, generateLevelArt, generatePlatformArt } from '../art';
 import type { ParallaxHandle } from '../art';
-import { TILE_FRAME } from '../art/keys';
+import { ANIM, TILE_FRAME } from '../art/keys';
 import {
   INVULNERABLE_MS,
   MAX_HEARTS,
@@ -15,24 +17,32 @@ import {
   TILE,
 } from '../constants';
 import { Arena } from './arena';
-import { bossWalkers, createBoss, destroyBossArt, generateBossArt } from './bosses';
+import { bossFlyers, bossMusic, bossWalkers, createBoss, destroyBossArt, generateBossArt } from './bosses';
 import type { Boss } from './bosses/types';
 import { Doors } from './doors';
 import type { DoorArrival } from './doors';
 import { EnemyManager } from './enemies';
 import { Effects } from './effects';
-import { createExit } from './exit';
-import type { LevelExit } from './exit';
+import { EXIT_MAX_MS, createArrival, createExit } from './exit';
+import type { LevelArrival, LevelExit } from './exit';
+import { Glyphs } from './glyphs';
 import { HudSync } from './hudSync';
 import { Items } from './items';
 import { LevelEvents } from './levelEvents';
+import type { LevelEvent } from '../levels/types';
 import { buildTilemap, CELL_HAZARD, CELL_ONEWAY, Grid, parseLevel } from './mapBuilder';
 import type { EnemySpawn, GridPos, ParsedLevel } from './mapBuilder';
 import { Movers } from './movers';
+import { Mushrooms } from './mushrooms';
+import { Castaway, rescueDelayMs } from './npc';
 import { Player, PLAYER_HALF_H } from './Player';
 import { ShotPool, SporePool } from './projectiles';
-import { bossBar, endSession, haptic, music, radio, reportError, sfx, toast } from './session';
+import { SporeRain } from './sporeRain';
+import { FallingTrunk } from './trunk';
+import { bossBar, endSession, haptic, music, musicLevel, radio, reportError, sfx, toast } from './session';
 import type { Session } from './session';
+import { readFightSnapshot } from './snapshot';
+import type { FightSnapshot } from './snapshot';
 import {
   BG_RGB,
   CAMERA_EDGE_BOTTOM,
@@ -47,10 +57,10 @@ import {
   SCORE_BOSS,
   SCORE_CRYSTAL,
   SCORE_ENEMY,
+  SCORE_GUARDIAN,
   SCORE_LIFE,
   SPEED_TRAIL_MS,
   TIME_BONUS_PER_S,
-  TIME_BONUS_REF_S,
 } from './tuning';
 import { Gun } from './weapons';
 
@@ -60,10 +70,17 @@ export interface PlatformSceneData {
   session: Session;
 }
 
-export type PlayState = 'play' | 'dead' | 'exit' | 'over';
+/** 'enter' : arrivée de Kaï au départ (LevelData.start), commandes coupées, au plus ARRIVAL_MS. */
+export type PlayState = 'enter' | 'play' | 'dead' | 'exit' | 'over';
 type DamageSource = 'hazard' | 'enemy' | 'spore';
 
 const DEV = import.meta.env.DEV;
+
+/** Naufragé du niveau : l'équipier que donne l'étape (check-levels : 'N' seulement avec une récompense d'équipage). */
+function castawayOf(session: Session): CrewId | null {
+  for (const r of session.stage.rewards) if (r.kind === 'crew') return r.id;
+  return null;
+}
 
 export class PlatformScene extends Phaser.Scene {
   session: Session | null = null;
@@ -82,6 +99,10 @@ export class PlatformScene extends Phaser.Scene {
   movers!: Movers;
   /** Sortie du niveau (Comète ou balise de LUMA) ; null pour un niveau sans sortie dans la carte. */
   exit: LevelExit | null = null;
+  /** Arrivée au départ (Comète qui repart à vide, faisceau de LUMA) ; null sans LevelData.start ou depuis un K. */
+  arrival: LevelArrival | null = null;
+  /** Glyphes astréens des ruines ('G') ; null s'il n'y en a pas. */
+  glyphs: Glyphs | null = null;
   gun!: Gun;
   hud!: HudSync;
   doors!: Doors;
@@ -90,8 +111,25 @@ export class PlatformScene extends Phaser.Scene {
   /** Arène de boss du niveau et son boss (lu par ShotPool.probe) ; null sans arène. */
   arena: Arena | null = null;
   boss: Boss | null = null;
-  /** Boss vaincu pendant cette partie : prime SCORE_BOSS. */
+  /** Boss vaincu pendant cette partie : prime SCORE_BOSS (gardien : SCORE_GUARDIAN). */
   bossBeaten = false;
+  /** Défaite du gardien (état 'exit') : Kaï, sans commandes, finit son saut avant d'être figé au sol. */
+  kaiLanding = false;
+  /** Champignons 'o' (null sans champignon), troncs des secousses, pluie de spores (null sans pluie). */
+  mushrooms: Mushrooms | null = null;
+  trunks: FallingTrunk[] = [];
+  sporeRain: SporeRain | null = null;
+  /** Passages de la créature joués (événement 'shadow'), pour les tests. */
+  shadowPasses = 0;
+  /** Naufragé 'N' (Tess) ; null sans naufragé. */
+  npc: Castaway | null = null;
+  /**
+   * « Réessayer le combat » (choix 7 du plan 04) : état noté quand Kaï allume le point de contrôle d'avant l'arène (ou
+   * repris du départ imposé), rendu par onFail si la partie se perd en plein combat. `fightRetry` : partie reprise
+   * ainsi (pas de prime de vies).
+   */
+  fightSnap: FightSnapshot | null = null;
+  fightRetry = false;
 
   /** Horloge de jeu (ms, hors pause). */
   clockMs = 0;
@@ -127,6 +165,8 @@ export class PlatformScene extends Phaser.Scene {
   /** Cadre de départ du glissement vers l'arène (px) : la vue à la fermeture, toute la carte à l'ouverture. */
   private camFromX = 0;
   private camFromW = 0;
+  /** Dernier point de contrôle avant l'arène (null sans arène ou sans K avant elle). */
+  private arenaK: GridPos | null = null;
   private lastBumpAt = -1e9;
   private heatHudMs = 0;
   private crystalCombo = 0;
@@ -135,8 +175,10 @@ export class PlatformScene extends Phaser.Scene {
   private readonly doorArrival: DoorArrival = { x: 0, feetY: 0 };
   /** Textures du boss générées pour cette partie (libérées à l'arrêt de la scène). */
   private bossArt: BossId | null = null;
+  /** Textures des objets du niveau (champignon, tronc, tache de spore) générées : libérées à l'arrêt. */
+  private levelArt = false;
   /** Barre de boss : objet réutilisé, dernier état envoyé (vie en %). */
-  private readonly bossHud: BossHud = { name: '', life: 1, phase: 1, phases: 1 };
+  private readonly bossHud: BossHud = { name: '', life: 1, phase: 1, phases: 1, steps: 0 };
   private bossHudOn = false;
   private bossHudLife = -1;
   private bossHudPhase = 0;
@@ -153,11 +195,23 @@ export class PlatformScene extends Phaser.Scene {
     this.parallax = null;
     this.world = null;
     this.exit = null;
+    this.arrival = null;
+    this.glyphs = null;
     this.levelEvents = null;
     this.arena = null;
     this.boss = null;
     this.bossBeaten = false;
+    this.kaiLanding = false;
     this.bossArt = null;
+    this.mushrooms = null;
+    this.trunks = [];
+    this.sporeRain = null;
+    this.shadowPasses = 0;
+    this.npc = null;
+    this.fightSnap = null;
+    this.fightRetry = false;
+    this.arenaK = null;
+    this.levelArt = false;
     this.bossHudOn = false;
     this.bossHudLife = -1;
     this.bossHudPhase = 0;
@@ -201,9 +255,9 @@ export class PlatformScene extends Phaser.Scene {
     const level = session.level;
     const theme = level.theme;
 
-    // Textures générées par code (synchrones), puis décor de fond.
+    // Textures générées par code (synchrones), puis décor de fond (gardien du monde à sa distance).
     generatePlatformArt(this, theme);
-    this.parallax = createParallax(this, theme);
+    this.parallax = createParallax(this, theme, { creature: level.creature ?? 'far' });
 
     const p = parseLevel(level);
     this.parsed = p;
@@ -211,6 +265,31 @@ export class PlatformScene extends Phaser.Scene {
     const built = buildTilemap(this, p);
     this.map = built.map;
     this.layer = built.layer;
+    // Objets du niveau : champignons, tronc d'une secousse, taches de la pluie de spores, naufragé et sa capsule
+    // (libérés dans onShutdown).
+    const events = level.events ?? [];
+    const need = {
+      mushroom: p.mushrooms.length > 0,
+      trunk: events.some((e) => e.kind === 'quake'),
+      sporeSpot: events.some((e) => e.kind === 'spores'),
+      castaway: p.castaway !== null,
+    };
+    if (need.mushroom || need.trunk || need.sporeSpot || need.castaway) {
+      generateLevelArt(this, theme, need);
+      this.levelArt = true;
+    }
+    if (need.mushroom) this.mushrooms = new Mushrooms(this, p.mushrooms);
+    for (const e of events) if (e.kind === 'quake') this.trunks.push(new FallingTrunk(this, e.trunk[0], e.trunk[1]));
+    if (p.castaway) {
+      // Dissolution calée sur les répliques du sauvetage (déclencheur 'rescue' de la radio). Déjà dans l'équipage
+      // (hooks.loadout.crew : niveau rejoué) : seule sa capsule reste.
+      const lines: string[] = [];
+      for (const r of level.radio ?? []) if ('on' in r && r.on === 'rescue') lines.push(RADIO[r.id].text);
+      const who = castawayOf(session);
+      const lo = session.hooks.loadout;
+      const aboard = who !== null && !!lo && Array.isArray(lo.crew) && lo.crew.includes(who);
+      this.npc = new Castaway(this, p.castaway, rescueDelayMs(lines), this.onCastawayRescued, aboard);
+    }
     // Arène de boss : barrières et planches du boss générées avec le niveau (libérées dans onShutdown).
     const bossId = p.arena && p.boss && level.boss ? level.boss : null;
     if (bossId) {
@@ -232,7 +311,10 @@ export class PlatformScene extends Phaser.Scene {
     this.doors = new Doors(this, p.doors);
     // Renforts du boss créés dès maintenant, cachés (le collider des marcheurs est posé plus bas).
     const reserve: EnemySpawn[] = [];
-    if (bossId && p.boss) for (let i = 0; i < bossWalkers(bossId); i++) reserve.push({ kind: 'w', col: p.boss.col, row: p.boss.row });
+    if (bossId && p.boss) {
+      for (let i = 0; i < bossWalkers(bossId); i++) reserve.push({ kind: 'w', col: p.boss.col, row: p.boss.row });
+      for (let i = 0; i < bossFlyers(bossId); i++) reserve.push({ kind: 'f', col: p.boss.col, row: p.boss.row - 2 });
+    }
     this.enemies = new EnemyManager(this, p.enemies, reserve);
     this.exit = p.exit ? createExit(this, p.exit) : null;
     if (bossId && p.arena && p.boss) {
@@ -246,6 +328,7 @@ export class PlatformScene extends Phaser.Scene {
     // Équipement de la partie (hooks.loadout, fixe) : arme tenue, ses améliorations (et celles des autres
     // armes), compétence du double saut. Cœurs max : init().
     const weapon = this.loadoutWeapon(session);
+    this.arenaK = this.arenaCheckpoint(p);
     const start = this.startPoint(session, p);
     this.respawnX = start.col * TILE + TILE / 2;
     this.respawnFeetY = (start.row + 1) * TILE;
@@ -253,9 +336,21 @@ export class PlatformScene extends Phaser.Scene {
     this.player.canDoubleJump = this.loadoutDoubleJump(session);
     this.lasers = new ShotPool(this);
     this.spores = new SporePool(this);
+    if (need.sporeSpot) this.sporeRain = new SporeRain(this);
     this.gun = new Gun(this, weapon, session.hooks.loadout ? session.hooks.loadout.mods : undefined);
-    this.levelEvents = new LevelEvents(level.radio, this.sayRadio);
+    this.levelEvents = new LevelEvents(level.radio, this.sayRadio, level.events, this.playLevelEvent);
     this.gun.onOverheat = this.onGunOverheat;
+    // Nouvel essai d'un combat : état noté au point de contrôle d'avant l'arène (départ à ce K).
+    const at = session.hooks.startAt;
+    const snap = at && at.at === 'boss' && start === this.arenaK ? readFightSnapshot(at.snapshot, level.id) : null;
+    if (snap) this.restoreFight(snap);
+    this.glyphs = p.glyphs.length > 0 ? new Glyphs(this, p.glyphs) : null;
+    // Arrivée au départ P seulement (pas depuis un point de contrôle, ?at=boss) : Kaï figé jusqu'à onLanded.
+    if (level.start && start === p.start) {
+      this.arrival = createArrival(this, level.start, this.respawnX, this.respawnFeetY);
+      this.state = 'enter';
+      this.arrival.play(this.player, this.onLanded);
+    }
 
     // Collisions Arcade : uniquement le décor (le reste est géré à la main).
     this.physics.add.collider(this.player.zone, this.layer, undefined, this.processTile, this);
@@ -280,7 +375,7 @@ export class PlatformScene extends Phaser.Scene {
       hearts: this.hearts,
       maxHearts: this.maxHearts,
       lives: this.lives,
-      crystals: 0,
+      crystals: this.crystals,
       crystalsTotal: p.crystalsTotal,
       weapon,
       heat: 0,
@@ -289,6 +384,7 @@ export class PlatformScene extends Phaser.Scene {
       rapidLeft: 0,
       shield: false,
     });
+    if (snap) this.refreshPowerHud();
 
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, this.onPostUpdate, this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this);
@@ -311,13 +407,65 @@ export class PlatformScene extends Phaser.Scene {
     return Math.min(MAX_HEARTS_CAP, Math.max(MAX_HEARTS, Math.floor(n)));
   }
 
-  /** Départ : P, ou le dernier point de contrôle avant l'arène avec ModeHooks.startAt `boss` (?at=boss). */
-  private startPoint(session: Session, p: ParsedLevel): GridPos {
-    const at = session.hooks.startAt;
-    if (!at || at.at !== 'boss' || !p.arena) return p.start;
+  /** Dernier point de contrôle avant l'arène, ou null. */
+  private arenaCheckpoint(p: ParsedLevel): GridPos | null {
+    if (!p.arena) return null;
     let k: GridPos | null = null;
     for (const c of p.checkpoints) if (c.col < p.arena.col0) k = c;
-    return k ?? p.start;
+    return k;
+  }
+
+  /** Départ : P, ou le dernier point de contrôle avant l'arène avec ModeHooks.startAt `boss` (?at=boss, nouvel essai). */
+  private startPoint(session: Session, p: ParsedLevel): GridPos {
+    const at = session.hooks.startAt;
+    if (!at || at.at !== 'boss') return p.start;
+    return this.arenaK ?? p.start;
+  }
+
+  /** Nouvel essai d'un combat : la partie reprend l'état noté (3 vies, cœurs pleins, boss à neuf : rien à faire). */
+  private restoreFight(s: FightSnapshot): void {
+    this.fightSnap = s;
+    this.fightRetry = true;
+    this.elapsedMs = s.timeMs;
+    this.crystals = s.crystals;
+    this.enemiesKilled = s.enemiesKilled;
+    this.speedLeftMs = s.speedLeftMs;
+    this.rapidLeftMs = s.rapidLeftMs;
+    this.player.shield = s.shield;
+    this.applyPowers();
+    this.items.restore(s.items);
+    // Départ sur le K d'avant l'arène : allumé d'emblée, même s'il avait été contourné (état noté à l'entrée).
+    if (this.arenaK) this.items.lightCheckpoint(this.parsed.checkpoints.indexOf(this.arenaK));
+    this.enemies.restore(s.deadEnemies);
+    if (this.levelEvents && s.events) this.levelEvents.restore(s.events);
+    if (this.npc) this.npc.restore(s.castaway);
+    for (let i = 0; i < this.trunks.length; i++) this.trunks[i].restore(s.trunks[i] === true);
+  }
+
+  /** Note l'état de la partie (point de contrôle d'avant l'arène atteint, ou combat commencé sans lui). */
+  private noteFight(): void {
+    const s = this.session;
+    if (!s || !this.arena) return;
+    this.fightSnap = {
+      level: s.level.id,
+      timeMs: this.elapsedMs,
+      crystals: this.crystals,
+      enemiesKilled: this.enemiesKilled,
+      speedLeftMs: this.speedLeftMs,
+      rapidLeftMs: this.rapidLeftMs,
+      shield: this.player.shield,
+      items: this.items.snapshot(),
+      deadEnemies: this.enemies.snapshot(),
+      events: this.levelEvents ? this.levelEvents.snapshot() : null,
+      castaway: this.npc ? this.npc.snapshot() : false,
+      trunks: this.trunks.map((t) => t.state !== 'stand'),
+    };
+  }
+
+  /** Point de reprise « Réessayer le combat » : combat en cours (arène fermée) et état noté, sinon null. */
+  fightRetryPoint(): StartAt | null {
+    if (!this.built || !this.fightSnap || !this.arena || this.arena.state !== 'closed') return null;
+    return { at: 'boss', snapshot: this.fightSnap };
   }
 
   /** Double saut : compétence apprise (ou mode test). */
@@ -349,6 +497,11 @@ export class PlatformScene extends Phaser.Scene {
     }
 
     switch (this.state) {
+      case 'enter':
+        // Radio dès l'arrivée (Kaï au départ).
+        if (this.levelEvents) this.levelEvents.update(this.player.x);
+        this.updateWorld(dt, dtMs);
+        break;
       case 'play':
         this.updatePlay(dt, dtMs, s);
         break;
@@ -359,6 +512,7 @@ export class PlatformScene extends Phaser.Scene {
         break;
       case 'exit':
         this.updateWorld(dt, dtMs);
+        if (this.kaiLanding) this.landKai();
         break;
       default:
         break;
@@ -379,15 +533,26 @@ export class PlatformScene extends Phaser.Scene {
     this.updatePower(dtMs);
     p.controlUpdate(dt, dtMs, this.clockMs, input);
     this.gun.update(dt, dtMs, input);
-    // Portes : « interact » (↑ seul, refusé si Tir est tenu) consommé à chaque image, pour qu'un appui
-    // loin d'une porte ne serve pas plus tard ; devant une porte reliée, Kaï ressort devant l'autre.
-    if (input.consumePress('interact') && this.doors.enter(this.doorArrival)) {
-      p.teleport(this.doorArrival.x, this.doorArrival.feetY);
-      this.snapCamera();
+    // Portes et naufragé : « interact » (↑ seul, refusé si Tir est tenu) consommé à chaque image, pour qu'un appui
+    // loin d'une porte ne serve pas plus tard ; près du naufragé, il le secourt (les portes attendent son départ) ;
+    // devant une porte reliée, Kaï ressort devant l'autre.
+    const npc = this.npc;
+    const npcHolds = npc !== null && npc.holdsDoors(p);
+    if (input.consumePress('interact')) {
+      if (npc && npc.rescue(p)) {
+        if (this.levelEvents) this.levelEvents.trigger('rescue');
+      } else if (!npcHolds && this.doors.enter(this.doorArrival)) {
+        const a = this.doorArrival;
+        p.teleport(a.x, a.feetY);
+        this.snapCamera();
+        if (this.glyphs) this.glyphs.wake(a.x, a.feetY - PLAYER_HALF_H);
+        if (this.levelEvents) this.levelEvents.trigger('door');
+      }
     }
-    this.doors.update(dtMs, true);
+    this.doors.update(dtMs, !npcHolds);
     // Radio : après les portes (une fenêtre franchie par une porte ou une téléportation est sautée).
     if (this.levelEvents) this.levelEvents.update(p.x);
+    if (this.glyphs) this.glyphs.update(p.x, p.feetY - PLAYER_HALF_H);
     // Arène : Kaï entre les bornes → barrières fermées, combat.
     const arena = this.arena;
     const boss = this.boss;
@@ -398,6 +563,7 @@ export class PlatformScene extends Phaser.Scene {
     this.lasers.update(dt);
     this.spores.update(dt);
     this.items.update(dt, this.clockMs, true);
+    this.updateDecor(dtMs);
 
     if (this.state === 'play') this.checkHeadBump();
     if (this.state === 'play') this.enemies.checkPlayer();
@@ -437,6 +603,15 @@ export class PlatformScene extends Phaser.Scene {
     this.spores.update(dt);
     this.items.update(dt, this.clockMs, false);
     this.doors.update(dtMs, false);
+    this.updateDecor(dtMs);
+  }
+
+  /** Champignons, troncs, pluie de spores, naufragé (animés à la main, sur l'horloge de la scène). */
+  private updateDecor(dtMs: number): void {
+    if (this.mushrooms) this.mushrooms.update(dtMs);
+    for (let i = 0; i < this.trunks.length; i++) this.trunks[i].update(dtMs);
+    if (this.sporeRain) this.sporeRain.update(dtMs);
+    if (this.npc) this.npc.update(dtMs, this.state === 'play');
   }
 
   private updateCamera(dt: number): void {
@@ -511,10 +686,13 @@ export class PlatformScene extends Phaser.Scene {
     if (this.state === 'play') {
       this.player.syncVisual();
       this.updateCamTarget();
-    } else if (this.state === 'exit') {
+    } else if (this.state === 'exit' && this.kaiLanding) {
+      this.player.syncVisual();
+    } else if (this.state === 'exit' || this.state === 'enter') {
       this.player.syncArmToSprite();
     }
     if (this.exit) this.exit.sync();
+    if (this.arrival) this.arrival.sync();
   }
 
   private onWorldStep(delta: number): void {
@@ -629,7 +807,7 @@ export class PlatformScene extends Phaser.Scene {
     this.hud.set('hearts', this.hearts);
     this.playSfx('hurt');
     this.vibrate(60);
-    this.cameras.main.shake(180, 0.006);
+    this.fx.shake(0.6, 180);
     if (this.hearts <= 0) {
       this.killPlayer(true);
       return;
@@ -655,6 +833,8 @@ export class PlatformScene extends Phaser.Scene {
     if (this.state !== 'play') return;
     this.state = 'dead';
     this.lives = Math.max(0, this.lives - 1);
+    // Dernière vie perdue en plein combat : l'interface proposera « Réessayer le combat ».
+    const retry = this.lives <= 0 ? this.fightRetryPoint() : null;
     this.hearts = 0;
     this.hud.set('lives', this.lives);
     this.hud.set('hearts', 0);
@@ -664,14 +844,14 @@ export class PlatformScene extends Phaser.Scene {
     this.player.startDeath(hop);
     this.playSfx('death');
     this.vibrate([40, 60, 90]);
-    if (hop) this.cameras.main.shake(220, 0.008);
+    if (hop) this.fx.shake(0.8, 220);
 
     this.time.delayedCall(hop ? 1000 : 650, () => {
       const s = this.session;
       if (!s) return;
       if (this.lives <= 0) {
         this.state = 'over';
-        endSession(s, () => s.hooks.onFail('Plus de vies !'));
+        endSession(s, () => s.hooks.onFail('Plus de vies !', retry ?? undefined));
         return;
       }
       const cam = this.cameras.main;
@@ -696,6 +876,7 @@ export class PlatformScene extends Phaser.Scene {
     this.gun.reset();
     this.lasers.clear();
     this.spores.clear();
+    if (this.sporeRain) this.sporeRain.clear();
     this.stompGraceMs = 0;
     this.state = 'play';
     this.camOffsetX = CAMERA_LOOKAHEAD * this.player.facing;
@@ -710,12 +891,15 @@ export class PlatformScene extends Phaser.Scene {
   reachCheckpoint(x: number, feetY: number): void {
     this.playSfx('checkpoint');
     this.showToast('Point de contrôle !', 'good');
+    if (this.levelEvents) this.levelEvents.trigger('checkpoint');
     this.fx.burst(x, feetY - 110, this.fx.colors.laser, 12);
     // On ne recule jamais le point de réapparition.
     if (x >= this.respawnX) {
       this.respawnX = x;
       this.respawnFeetY = feetY;
     }
+    const k = this.arenaK;
+    if (k && Math.floor(x / TILE) === k.col && feetY === (k.row + 1) * TILE) this.noteFight();
   }
 
   collectCrystal(x: number, y: number): void {
@@ -788,14 +972,30 @@ export class PlatformScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- Arène et boss
 
+  /** Niveau qui finit par la défaite du gardien (niveau 3 d'un monde) : pas de sortie, pas de fuite. */
+  private get guardianLevel(): boolean {
+    return !!this.session && this.session.level.ending === 'guardian';
+  }
+
   private startBossFight(s: Session, arena: Arena, boss: Boss): void {
+    // Point de contrôle d'avant l'arène contourné (sauté très haut) : état noté à l'entrée.
+    if (!this.fightSnap) this.noteFight();
     const cam = this.cameras.main;
     this.camFromX = cam.scrollX;
     this.camFromW = cam.width;
     arena.close();
-    music(s, 'boss');
+    // Intensité 0 explicite : un nouvel essai retrouve le gardien déjà en musique (music() garde alors l'intensité).
+    music(s, bossMusic(boss.id));
+    musicLevel(s, 0);
+    // Le gardien quitte le décor : c'est lui qui arrive dans l'arène.
+    if (this.parallax && this.guardianLevel) this.parallax.setCreature(false);
     boss.start();
     if (this.levelEvents) this.levelEvents.trigger('boss');
+  }
+
+  /** Intensité de la musique du combat (gardien : une par phase), appelée par le boss. */
+  setMusicLevel(n: number): void {
+    if (this.session) musicLevel(this.session, n);
   }
 
   /** Barrières, cadre de la caméra et boss (aussi pendant la mort et la sortie). */
@@ -813,10 +1013,18 @@ export class PlatformScene extends Phaser.Scene {
     if (!Number.isNaN(x)) this.damagePlayer(x, 'enemy');
   }
 
-  /** Appelé par le boss vaincu : barrières rouvertes, renforts éclatés, musique du niveau (il s'enfuit seul). */
+  /**
+   * Appelé par le boss vaincu : barrières rouvertes, renforts éclatés, musique du niveau (il s'enfuit seul). Gardien :
+   * sa défaite, dans l'arène fermée, termine le niveau (startGuardianExit).
+   */
   onBossBeaten(): void {
     const s = this.session;
     this.bossBeaten = true;
+    if (this.guardianLevel) {
+      this.enemies.recall(true);
+      this.startGuardianExit();
+      return;
+    }
     // Le cadre se rouvre vers toute la carte (la caméra suit Kaï à son rythme une fois libérée).
     this.camFromX = 0;
     this.camFromW = this.parsed.width;
@@ -833,6 +1041,7 @@ export class PlatformScene extends Phaser.Scene {
     if (this.boss) this.boss.reset();
     this.enemies.recall(false);
     music(s, s.level.music);
+    if (this.parallax && this.guardianLevel) this.parallax.setCreature(true);
   }
 
   /** Aide de test (win) : combat passé, arène ouverte pour de bon, sans prime. */
@@ -867,6 +1076,7 @@ export class PlatformScene extends Phaser.Scene {
     h.life = life / 100;
     h.phase = b.phase;
     h.phases = b.phases;
+    h.steps = b.maxLife;
     bossBar(s, h);
   }
 
@@ -878,7 +1088,41 @@ export class PlatformScene extends Phaser.Scene {
     if (this.state !== 'play' || !exit) return;
     this.state = 'exit';
     this.spores.clear();
+    if (this.sporeRain) this.sporeRain.clear();
     exit.launch(this.player, () => this.finishLevel());
+  }
+
+  /**
+   * Défaite du gardien (choix 13 du plan 04) : état 'exit' le temps de sa défaite dans la scène (Boss.defeatMs, au
+   * plus EXIT_MAX_MS), puis finishLevel ; sur perte du contexte, finishExitNow termine sans attendre. Kaï, sans
+   * commandes ni dégâts, finit son saut puis reste figé au sol (landKai).
+   */
+  private startGuardianExit(): void {
+    if (this.state !== 'play') return;
+    this.state = 'exit';
+    this.spores.clear();
+    if (this.sporeRain) this.sporeRain.clear();
+    const p = this.player;
+    p.body.velocity.x = 0;
+    p.sprite.alpha = 1;
+    this.kaiLanding = true;
+    this.landKai();
+    const ms = Math.min(EXIT_MAX_MS, this.boss && this.boss.defeatMs ? this.boss.defeatMs : EXIT_MAX_MS);
+    this.time.delayedCall(ms, () => this.finishLevel());
+  }
+
+  /** Défaite du gardien : Kaï retombe (corps Arcade, sans commandes), puis il est figé au sol, au repos. */
+  private landKai(): void {
+    const p = this.player;
+    const b = p.body;
+    if (!b.blocked.down && !b.touching.down) {
+      p.playAnim(b.velocity.y < 0 ? ANIM.playerJump : ANIM.playerFall);
+      return;
+    }
+    this.kaiLanding = false;
+    p.freeze();
+    p.playAnim(ANIM.playerIdle);
+    p.syncVisual();
   }
 
   /** Sortie en cours : termine le niveau sans attendre la fin de l'animation. Faux sinon. */
@@ -895,12 +1139,13 @@ export class PlatformScene extends Phaser.Scene {
     const timeMs = Math.round(this.elapsedMs);
     const seconds = Math.floor(timeMs / 1000);
     const total = this.parsed.crystalsTotal;
-    const bossBonus = this.bossBeaten ? SCORE_BOSS : 0;
+    const bossBonus = this.bossBeaten ? (this.guardianLevel ? SCORE_GUARDIAN : SCORE_BOSS) : 0;
     const score =
       this.crystals * SCORE_CRYSTAL +
       this.enemiesKilled * SCORE_ENEMY +
-      Math.max(0, TIME_BONUS_REF_S - seconds) * TIME_BONUS_PER_S +
-      this.lives * SCORE_LIFE +
+      Math.max(0, s.level.parTimeS - seconds) * TIME_BONUS_PER_S +
+      // Nouvel essai d'un combat : 3 vies rendues, sans prime.
+      (this.fightRetry ? 0 : this.lives) * SCORE_LIFE +
       bossBonus;
     const ratio = total > 0 ? this.crystals / total : 1;
     const stars: 1 | 2 | 3 = ratio >= STARS_RATIO.three ? 3 : ratio >= STARS_RATIO.two ? 2 : 1;
@@ -931,6 +1176,19 @@ export class PlatformScene extends Phaser.Scene {
     if (this.session) toast(this.session, text, kind);
   }
 
+  /** Fin de l'arrivée : Kaï posé au départ, jouable. */
+  private readonly onLanded = (): void => {
+    const s = this.session;
+    if (this.state !== 'enter' || !s) return;
+    this.player.teleport(this.respawnX, this.respawnFeetY);
+    this.state = 'play';
+    try {
+      s.hooks.input.clearPresses();
+    } catch (err) {
+      reportError('input.clearPresses', err);
+    }
+  };
+
   private readonly sayRadio = (id: RadioId): void => {
     if (this.session) radio(this.session, id);
   };
@@ -938,6 +1196,44 @@ export class PlatformScene extends Phaser.Scene {
   private readonly onGunOverheat = (): void => {
     if (this.levelEvents) this.levelEvents.trigger('overheat');
   };
+
+  /** Événement du décor (LevelEvents) : ombre de la créature, secousse qui abat un tronc, pluie de spores. */
+  private readonly playLevelEvent = (e: LevelEvent): void => {
+    if (e.kind === 'shadow') {
+      const ms = this.parallax ? this.parallax.shadowPass() : 0;
+      if (ms > 0) {
+        this.shadowPasses++;
+        this.playSfx('whaleCry', 0.8);
+      }
+    } else if (e.kind === 'quake') {
+      this.fx.shake(1, 900);
+      this.playSfx('quake');
+      this.vibrate([90, 50, 140]);
+      for (const t of this.trunks) if (t.col === e.trunk[0] && t.row === e.trunk[1]) t.fall();
+    } else if (this.sporeRain) {
+      this.sporeRain.start(e.rain[0], e.rain[1]);
+    }
+  };
+
+  /** Naufragé téléporté à bord : il rejoindra l'équipage à la réussite du niveau (récompense de l'étape). */
+  private readonly onCastawayRescued = (): void => {
+    const s = this.session;
+    const crew = (s && castawayOf(s)) || 'tess';
+    this.showToast(`${CREW[crew].name} est à bord !`, 'good');
+  };
+
+  /** Tronc couché (cases pleines) : ennemis pris dessous écrasés, Kaï pris dessous posé dessus. */
+  onTrunkDown(t: FallingTrunk): void {
+    const x0 = t.col * TILE;
+    const x1 = (t.col + 4) * TILE;
+    const y0 = (t.row - 1) * TILE;
+    const y1 = (t.row + 1) * TILE;
+    this.enemies.crushIn(x0, y0, x1, y1);
+    const p = this.player;
+    if (this.state !== 'play' || p.right <= x0 || p.left >= x1 || p.feetY <= y0 || p.top >= y1) return;
+    const onStump = p.x < x0 + TILE;
+    p.teleport(p.x, onStump ? t.row * TILE : y0);
+  }
 
   // ---------------------------------------------------------------- Nettoyage / outils de test
 
@@ -975,12 +1271,45 @@ export class PlatformScene extends Phaser.Scene {
       }
       this.bossArt = null;
     }
+    if (this.levelArt) {
+      try {
+        destroyLevelArt(this);
+      } catch (err) {
+        reportError('destroyLevelArt', err);
+      }
+      this.levelArt = false;
+    }
+    this.mushrooms = null;
+    this.trunks = [];
+    this.sporeRain = null;
+    this.npc = null;
     this.built = false;
     this.session = null;
     if (DEV) {
       const w = window as unknown as { __xr2d?: { scene?: unknown } };
       if (w.__xr2d && w.__xr2d.scene === this) delete w.__xr2d;
     }
+  }
+
+  /** Aide de test : Kaï posé dans l'arène, sur la première case libre après la première borne (champignon sauté). */
+  private placeInArena(): boolean {
+    const a = this.arena;
+    if (!a) return false;
+    const y = a.row * TILE + TILE / 2;
+    let c = a.col0 + 1;
+    while (c < a.col1 - 1 && this.grid.solidAtPx(c * TILE + TILE / 2, y)) c++;
+    this.player.teleport(c * TILE + TILE / 2, (a.row + 1) * TILE);
+    this.snapCamera();
+    return true;
+  }
+
+  /** Aide de test (win) dans le niveau du gardien : Kaï dans l'arène, combat lancé, gardien vaincu. */
+  private winGuardian(s: Session): void {
+    const a = this.arena;
+    const b = this.boss;
+    if (!a || !b || !this.placeInArena()) return;
+    if (a.state === 'open' && b.state === 'wait') this.startBossFight(s, a, b);
+    b.takeDamage(b.life);
   }
 
   private exposeDevHelper(): void {
@@ -999,12 +1328,17 @@ export class PlatformScene extends Phaser.Scene {
       },
       /**
        * Kaï posé juste avant la sortie (balise ou Comète), qui démarre aussitôt (état 'exit') ; un combat de boss
-       * est passé (arène ouverte pour de bon, sans prime).
+       * est passé (arène ouverte pour de bon, sans prime). Niveau du gardien (sans sortie) : Kaï posé dans l'arène,
+       * combat lancé, puis défaite du gardien (prime comprise) : état 'exit', résultats à la fin de la défaite.
        */
       win: (): void => {
         const exit = this.exit;
         const s = this.session;
-        if (this.state !== 'play' || !exit || !s) return;
+        if (this.state !== 'play' || !s) return;
+        if (!exit) {
+          this.winGuardian(s);
+          return;
+        }
         this.skipBossFight(s);
         this.player.teleport(exit.approachX, exit.feetY);
         this.snapCamera();
@@ -1031,15 +1365,15 @@ export class PlatformScene extends Phaser.Scene {
             ...(b.info ? b.info() : {}),
           };
         },
-        /** Kaï posé dans l'arène, juste après la première borne : le combat commence à l'image suivante. */
+        /**
+         * Kaï posé dans l'arène, sur la première case libre après la première borne (un champignon collé à la borne
+         * est sauté) : le combat commence à l'image suivante.
+         */
         enter: (): void => {
-          const a = this.arena;
-          if (this.state !== 'play' || !a) return;
-          this.player.teleport(a.left + TILE, (a.row + 1) * TILE);
-          this.snapCamera();
+          if (this.state === 'play') this.placeInArena();
         },
-        /** Dégâts directs pendant le combat (où que soit le tir) ; renvoie la vie restante. */
-        hit: (n = 2): number => {
+        /** Touches directes pendant le combat (où que soit Kaï) ; renvoie les touches restantes. */
+        hit: (n = 1): number => {
           const b = this.boss;
           if (!b) return -1;
           b.takeDamage(Number(n));

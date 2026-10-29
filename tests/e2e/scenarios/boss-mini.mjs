@@ -2,30 +2,68 @@
 //  A. renforts cachés dès le chargement ; entrée dans l'arène → barrières fermées (grille ET calque, collision),
 //     sons « barrier » et « bossAppear », musique « boss », barre de boss, caméra calée et centrée sur l'arène
 //     (plus étroite que la vue), Kaï retenu par la barrière ;
-//  B. noyau seul vulnérable : contrat hitBy (0 sur la gelée, dégâts sur le noyau de l'image aplatie, -1 à côté),
-//     tirs du ShotPool arrêtés par la gelée sans dégât puis qui blessent le noyau aplati ; ondes au sol qui
-//     blessent au sol et pas en saut ;
-//  C. phase 2 à mi-vie : planche « rage », 2 petits blobs appelés tournés vers Kaï, hors score ; barre « Phase 2/2 » ;
+//  B. boss en touches (4, plan 04 point 20), noyau seul vulnérable : contrat hitBy (0 sur la gelée, 1 touche sur le
+//     noyau de l'image aplatie, -1 à côté), plomb de la même salve absorbé sans seconde touche, noyau refermé après
+//     la touche (0) et boss relevé ; barre en 4 crans ; tir du ShotPool arrêté par la gelée sans effet ; ondes au
+//     sol qui blessent au sol et pas en saut ; rebond sur la couronne ;
+//  C. seconde touche (tir du ShotPool sur le noyau aplati) : phase 2, planche « rage », 2 petits blobs appelés
+//     tournés vers Kaï, hors score ; barre « Phase 2/2 » ;
 //  D. vie perdue dans l'arène → retour au K, arène rouverte (grille, calque, caméra), boss à neuf, renforts rangés,
 //     barre masquée, musique du niveau ;
 //  E. victoire : fuite, barrières ouvertes, Kaï court jusqu'à la balise → résultats avec « Boss vaincu +2 000 » sous
 //     le score (prime comprise dans le score ; panneau entier sans défilement à 844x390 et 640x320) ;
 //     textures du boss et des barrières libérées après la session ;
-//  F. perte du contexte WebGL en plein combat : partie figée, restauration, le combat reprend, aucun échec.
+//  F. perte du contexte WebGL en plein combat : partie figée, restauration, le combat reprend, aucun échec ;
+//  F2. perte définitive en plein combat : échec « Liaison graphique perdue » avec « Réessayer le combat » (point de
+//     reprise passé à onFail), qui repart du K dans un jeu Phaser neuf, boss à neuf ;
+//  G. « Réessayer le combat » (plan 04, choix 7), j1 depuis le début : 3 cristaux, 2 blocs « ? » (cristal, bonus),
+//     2 ennemis abattus, bouclier, puis le K d'avant l'arène (instantané noté) ; vies épuisées en plein combat →
+//     écran d'échec : « Réessayer le combat » (vrai bouton, en premier), « Réessayer », « Menu » ; nouvel essai :
+//     départ au K sans arrivée, 3 vies, cœurs pleins, état noté rendu (cristaux, HUD, blocs redessinés, bonus
+//     flottant, ennemis morts, fenêtres et déclencheurs de la radio, K allumé sans message, bouclier, temps), aucun
+//     message rejoué, boss à neuf ; de nouveau perdu → « Réessayer » simple : début du niveau (arrivée, rien de
+//     gardé) ; enfin combat repris puis gagné : score sans prime de vies.
 import { assert, assertEq, fmt, waitFor, waitForScreen } from '../lib/helpers.mjs';
-import { assertLayout } from '../lib/core.mjs';
-import { ends, loseGameOk, pageNow, recordUi, restoreGame, toastsSince, waitGrounded, waitPlay } from '../lib/game2d.mjs';
+import { assertLayout, hudPlatform } from '../lib/core.mjs';
+import {
+  LOST_REASON,
+  ends,
+  loseFight,
+  loseGameOk,
+  pageNow,
+  pressScreen,
+  progress2d,
+  recordUi,
+  restoreGame,
+  snapFields,
+  snapOf,
+  toastsSince,
+  waitFail,
+  waitGrounded,
+  waitPlay,
+} from '../lib/game2d.mjs';
 
 export const meta = {
-  title: 'Mini-boss de j1 : arène, Blob-roi, phase 2, vie perdue, victoire, perte de contexte',
+  title: 'Mini-boss de j1 : arène, Blob-roi, phase 2, vie perdue, victoire, perte de contexte, réessayer le combat',
   suites: ['full'],
   dev: true,
-  timeoutMs: 240000,
+  timeoutMs: 300000,
 };
 
 /** Textures propres à l'arène et au Blob-roi (à libérer après la session). */
 const ARENA_TEX = ['boss-blob-king', 'boss-blob-king-rage', 'boss-blob-wave', 'w1-barrier-top', 'w1-barrier-mid', 'w1-barrier-bottom'];
+/**
+ * Réglages du Blob-roi recopiés (src/game2d/engine/bosses/blobKing.ts : MAX_LIFE en touches, SHUT_MS,
+ * TOUCH_GRACE_MS) et temps de référence de j1 (parTimeS).
+ */
+const BOSS_LIFE = 4;
+const SHUT_MS = 250;
+const TOUCH_GRACE_MS = 120;
+const PAR_TIME_S = 240;
 const URL = '?touch=1&unlock=1&stage=j1&at=boss';
+/** j1 depuis le début (partie G). */
+const URL_START = '?touch=1&unlock=1&stage=j1';
+const FAIL = '.screens [data-screen="fail"].is-active';
 
 function boss(t) {
   return t.ev(() => (window.__xr2d ? window.__xr2d.boss.info() : null));
@@ -68,7 +106,7 @@ function audioLog(t) {
   return t.ev(() => ({ sfx: window.__bmSfx.slice(), music: window.__bmMusic.slice() }));
 }
 
-/** Barre de boss du HUD : affichée, nom, phase, vie lue sur la jauge (scaleX), repères de phase. */
+/** Barre de boss du HUD : affichée, nom, phase, vie lue sur la jauge (scaleX), repères (dont crans des touches). */
 function bossBar(t) {
   return t.ev(() => {
     const e = document.querySelector('.hud-boss');
@@ -80,6 +118,7 @@ function bossBar(t) {
       phase: e.querySelector('.boss-phase').textContent,
       life: m ? Number(m[1]) : null,
       marks: e.querySelectorAll('.boss-mark').length,
+      steps: e.querySelectorAll('.boss-mark.is-step').length,
     };
   });
 }
@@ -137,7 +176,7 @@ function fireAtBoss(t) {
     const y = b.y - 38;
     window.__bmHits.length = 0;
     s.lasers.fire(x, y, fromLeft ? 0 : Math.PI, s.gun.stats, x + (fromLeft ? -10 : 10), y);
-    return { life: b.life, damage: s.gun.stats.damage };
+    return { life: b.life };
   });
 }
 
@@ -157,13 +196,16 @@ export default async function (t) {
       window.__bmResult = JSON.parse(JSON.stringify(r));
       return oc(r);
     };
-    // Retours de hitBy qui arrêtent un tir (0 gelée, > 0 dégâts) ; appels de renforts.
+    // Retours de hitBy qui arrêtent un tir (0 gelée, 1 touche), clignotement relevé dès une touche ; appels de
+    // renforts.
     window.__bmHits = [];
     const b = s.boss;
     const hitBy = b.hitBy.bind(b);
-    b.hitBy = (x, y, d) => {
-      const r = hitBy(x, y, d);
+    b.hitBy = (x, y) => {
+      const life = b.life;
+      const r = hitBy(x, y);
       if (r >= 0) window.__bmHits.push(r);
+      if (b.life < life) window.__bmHitGlow = window.__bmGlow();
       return r;
     };
     // Copie additive du clignotement calée sur l'état du boss (à lire dans la même tâche que le coup).
@@ -204,7 +246,7 @@ export default async function (t) {
   assertEq(start.reserve, [0, 1].map(() => ({ kind: 'w', alive: false, visible: false, body: false })), 'A : 2 petits blobs créés cachés dès le chargement');
   assertEq(start.tex, [], 'A : textures du boss et des barrières générées');
   let b = await boss(t);
-  assert(b.state === 'wait' && b.arena.state === 'open' && b.life === 24 && b.maxLife === 24 && b.phase === 1, `A : boss en attente, arène ouverte (${fmt(b)})`);
+  assert(b.state === 'wait' && b.arena.state === 'open' && b.life === BOSS_LIFE && b.maxLife === BOSS_LIFE && b.phase === 1, `A : boss en attente, arène ouverte (${fmt(b)})`);
   assert(!(await bossBar(t)).on, 'A : pas de barre de boss avant le combat');
   assertEq((await barrier(t)).cells, 0, 'A : barrières ouvertes (grille)');
 
@@ -225,7 +267,7 @@ export default async function (t) {
   assertEq(closed, { state: 'closed', n: 24, cells: 24, tiles: 24 }, 'A : 2 x 12 cases de barrière pleines (grille) et solides (calque)');
   await waitFor(t, () => document.querySelector('.hud-boss.is-on') !== null, { timeout: 2000, label: 'A : barre de boss affichée' });
   const bar = await bossBar(t);
-  assertEq(bar, { on: true, name: 'Blob-roi', phase: 'Phase 1/2', life: 1, marks: 1 }, 'A : barre de boss (nom, phase, vie pleine, repère de mi-vie)');
+  assertEq(bar, { on: true, name: 'Blob-roi', phase: 'Phase 1/2', life: 1, marks: 3, steps: 2 }, 'A : barre de boss (nom, phase, vie pleine, repère de mi-vie, 4 crans)');
   let au = await audioLog(t);
   assert(au.sfx.includes('barrier') && au.sfx.includes('bossAppear'), `A : sons de la barrière et de l'apparition (${fmt(au.sfx)})`);
   assertEq(au.music[au.music.length - 1], 'boss', 'A : musique du boss');
@@ -258,8 +300,9 @@ export default async function (t) {
   assert(kx.left >= kx.wall - 1, `A : Kaï retenu par la barrière (${fmt(kx)})`);
   await t.shot('arena-closed');
 
-  // ---------- B. Noyau seul vulnérable
+  // ---------- B. En touches, noyau seul vulnérable
   await waitBoss(t, "i.act === 'flat'", 'B : boss aplati après un bond');
+  await t.shot('flat-core');
   const flat = await t.ev(() => {
     const s = window.__xr2d.scene;
     const bs = s.boss;
@@ -268,44 +311,74 @@ export default async function (t) {
     const n = (v) => (Number.isNaN(v) ? 'NaN' : Math.round(v));
     const feet = bs.spot.feetY;
     const life0 = bs.life;
-    const core = bs.hitBy(bs.x, bs.y - 50, 2);
+    const open0 = bs.info().open;
+    const core = bs.hitBy(bs.x, bs.y - 50);
     const glow = window.__bmGlow();
-    const miss = bs.hitBy(bs.x, bs.y - 400, 2);
+    // Plomb de la même salve (même image) : absorbé, sans seconde touche.
+    const again = bs.hitBy(bs.x, bs.y - 50);
+    const miss = bs.hitBy(bs.x, bs.y - 400);
     return {
       waves: bs.waves.filter((x) => x.alive).length,
       waveGround: w ? n(bs.hurts(fake(w.x, feet))) : null,
       waveJump: w ? n(bs.hurts(fake(w.x, feet - 130))) : null,
       life0,
+      open0,
       core,
       glow,
+      again,
       miss,
       life1: bs.life,
+      open1: bs.info().open,
     };
   });
   t.log('aplati', fmt(flat));
   assert(flat.waves >= 1 && typeof flat.waveGround === 'number' && flat.waveJump === 'NaN', `B : onde au sol, qui blesse au sol et pas en saut (${fmt(flat)})`);
-  assert(flat.core === 2 && flat.miss === -1 && flat.life1 === flat.life0 - 2, `B : noyau aplati touché (2), tir à côté raté (-1) (${fmt(flat)})`);
+  assert(
+    flat.open0 && flat.core === 1 && flat.again === 1 && flat.miss === -1 && flat.life1 === flat.life0 - 1 && !flat.open1,
+    `B : noyau aplati : une touche (1), plomb de la même salve absorbé (1, sans touche), raté (-1), noyau refermé (${fmt(flat)})`,
+  );
   // Coup reçu hors de la boucle de rendu : la copie du clignotement est déjà sur le boss (pas à sa place de départ).
   assertEq(flat.glow, { on: true, at: true, flip: true, tex: true }, 'B : clignotement calé sur le boss dès le coup');
-  await t.shot('flat-core');
+  // Noyau refermé (après les plombs de la salve) : tir arrêté sans touche ; le boss se relève aussitôt.
+  const shut = await t.ev(
+    (grace) =>
+      new Promise((resolve) => {
+        const s = window.__xr2d.scene;
+        const bs = s.boss;
+        let closed = null;
+        const on = () => {
+          if (closed === null && s.clockMs - bs.touchAt > grace + 10) closed = { act: bs.act, r: bs.act === 'flat' ? bs.hitBy(bs.x, bs.y - 50) : null, life: bs.life };
+          if (bs.act === 'flat') return;
+          s.events.off('postupdate', on);
+          resolve({ closed, riseAfter: Math.round(s.clockMs - bs.touchAt), act: bs.act });
+        };
+        s.events.on('postupdate', on);
+      }),
+    TOUCH_GRACE_MS,
+  );
+  t.log('noyau refermé', fmt(shut));
+  assert(
+    shut.closed && shut.closed.act === 'flat' && shut.closed.r === 0 && shut.closed.life === flat.life1 && shut.riseAfter <= SHUT_MS + 100,
+    `B : noyau refermé après la touche (0), boss relevé en ${SHUT_MS} ms au plus (${fmt(shut)})`,
+  );
+  // Barre : vie en %, arrondie au-dessus (PlatformScene.syncBossHud) : un cran de moins.
+  await waitFor(t, (v) => Math.abs(Number(/scaleX\(([\d.]+)\)/.exec(document.querySelector('.boss-fill').style.transform)[1]) - v) < 0.001, {
+    timeout: 2000,
+    label: 'B : barre de boss qui baisse d’un cran',
+    arg: (BOSS_LIFE - 1) / BOSS_LIFE,
+  });
   await waitBoss(t, "i.act === 'idle'", 'B : boss revenu au repos');
   const body = await t.ev(() => {
     const bs = window.__xr2d.scene.boss;
     const life0 = bs.life;
-    return { r: bs.hitBy(bs.x, bs.y - 50, 2), life0, life1: bs.life };
+    return { r: bs.hitBy(bs.x, bs.y - 50), life0, life1: bs.life };
   });
-  assert(body.r === 0 && body.life1 === body.life0, `B : gelée au repos : tir arrêté sans dégât (0) (${fmt(body)})`);
-  // Tirs du ShotPool (fiche de l'arme tenue) : arrêtés par la gelée, puis blessent le noyau aplati.
+  assert(body.r === 0 && body.life1 === body.life0, `B : gelée au repos : tir arrêté sans touche (0) (${fmt(body)})`);
+  // Tir du ShotPool (fiche de l'arme tenue) arrêté par la gelée.
   const shot1 = await fireAtBoss(t);
   await waitFor(t, () => window.__bmHits.length > 0, { timeout: 3000, interval: 20, label: 'B : tir arrêté par le boss au repos' });
   const r1 = await t.ev(() => ({ hits: window.__bmHits.slice(), life: window.__xr2d.scene.boss.life, act: window.__xr2d.boss.info().act }));
-  assert(r1.hits[0] === 0 && r1.life === shot1.life, `B : tir arrêté par la gelée sans dégât (${fmt({ shot1, r1 })})`);
-  await waitBoss(t, "i.act === 'flat'", 'B : boss de nouveau aplati');
-  const shot2 = await fireAtBoss(t);
-  await waitFor(t, () => window.__bmHits.length > 0, { timeout: 3000, interval: 20, label: 'B : tir sur le noyau aplati' });
-  const r2 = await t.ev(() => ({ hits: window.__bmHits.slice(), life: window.__xr2d.scene.boss.life }));
-  assert(r2.hits[0] === shot2.damage && r2.life === shot2.life - shot2.damage, `B : tir sur le noyau aplati : ${shot2.damage} de dégâts (${fmt({ shot2, r2 })})`);
-  await waitFor(t, () => Number(/scaleX\(([\d.]+)\)/.exec(document.querySelector('.boss-fill').style.transform)[1]) < 0.85, { timeout: 2000, label: 'B : barre de boss qui baisse' });
+  assert(r1.hits[0] === 0 && r1.life === shot1.life, `B : tir arrêté par la gelée sans touche (${fmt({ shot1, r1 })})`);
   // Rebond par le dessus, sans mode dieu : Kaï lâché sur le milieu (la couronne dépasse du corps) ne perd rien.
   await waitBoss(t, "i.act === 'idle'", 'B : boss au repos avant le rebond');
   const crown = await t.ev(
@@ -329,7 +402,7 @@ export default async function (t) {
           if (!r) return;
           s.events.off('postupdate', on);
           window.__xr2d.god(true);
-          // Kaï ramené près de la première borne (ne pas rebondir sur le noyau aplati : vie de la phase 2 vérifiée).
+          // Kaï ramené près de la première borne (ne pas rebondir sur le noyau aplati : seconde touche vérifiée en C).
           p.teleport(s.arena.left + 64, bs.spot.feetY);
           resolve(r);
         };
@@ -339,13 +412,14 @@ export default async function (t) {
   t.log('rebond', fmt(crown));
   assert(crown.hurt === false && crown.vy < 0, `B : rebond sur la couronne sans perdre de cœur (${fmt(crown)})`);
 
-  // ---------- C. Phase 2 à mi-vie, petits blobs appelés (hors score)
+  // ---------- C. Seconde touche (tir du ShotPool sur le noyau aplati) : phase 2, petits blobs appelés (hors score)
   const killed0 = await t.ev(() => window.__xr2d.scene.enemiesKilled);
-  const rageGlow = await t.ev(() => {
-    window.__xr2d.boss.hit(window.__xr2d.boss.info().life - 12);
-    return window.__bmGlow();
-  });
-  assertEq(rageGlow, { on: true, at: true, flip: true, tex: true }, 'C : clignotement sur la planche « rage » dès le coup');
+  await waitBoss(t, "i.act === 'flat'", 'C : boss de nouveau aplati');
+  const shot2 = await fireAtBoss(t);
+  await waitFor(t, () => window.__bmHits.length > 0, { timeout: 3000, interval: 20, label: 'C : tir sur le noyau aplati' });
+  const r2 = await t.ev(() => ({ hits: window.__bmHits.slice(), life: window.__xr2d.scene.boss.life, glow: window.__bmHitGlow }));
+  assert(r2.hits[0] === 1 && r2.life === shot2.life - 1 && r2.life === BOSS_LIFE / 2, `C : tir sur le noyau aplati : une touche, mi-vie (${fmt({ shot2, r2 })})`);
+  assertEq(r2.glow, { on: true, at: true, flip: true, tex: true }, 'C : clignotement sur la planche « rage » dès le coup');
   await waitBoss(t, "i.phase === 2 && i.act === 'rage' && i.texture === 'boss-blob-king-rage'", 'C : phase 2 (colère, planche « rage »)', 3000);
   au = await audioLog(t);
   assert(au.sfx.includes('bossPhase') && au.sfx.includes('bossHit'), `C : sons du coup et de la phase (${fmt(au.sfx)})`);
@@ -375,7 +449,7 @@ export default async function (t) {
   assertEq(back.alive, 0, 'D : petits blobs rangés');
   assertEq(await barrier(t), { state: 'open', n: 24, cells: 0, tiles: 0 }, 'D : barrières retirées (grille et calque)');
   b = await boss(t);
-  assert(b.state === 'wait' && b.life === 24 && b.phase === 1 && b.texture === 'boss-blob-king' && b.waves === 0, `D : boss remis à neuf (${fmt(b)})`);
+  assert(b.state === 'wait' && b.life === BOSS_LIFE && b.phase === 1 && b.texture === 'boss-blob-king' && b.waves === 0 && b.open === false, `D : boss remis à neuf (${fmt(b)})`);
   const camD = await camera(t);
   assert(camD.bx === 0 && camD.bw === camD.mapW, `D : caméra rendue à toute la carte (${fmt(camD)})`);
   await waitFor(t, () => !document.querySelector('.hud-boss.is-on'), { timeout: 2000, label: 'D : barre de boss masquée' });
@@ -414,7 +488,7 @@ export default async function (t) {
   await waitForScreen(t, 'results', { timeout: 25000 });
   const res = await t.ev(() => window.__bmResult);
   const expected =
-    res.crystals * 50 + res.enemies * 100 + Math.max(0, 240 - Math.floor(res.timeMs / 1000)) * 10 + lives * 500 + 2000;
+    res.crystals * 50 + res.enemies * 100 + Math.max(0, PAR_TIME_S - Math.floor(res.timeMs / 1000)) * 10 + lives * 500 + 2000;
   assert(res.bossBonus === 2000 && res.score === expected, `E : prime du boss dans le score (${fmt({ res, lives, expected })})`);
   const R = '.screens [data-screen="results"].is-active';
   await t.page.locator(`${R} .results-panel`).click({ position: { x: 8, y: 8 } }); // fin des animations
@@ -448,7 +522,7 @@ export default async function (t) {
   await t.ev(() => window.__xr2d.god(true));
   await waitGrounded(t, 'F : Kaï posé');
   await walkIn(t, 'F');
-  await t.ev(() => window.__xr2d.boss.hit(4));
+  await t.ev(() => window.__xr2d.boss.hit(1));
   await t.wait(500);
   const loss = await loseGameOk(t, 0, 'F : perte en plein combat');
   await waitFor(t, () => window.__xr2d.scene.session.gfxLost, { timeout: 5000, label: 'F : perte prise en compte' });
@@ -460,7 +534,7 @@ export default async function (t) {
   await waitFor(t, () => !window.__xr2d.scene.session.gfxLost && window.__xr2d.scene.sys.isActive(), { timeout: 5000, label: 'F : contexte restauré, scène relancée' });
   await waitFor(t, (c) => window.__xr2d.scene.clockMs > c + 1500, { timeout: 8000, label: 'F : le combat reprend', arg: f1.clock });
   b = await boss(t);
-  assert(b.state === 'fight' && b.life === 20 && b.arena.state === 'closed' && b.visible, `F : combat toujours en cours après la restauration (${fmt(b)})`);
+  assert(b.state === 'fight' && b.life === BOSS_LIFE - 1 && b.arena.state === 'closed' && b.visible, `F : combat toujours en cours après la restauration (${fmt(b)})`);
   assert((await bossBar(t)).on, 'F : barre de boss toujours affichée');
   await t.shot('ctx-restored');
   for (let now = await pageNow(t); now < loss.at + 6500; now = await pageNow(t)) await t.wait(250);
@@ -470,4 +544,177 @@ export default async function (t) {
   await waitForScreen(t, 'results', { timeout: 25000 });
   const e2 = await ends(t, loss.at);
   assert(e2.length === 1 && e2[0].kind === 'complete' && e2[0].sid === g2.sid, `F : un seul onComplete (${fmt(e2)})`);
+
+  await lostForGood(t);
+  await retryFight(t);
+}
+
+/** Boutons de l'écran d'échec affiché, dans l'ordre : « balise:texte », suivi de * pour le bouton principal. */
+function failButtons(t) {
+  return t.ev(
+    (sel) =>
+      [...document.querySelectorAll(`${sel} .fail-actions > *`)].map(
+        (b) => `${b.tagName.toLowerCase()}:${b.textContent.replace(/\s+/g, ' ').trim()}${b.classList.contains('btn-primary') ? '*' : ''}`,
+      ),
+    FAIL,
+  );
+}
+
+const FIGHT_BUTTONS = ['button:Réessayer le combat*', 'button:Réessayer', 'button:Menu'];
+
+/** F2. Perte définitive du contexte en plein combat : échec avec « Réessayer le combat », reprise au K. */
+async function lostForGood(t) {
+  await t.goto(URL);
+  const g = await waitPlay(t);
+  await t.ev(() => window.__xr2d.god(true));
+  await waitFor(t, () => !!window.__xr2d.scene.fightSnap, { timeout: 3000, label: 'F2 : K allumé au départ, état noté' });
+  await t.ev(() => window.__xr2d.boss.enter());
+  await waitBoss(t, "i.state === 'fight' && i.arena.state === 'closed'", 'F2 : combat commencé');
+  await t.ev(() => window.__xr2d.boss.hit(1));
+  const loss = await loseGameOk(t, 0, 'F2 : perte définitive en plein combat');
+  const reason = await waitFail(t, { timeout: 20000 });
+  assertEq(reason, LOST_REASON, 'F2 : motif de l’échec');
+  const e = await ends(t, loss.at);
+  assert(e.length === 1 && e[0].kind === 'fail' && e[0].retry === 'boss' && e[0].sid === g.sid, `F2 : un seul onFail, avec un point de reprise (${fmt(e)})`);
+  assertEq(await failButtons(t), FIGHT_BUTTONS, 'F2 : « Réessayer le combat » proposé');
+  await t.shot('ctx-lost-fail');
+  await pressScreen(t, 'fail', 'Réessayer le combat');
+  const g2 = await waitPlay(t);
+  const p = await progress2d(t);
+  assert(g2.game !== g.game && g2.sid !== g.sid, `F2 : jeu Phaser neuf (${fmt({ g, g2 })})`);
+  assert(p.retry && p.lives === 3 && p.k && p.x === p.k.x && p.k.on, `F2 : reprise au K d'avant l'arène, 3 vies (${fmt(p)})`);
+  const b = await boss(t);
+  assert(b.state === 'wait' && b.life === BOSS_LIFE && b.arena.state === 'open', `F2 : boss à neuf (${fmt(b)})`);
+}
+
+/** G. « Réessayer le combat » : état noté au K rendu, sans prime de vies ; « Réessayer » simple : début du niveau. */
+async function retryFight(t) {
+  // ---------- G1. Partie jusqu'au K : cristaux, blocs « ? », ennemis, bouclier ; vies épuisées en plein combat
+  await t.goto(URL_START);
+  const g = await waitPlay(t);
+  const plan = await t.ev(() => {
+    const s = window.__xr2d.scene;
+    window.__xr2d.god(true);
+    const p = s.parsed;
+    const ks = p.checkpoints.filter((c) => c.col < s.arena.col0);
+    const k = ks[ks.length - 1];
+    const crystals = p.crystals.filter((c) => c.col > 20 && c.col < k.col - 20).slice(0, 3);
+    const blocks = [...p.bonus.entries()]
+      .map(([i, content]) => ({ col: i % p.cols, row: Math.floor(i / p.cols), content }))
+      .filter((b) => b.col < k.col - 10);
+    return {
+      k: { col: k.col, row: k.row },
+      start: p.start.col * 64 + 32,
+      crystals,
+      blocks: [blocks.find((b) => b.content === 'crystal'), blocks.find((b) => b.content !== 'crystal')],
+    };
+  });
+  t.log('G : plan', fmt(plan));
+  assert(plan.crystals.length === 3 && plan.blocks.every((b) => !!b), `G : 3 cristaux et 2 blocs « ? » avant le K (${fmt(plan)})`);
+  for (const c of plan.crystals) {
+    const n = await t.ev((c) => {
+      window.__xr2d.teleport(c.col, c.row);
+      return window.__xr2d.scene.crystals;
+    }, c);
+    await waitFor(t, (n) => window.__xr2d.scene.crystals > n, { timeout: 3000, label: `G : cristal (${c.col}, ${c.row}) ramassé`, arg: n });
+  }
+  const killed = await t.ev((plan) => {
+    const s = window.__xr2d.scene;
+    for (const b of plan.blocks) s.items.hitBonus(b.col, b.row);
+    const list = [];
+    s.enemies.list.forEach((e, i) => {
+      if (!e.summoned && e.alive && list.length < 2 && e.sprite.x < (plan.k.col - 10) * 64) list.push(i);
+    });
+    for (const i of list) s.enemies.hit(s.enemies.list[i], 99);
+    window.__xr2d.power('shield');
+    window.__xr2d.teleport(plan.k.col, plan.k.row);
+    return list;
+  }, plan);
+  await waitFor(t, () => !!window.__xr2d.scene.fightSnap, { timeout: 3000, label: 'G : K d’avant l’arène allumé, état noté' });
+  const before = await progress2d(t);
+  const snap = before.snap;
+  t.log('G : instantané', fmt({ ...snap, events: undefined }));
+  assertEq(snapOf(snap), snapFields(before), 'G : instantané = état de la partie au K');
+  // Kaï retombe après chaque téléportation : il peut ramasser un cristal ou écraser un ennemi de plus en passant.
+  assert(snap.items.crystals.length >= 3 && snap.crystals === snap.items.crystals.length + 1 && snap.shield, `G : cristaux (dont celui du bloc) et bouclier notés (${fmt(snap)})`);
+  assert(snap.enemiesKilled >= 2 && killed.every((i) => snap.deadEnemies.includes(i)) && snap.items.bonus.length === 2, `G : ennemis morts et blocs frappés notés (${fmt(snap)})`);
+  assertEq(snap.items.powers.map((p) => p.kind), [plan.blocks[1].content], 'G : bonus sorti du bloc, pas encore pris, noté');
+  assert(before.k.on && snap.items.checkpoints.length >= 1, `G : K allumé noté (${fmt(before.k)})`);
+  await t.wait(300);
+  const usedTile = await t.ev((b) => window.__xr2d.scene.layer.getTileAt(b.col, b.row).index, plan.blocks[0]);
+  const reason = await loseFight(t, 'G1');
+  assertEq(reason, 'Plus de vies !', 'G1 : motif de l’échec');
+  const e1 = (await ends(t)).filter((e) => e.sid === g.sid);
+  assert(e1.length === 1 && e1[0].kind === 'fail' && e1[0].retry === 'boss', `G1 : onFail avec un point de reprise (${fmt(e1)})`);
+  assertEq(await failButtons(t), FIGHT_BUTTONS, 'G1 : « Réessayer le combat » (bouton principal), puis Réessayer et Menu');
+  await t.shot('fail-fight');
+
+  // ---------- G2. « Réessayer le combat » : départ au K, état noté rendu, boss à neuf
+  const t0 = await pageNow(t);
+  await pressScreen(t, 'fail', 'Réessayer le combat');
+  const g2 = await waitPlay(t);
+  const after = await progress2d(t);
+  t.log('G2 : reprise', fmt({ x: after.x, lives: after.lives, timeMs: Math.round(after.timeMs), snapMs: Math.round(snap.timeMs), powers: after.powerKinds }));
+  assert(g2.sid !== g.sid && after.state === 'play' && after.retry, `G2 : nouvelle partie reprise au combat (${fmt(after)})`);
+  assert(after.x === before.k.x && after.lives === 3 && after.hearts === after.maxHearts, `G2 : au K, 3 vies, cœurs pleins (${fmt(after)})`);
+  assertEq(snapFields(after), snapOf(snap), 'G2 : état noté rendu (cristaux, blocs, K, ennemis morts, radio, bouclier)');
+  assertEq(after.snap, snap, 'G2 : même instantané pour un nouvel essai');
+  assertEq(after.powerKinds, snap.items.powers.map((p) => `${p.kind}:2`), 'G2 : bonus du bloc flottant, à prendre');
+  assert(after.timeMs >= snap.timeMs && after.timeMs < snap.timeMs + 3000, `G2 : temps repris au K (${Math.round(after.timeMs)} / ${Math.round(snap.timeMs)})`);
+  const g2s = await t.ev((b) => {
+    const s = window.__xr2d.scene;
+    return { arrival: s.arrival, tile: s.layer.getTileAt(b.col, b.row).index, active: s.items.isActiveBonus(b.col, b.row), shield: window.__xr2d.info().shield };
+  }, plan.blocks[0]);
+  assertEq(g2s, { arrival: null, tile: usedTile, active: false, shield: true }, 'G2 : sans arrivée, bloc « ? » redessiné frappé, bouclier');
+  assertEq(await hudPlatform(t), { visible: true, lives: 3, crystals: snap.crystals }, 'G2 : HUD (vies, cristaux)');
+  const b = await boss(t);
+  assert(b.state === 'wait' && b.life === BOSS_LIFE && b.phase === 1 && b.arena.state === 'open', `G2 : boss à neuf (${fmt(b)})`);
+  await t.wait(800);
+  assertEq((await t.ev(() => window.__xrShell.radio())).played, [], 'G2 : aucun message de LUMA rejoué');
+  assertEq((await toastsSince(t, 'Point de contrôle', t0)).length, 0, 'G2 : K déjà allumé, sans message');
+  await t.shot('retry-fight-k');
+
+  // ---------- G3. De nouveau perdu : « Réessayer » simple → début du niveau, rien de gardé
+  await loseFight(t, 'G3');
+  const e3 = (await ends(t)).filter((e) => e.sid === g2.sid);
+  assert(e3.length === 1 && e3[0].retry === 'boss', `G3 : de nouveau un point de reprise (${fmt(e3)})`);
+  assertEq(await failButtons(t), FIGHT_BUTTONS, 'G3 : « Réessayer le combat » de nouveau proposé');
+  await pressScreen(t, 'fail', 'Réessayer');
+  const g3 = await waitPlay(t);
+  const fresh = await progress2d(t);
+  const arrived = await t.ev(() => window.__xr2d.scene.arrival !== null);
+  assert(g3.sid !== g2.sid && arrived && !fresh.retry && fresh.snap === null, `G3 : niveau repris depuis le début, avec l'arrivée (${fmt(fresh)})`);
+  assert(Math.abs(fresh.x - plan.start) <= 64 && fresh.lives === 3 && !fresh.k.on, `G3 : Kaï au départ (${fmt({ x: fresh.x, start: plan.start })})`);
+  assertEq(
+    { crystals: fresh.crystals, taken: fresh.items.crystals, bonus: fresh.items.bonus, dead: fresh.deadEnemies, killed: fresh.enemiesKilled },
+    { crystals: 0, taken: [], bonus: [], dead: [], killed: 0 },
+    'G3 : rien de gardé',
+  );
+
+  // ---------- G4. Combat repris puis gagné : score sans prime de vies
+  await t.ev((k) => {
+    window.__xr2d.god(true);
+    window.__xr2d.teleport(k.col, k.row);
+  }, plan.k);
+  await waitFor(t, () => !!window.__xr2d.scene.fightSnap, { timeout: 3000, label: 'G4 : état noté au K' });
+  await loseFight(t, 'G4');
+  await pressScreen(t, 'fail', 'Réessayer le combat');
+  await waitPlay(t);
+  await t.ev(() => {
+    const h = window.__xr2d.scene.session.hooks;
+    const oc = h.onComplete;
+    h.onComplete = (r) => {
+      window.__bmRetryResult = JSON.parse(JSON.stringify(r));
+      return oc(r);
+    };
+    window.__xr2d.god(true);
+    window.__xr2d.boss.enter();
+  });
+  await waitBoss(t, "i.state === 'fight'", 'G4 : combat repris');
+  await t.ev(() => window.__xr2d.boss.win());
+  await t.ev(() => window.__xr2d.win());
+  await waitForScreen(t, 'results', { timeout: 25000 });
+  const res = await t.ev(() => window.__bmRetryResult);
+  const expected = res.crystals * 50 + res.enemies * 100 + Math.max(0, PAR_TIME_S - Math.floor(res.timeMs / 1000)) * 10 + 2000;
+  assert(res.bossBonus === 2000 && res.score === expected, `G4 : score sans prime de vies (${fmt({ res, expected })})`);
 }

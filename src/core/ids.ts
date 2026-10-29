@@ -13,5 +13,6 @@ export const COURSE_IDS = ['nebula', 'asteroids'] as const;
  */
 export const MUSIC_IDS = ['menu', 'jungle', 'moon', 'nebula', 'asteroids', 'boss', 'guardian', 'story'] as const;
 
-/** Boss des arènes 2D (game2d/engine/bosses : createBoss), case 'M' d'un niveau (LevelData.boss). */
-export const BOSS_IDS = ['blobKing'] as const;
+/** Boss des arènes 2D (game2d/engine/bosses : createBoss), case 'M' d'un niveau (LevelData.boss) ; 'whale' : la
+ *  méduse-baleine, gardienne du monde 1. */
+export const BOSS_IDS = ['blobKing', 'beetleTitan', 'whale'] as const;

@@ -4,14 +4,14 @@ Un plan par étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). On 
 en lisant le code concerné ; l'utilisateur valide les choix proposés, qui passent dans la section
 « Décisions ». Organisation générale : [ARCHITECTURE.md](../ARCHITECTURE.md).
 
-## État au 28/10/2026
+## État au 29/10/2026
 
 | Étape | Plan | État |
 |---|---|---|
 | 1. Contrôles 2D (stick à 8 directions, visée, accroupi, descente, portes, réglage des boutons) | [01-controles.md](01-controles.md) | codé et vérifié par la suite e2e complète (branche `plans-etapes-1-3`) ; essai sur téléphone à faire (secteurs d'angle du stick, taille) |
 | 2. Armes et nouveaux bonus | [02-armes.md](02-armes.md) | codé et vérifié par la suite e2e complète (nouveaux scénarios `weapons` / `powerups`) ; essai sur téléphone à faire (réglage des armes, sons, vitesse) |
 | 3. Hangar (3a : hangar et armes de Kaï ; 3b : combat en vol) | [03-hangar.md](03-hangar.md) | 3a et 3b codées et vérifiées par la suite e2e complète (branche `plans-etapes-1-3` ; 3a et 3b commitées ; nouveaux scénarios `hangar` et `flight-combat`, captures et tests relus) ; essai sur téléphone à faire (3b : lisibilité des tirs et des ennemis, tir automatique, bouton TIR, réglages) ; la balise (point 16) est faite à l'étape 4 |
-| 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | décisions validées le 28/10 (les 19 choix tels quels) ; en cours de réalisation sur la branche `claude/world-1-completion-866505` ; la balise de LUMA (point 16 du plan 03) est faite ici, en 4a |
+| 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | décisions validées le 28/10 (les 19 choix tels quels), plus 20 (boss en touches) et 21 (tir au bouton en vol) le 29/10 ; branche `claude/world-1-completion-866505` (3b y est fusionnée) ; **4a faite** (étapes 1 à 6 : tables par thème, table des mondes et progression, Niveaux en pages, balise de LUMA, radio et tutoriel, arène et Blob-roi, j1 au nouveau format), essayée sur téléphone le 29/10 ; **4b faite** (étapes 7 à 12 : champignons, créature et événements, j2 et Tess, Scarabée-titan, j3 et méduse-baleine, campagne à 6 étapes, boss en touches, « Réessayer le combat »), vérifiée par la suite e2e complète (39/39) et le diag (7/7) ; essai sur téléphone de 4b à faire ; prochaine : 4c |
 | 5. Monde 2 au même format | à écrire | — |
 | 6. Carte galactique, puis Boréa, Vulkar, Cœur de la Faille | à écrire | — |
 | 7. Objets secrets et niveaux bonus | à écrire | — |
@@ -21,13 +21,13 @@ d'armes de l'étape 2.
 
 ## Prochaine action
 
-1. **Vérifier l'arbre Git** : les étapes 1, 2 et 3a sont commitées sur la branche `plans-etapes-1-3` ; 3b y est
-   **non commitée** ; commit sur demande de l'utilisateur (`npm run build` doit passer avant). L'étape 4 avance
-   en parallèle sur `claude/world-1-completion-866505` (autre discussion, autre worktree), partie de `f4275db`
-   (sans 3b) : sa partie 4c (vol, léviathan) demande 3b, donc la fusion des deux branches ; le plan 04 à jour
-   (« Décisions ») est sur cette branche. Points de rencontre : « Ce qui existe déjà » de
-   [03-hangar.md](03-hangar.md) (boss du vol : visée, impacts, orbes, phase `fly`, `COURSE_FP` de
-   `flight-combat`).
+1. **Vérifier l'arbre Git** : les étapes 1, 2, 3a et 3b sont commitées (branche `plans-etapes-1-3`) ; l'étape 4
+   avance sur `claude/world-1-completion-866505`, où 3b est fusionnée (`b78ffd6`) et 4a commitée en partie
+   (étapes 1 à 5 : `64bd3d6`) ; l'étape 6 de 4a, toute la partie 4b et leur documentation ne sont pas encore
+   commitées (sur demande de l'utilisateur, `npm run build` devant passer avant). Le tir au bouton du vol
+   (décision 21) se fait à part, sur `claude/vol-tir-bouton`, puis sera fusionné (pas encore dans cette branche ;
+   4c touche aussi le vol). Points de rencontre avec le vol pour 4c : « Ce qui existe déjà » de
+   [03-hangar.md](03-hangar.md) (boss du vol : visée, impacts, orbes, phase `fly`, `COURSE_FP` de `flight-combat`).
 2. **Trancher les points relevés** par les tests de 3a et de 3b (fin de la section Tests de
    [03-hangar.md](03-hangar.md)) : 3a : cœurs au point de contrôle, musique au retour du hangar, message du
    hangar par-dessus la liste, niveau 1 des dégâts sans effet visible ; 3b : tirs vus presque dans l'axe (des
@@ -54,12 +54,37 @@ d'armes de l'étape 2.
    `GUNS`, `POINTS`, `DROPS`, `WAVES`… de `flight-combat.mjs` : listes dans
    [tests/e2e/README.md](../../tests/e2e/README.md), « Scénario du hangar » et « Scénario du combat en vol »),
    puis `npm test` et `npm run e2e -- weapons powerups hangar small-screens flight-combat flight-autopilot`.
-4. **Étape 4** : en cours dans une autre discussion (voir 1) ; elle y suit l'« Ordre de réalisation » du plan
-   04 de sa branche.
+4. **Essai de 4b sur téléphone** (même APK ; 4a essayée le 29/10 : tutoriel, glyphes et départ en Comète
+   validés, Blob-roi trop dur d'où les boss en touches) :
+   - champignons (6,5 / 8 tuiles : `MUSHROOM_*` de `src/game2d/constants.ts`) et chaîne au-dessus du vide de j3 ;
+     branches de j3 au-dessus d'un trou de 25 colonnes ;
+   - lisibilité : créature proche (j2) et immense (j3), ombre, taches des spores, tunnel bouché par le tronc,
+     marque des cailloux du titan, cœur, marques, balayage et ombre de la plongée de la gardienne ;
+   - rythme : messages de LUMA entre la secousse et la salle de Tess, portes fermées ≈ 6 s pendant le sauvetage,
+     les 5 messages brouillés de j3, pluie de spores ;
+   - combats en touches (Blob-roi, Scarabée-titan, méduse-baleine : réglages en tête de
+     `src/game2d/engine/bosses/*.ts`, puis `BOSS_LIFE` / constantes de `boss-mini`, `boss-titan`, `boss-whale` et
+     `BOSS_FIGHT_S` de `scripts/check-levels.ts` ; relancer le diag `boss-bot`) ; plongée de la gardienne contre une
+     borne (≈ 480 px à courir) ; Kaï qui traverse son corps ;
+   - arènes : bords sous le stick et sous TIR (j1 à 20 colonnes surtout), sortie de l'arène de j2 en sautant sur le
+     champignon 220 ;
+   - écran d'échec à trois boutons (« Réessayer le combat »).
+5. **Étape 4, partie 4c** (histoire et vol), dans l'« Ordre de réalisation » du plan 04 : étape 13, tables par
+   monde côté 3D ; puis lecteur et phase `story`, prologue, libération, phase `boss` du vol et nouvel essai en vol
+   (`onFail(reason, retry)` et `startAt` dans `startFlight`, même contrat qu'en 2D), léviathan, sons définitifs.
 
 ## Questions encore ouvertes
 
 - Points relevés par les tests de 3a et de 3b, à trancher (voir 2).
+- 4a, sans blocage (bilan technique) : blocs « ? » du départ de j1 sans explication (la file de la radio est
+  pleine au départ), messages `tuto-aim` et `tuto-blocks` chassés à pleine course, tutoriel rejoué après un
+  échec de j1 (marque posée à la réussite, décision 12).
+- 4b, sans blocage (bilans et relectures) : `boss-bot` ne joue pas la gardienne (durée réelle d'un combat à
+  mesurer) ; `small-screens` ne vérifie pas la barre de la gardienne (vérifiée à la main à 640x320) ; volant (99, 6)
+  de j2 qui, écrasé depuis le rocher, relance Kaï jusqu'à la branche secrète ; saut normal sous un plafond bas
+  plus indulgent dans check-levels que dans le moteur (le calcul des rebonds pourrait s'y appliquer, au risque de
+  changer le verdict de j1 et de la Lune) ; premier message de radio d'un niveau retardé d'≈ 0,5 s par l'horloge
+  bornée ; bulle presque transparente quand Kaï passe dessous (idée).
 - Styles des niveaux bonus (étape 7, rien ne presse).
 - Valeurs chiffrées (armes, canons, ennemis du vol, bonus, prix) : à régler après essai sur téléphone.
 

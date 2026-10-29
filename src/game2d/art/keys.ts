@@ -6,7 +6,7 @@ import type { WeaponId } from '../../core/types';
 
 /** Clés de texture Phaser. Taille des frames entre parenthèses (largeur x hauteur, px). */
 export const TEX = {
-  /** Tileset (64x64 par tuile), voir TILESET et TILE_FRAME. Les frames 0..15 sont aussi utilisables par des sprites. */
+  /** Tileset (64x64 par tuile), voir TILESET et TILE_FRAME. Ses frames sont aussi utilisables par des sprites. */
   tiles: 'tiles',
   /** Astronaute (64x80) — frames : voir FRAMES.player. Dessiné SANS le bras armé (sprite à part, voir ARM_RIG). */
   player: 'player',
@@ -63,6 +63,8 @@ export const TEX = {
   interactArrow: 'interact-arrow',
   /** Mur du fond d'une salle close (64x64, se répète), selon le thème : derrière les cases vides de la salle. */
   roomWall: 'room-wall',
+  /** Glyphes astréens gravés sur le mur du fond (cases 'G', 64x64) — frames : FRAMES.glyph (éteints, allumés). */
+  glyphs: 'w1-glyphs',
   /** Particule ronde blanche douce (16x16), teintée à l'exécution. */
   spark: 'spark',
   /** Petit nuage de poussière (32x32). */
@@ -74,6 +76,18 @@ export const TEX = {
   barrierTop: 'w1-barrier-top',
   barrierMid: 'w1-barrier-mid',
   barrierBottom: 'w1-barrier-bottom',
+  /**
+   * Objets du décor d'un niveau, générés avec lui (generateLevelArt) : champignon 'o' (64x64, posé au bas de sa
+   * case, FRAMES.mushroom), tronc abattu par la secousse (256x256 = 4x4 cases, origine au coin bas-gauche de la
+   * souche, FRAMES.trunk), tache au sol qui annonce une spore (128x40, centrée sur le sol, FRAMES.sporeSpot),
+   * naufragée 'N' (Tess, 64x80 comme Kaï, posée par les pieds, tournée vers la droite, FRAMES.tess) et sa capsule
+   * (128x128 = 2x2 cases, origine au joint bas des deux cases, FRAMES.capsule).
+   */
+  mushroom: 'w1-mushroom',
+  trunk: 'w1-trunk',
+  sporeSpot: 'w1-spore-spot',
+  tess: 'w1-tess',
+  capsule: 'w1-capsule',
 } as const;
 
 export const FRAME_SIZE = {
@@ -89,6 +103,7 @@ export const FRAME_SIZE = {
   shipFlame: { w: 48, h: 32 },
   beacon: { w: 64, h: 160 },
   beaconBeam: { w: 64, h: 128 },
+  glyph: { w: 64, h: 64 },
 } as const;
 
 /** Index des frames dans chaque planche (frames numérotées 0..n de gauche à droite). */
@@ -107,8 +122,22 @@ export const FRAMES = {
   /** Balise : veille (lueur qui pulse, chevrons allumés tour à tour), activée (tout allumé, anneaux). */
   beacon: { idle: [0, 1], on: [2, 3] },
   beaconBeam: { flicker: [0, 1] },
+  /**
+   * Glyphe (GLYPH_VARIANTS de draw/world1.ts) : motif v éteint = v, allumé = v + on (posé par-dessus en fondu).
+   * Motifs : 0 réseau, 1 chaîne de portails, 2 gardien, 3 noyau, 4 Astréen, 5 spirale de la Faille.
+   */
+  glyph: { variants: 6, on: 6 },
   /** Barrière : crépitement (fermée), éteinte (bornes seules), allumage, extinction ; même frame sur toute la colonne. */
   barrier: { crackle: [0, 1, 2, 3], off: 4, close: [4, 5, 6], open: [6, 5, 4] },
+  /** Champignon : repos (lueur qui pulse), rebond (écrasé, détente, retour). */
+  mushroom: { idle: [0, 1, 2, 1], bounce: [3, 4, 5, 0] },
+  /** Tronc : debout, tremblement, chute, couché. */
+  trunk: { stand: 0, tremble: [0, 1, 0, 2], fall: [3, 4, 5, 6], lying: 6 },
+  /** Tache d'une spore : lointaine, proche, imminente. */
+  sporeSpot: { warn: [0, 1, 2] },
+  /** Tess : repos, salut, téléportation par LUMA (dissolution) ; capsule : feu de détresse allumé, éteint. */
+  tess: { idle: [0, 1], wave: [2, 3], beam: [4, 5, 6, 7] },
+  capsule: { blink: [0, 1] },
 } as const;
 
 /** Clés des animations créées par le module graphique (anims.create). */
@@ -218,11 +247,11 @@ export const ARM_MUZZLE = {
 } as const satisfies Record<WeaponId, { x: number; y: number }>;
 
 /**
- * Disposition du tileset : 8 colonnes x 2 lignes de tuiles 64x64, avec marge de 1 px et espacement de 2 px
- * (bords « extrudés » d'1 px pour éviter les coutures). Taille de la texture : 528 x 132.
+ * Disposition du tileset : 8 colonnes x 4 lignes de tuiles 64x64, avec marge de 1 px et espacement de 2 px
+ * (bords « extrudés » d'1 px pour éviter les coutures). Taille de la texture : 528 x 264.
  * Utilisation : map.addTilesetImage(TEX.tiles, TEX.tiles, 64, 64, TILESET.margin, TILESET.spacing)
  */
-export const TILESET = { columns: 8, rows: 2, margin: 1, spacing: 2, width: 528, height: 132 } as const;
+export const TILESET = { columns: 8, rows: 4, margin: 1, spacing: 2, width: 528, height: 264 } as const;
 
 /** Index de chaque tuile dans le tileset (= index de tuile Phaser = numéro de frame de la texture). */
 export const TILE_FRAME = {
@@ -235,11 +264,20 @@ export const TILE_FRAME = {
   BLOCK: 6, // bloc solide décoratif
   BONUS: 7, // bloc bonus actif (symbole lumineux)
   BONUS_USED: 8, // bloc bonus vidé
-  PLATFORM: 9, // plateforme traversable par le dessous (épaisseur visuelle ~24 px en haut de la tuile)
+  PLATFORM: 9, // plateforme traversable sans motif (aperçus ; les cartes posent WALKWAY), épaisseur ~24 px en haut
   HAZARD: 10, // pics / acide (moitié basse de la tuile)
   DECOR_A: 11, // décor sans collision posé au bas de la tuile (plante, rocher…)
   DECOR_B: 12,
   DECOR_C: 13,
   GROUND_SINGLE: 14, // surface avec les deux bords (pilier d'une tuile de large)
   GROUND_FILL_ALT: 15, // variante de remplissage (fossiles, racines, cristaux)
+  /**
+   * Plateforme traversable à motifs, 9 tuiles (WALKWAY..WALKWAY + 8) = famille x 3 + variante : branche, liane,
+   * passerelle dans la Jungle (art/draw/world1.ts), la plateforme du thème ailleurs. Une famille par rangée de '='.
+   */
+  WALKWAY: 16,
 } as const;
+
+/** Tuiles à motifs de plateforme traversable : WALKWAY_FAMILY_COUNT familles de WALKWAY_VARIANTS variantes. */
+export const WALKWAY_FAMILY_COUNT = 3;
+export const WALKWAY_VARIANTS = 3;

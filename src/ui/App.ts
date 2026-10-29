@@ -59,7 +59,8 @@ import { createSafeAudio, createSafeInput, type UiCtx } from './services';
 const INTRO_MS = 2200;
 
 type Phase = 'menu' | 'intro' | 'playing';
-type Outcome = { ok: true; result: StageResult } | { ok: false; reason: string };
+/** Échec : `retry` = point de reprise rendu par le mode (« Réessayer le combat »), sinon null. */
+type Outcome = { ok: true; result: StageResult } | { ok: false; reason: string; retry: StartAt | null };
 
 interface Run {
   readonly stage: StageDef;
@@ -119,6 +120,11 @@ function sanitizeResult(res: StageResult, stage: StageDef): StageResult {
 
 const noop = (): void => undefined;
 
+/** Point de reprise passé à onFail par un mode : gardé tel quel (instantané opaque) s'il a la forme attendue. */
+function retryPoint(v: unknown): StartAt | null {
+  return v !== null && typeof v === 'object' && (v as StartAt).at === 'boss' ? (v as StartAt) : null;
+}
+
 let booted = false;
 
 export function startApp(): void {
@@ -141,7 +147,8 @@ export function startApp(): void {
   // ---------------------------------------------------------------- Couches de l'interface
 
   const bg = createSpaceBackground(uiRoot);
-  const hud = createHud(uiRoot, () => pauseGame(), audio);
+  // Commandes tactiles affichées : classe posée par input/touch.ts sur sa racine.
+  const hud = createHud(uiRoot, () => pauseGame(), audio, () => touchRoot.classList.contains('xr-touch--on'));
   const screensLayer = div('screens');
   uiRoot.append(screensLayer);
   const fader = createFader(uiRoot, true);
@@ -402,7 +409,8 @@ export function startApp(): void {
     while (!isPlayable() && flow === flowId) await delay(200);
   }
 
-  function startStage(stage: StageDef, withIntro: boolean, force = false): void {
+  /** `startAt` : départ imposé (point de reprise d'un combat) ; sinon ?at=boss pour un niveau 2D. */
+  function startStage(stage: StageDef, withIntro: boolean, force = false, startAt: StartAt | null = null): void {
     navigate(async (flow) => {
       const bg0 = bgCount;
       // Chargement du mode en parallèle du fondu et de l'intro.
@@ -439,7 +447,7 @@ export function startApp(): void {
       } catch (err) {
         if (flow !== flowId) return;
         console.error('[ui] chargement du mode impossible', err);
-        showStartError(stage, err);
+        showStartError(stage, err, startAt);
         await fader.clear();
         return;
       }
@@ -450,7 +458,7 @@ export function startApp(): void {
       setScreen(null, true);
       bg.setVisible(false);
       // Appli passée en arrière-plan pendant l'intro ou un fondu : on démarre en pause (REPRENDRE).
-      if (!launch(stage, start, bgCount !== bg0)) {
+      if (!launch(stage, start, bgCount !== bg0, startAt)) {
         await fader.clear();
         return;
       }
@@ -470,7 +478,7 @@ export function startApp(): void {
     weaponWarning = '';
   }
 
-  function launch(stage: StageDef, start: StartMode, startPaused: boolean): boolean {
+  function launch(stage: StageDef, start: StartMode, startPaused: boolean, startAt: StartAt | null): boolean {
     // Équipement effectif figé pour toute la partie : arme (de la session sinon de la sauvegarde), améliorations,
     // cœurs max, modules de la Comète ; mode test : 4 armes et double saut.
     const loadout = playLoadout(live);
@@ -490,9 +498,11 @@ export function startApp(): void {
       settings: live,
       loadout,
       onComplete: (result) => endRun(r, { ok: true, result }),
-      onFail: (reason) => endRun(r, { ok: false, reason: typeof reason === 'string' ? reason : '' }),
+      onFail: (reason, retry) =>
+        endRun(r, { ok: false, reason: typeof reason === 'string' ? reason : '', retry: retryPoint(retry) }),
     };
-    if (urlStartAt && stage.kind === 'platform') hooks.startAt = urlStartAt;
+    const at = startAt ?? (stage.kind === 'platform' ? urlStartAt : null);
+    if (at) hooks.startAt = at;
 
     try {
       r.handle = start(gameRoot, stage, hooks);
@@ -502,7 +512,7 @@ export function startApp(): void {
       if (run === r) run = null;
       hud.hide();
       input.setLayout('none');
-      showStartError(stage, err);
+      showStartError(stage, err, startAt);
       return false;
     }
     // Lancé en portrait ou en arrière-plan (ou juste après) : on démarre directement en pause.
@@ -510,13 +520,14 @@ export function startApp(): void {
     return true;
   }
 
-  function showStartError(stage: StageDef, err: unknown): void {
+  /** `startAt` : départ imposé de la tentative (nouvel essai d'un combat), gardé par « Réessayer ». */
+  function showStartError(stage: StageDef, err: unknown, startAt: StartAt | null): void {
     phase = 'menu';
     bg.setVisible(true);
     audio.music('menu');
     setScreen(
       createErrorScreen(ctx, stage, errorMessage(err), {
-        retry: () => startStage(stage, false),
+        retry: () => startStage(stage, false, false, startAt),
         menu: () => goTitle(),
       }),
       true,
@@ -569,8 +580,10 @@ export function startApp(): void {
         if (results) {
           s = makeResults(results, false);
         } else {
+          const retry = outcome.ok ? null : outcome.retry;
           s = createFailScreen(ctx, r.stage, outcome.ok ? '' : outcome.reason, {
             retry: () => startStage(r.stage, false),
+            retryFight: retry ? () => startStage(r.stage, false, false, retry) : null,
             menu: () => goTitle(),
           });
         }

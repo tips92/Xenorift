@@ -1,6 +1,8 @@
 import type Phaser from 'phaser';
 import type { ThemeId, WeaponId } from '../../core/types';
+import type { CreatureDistance } from '../levels/types';
 import { drawBeacon, drawBeaconBeam } from './draw/beacon';
+import { WHALE_SPOT, drawWhaleSpot } from './draw/bosses';
 import { drawDoor, drawInteractArrow, drawRoomWall } from './draw/doors';
 import { drawArmored, drawFlyer, drawSpitter, drawSpore, drawWalker } from './draw/enemies';
 import {
@@ -97,6 +99,8 @@ export function generatePlatformArt(scene: Phaser.Scene, theme: ThemeId): void {
   buildSheet(scene, TEX.door, Dr.w, Dr.h, 2, (ctx, i) => drawDoor(ctx, theme, i));
   buildSheet(scene, TEX.interactArrow, 28, 24, 1, (ctx) => drawInteractArrow(ctx));
   buildSheet(scene, TEX.roomWall, 64, 64, 1, (ctx) => drawRoomWall(ctx, theme));
+  const Gl = WORLD1_SHEETS.glyphs;
+  buildSheet(scene, TEX.glyphs, Gl.w, Gl.h, Gl.frames, (ctx, i) => Gl.draw(ctx, theme, i));
   buildSheet(scene, TEX.spark, 16, 16, 1, (ctx) => drawSpark(ctx));
   buildSheet(scene, TEX.puff, 32, 32, 1, (ctx) => drawPuff(ctx));
 
@@ -142,19 +146,73 @@ export function destroyArenaArt(scene: Phaser.Scene): void {
   for (const [key] of BARRIER_SHEETS) removeTexture(scene, key);
 }
 
+/** Objets du décor dont un niveau a besoin (cases 'o' et 'N', LevelData.events). */
+export interface LevelArtNeeds {
+  mushroom: boolean;
+  trunk: boolean;
+  sporeSpot: boolean;
+  castaway: boolean;
+}
+
+/**
+ * Textures des objets du niveau qui en ont besoin (TEX.mushroom, trunk, sporeSpot, tess et capsule) ; libérées par
+ * destroyLevelArt.
+ */
+export function generateLevelArt(scene: Phaser.Scene, theme: ThemeId, need: LevelArtNeeds): void {
+  if (need.mushroom) {
+    const s = WORLD1_SHEETS.mushroom;
+    buildSheet(scene, TEX.mushroom, s.w, s.h, s.frames, (ctx, i) => s.draw(ctx, theme, i));
+  }
+  if (need.trunk) {
+    const s = WORLD1_SHEETS.trunk;
+    buildSheet(scene, TEX.trunk, s.w, s.h, s.frames, (ctx, i) => s.draw(ctx, theme, i));
+  }
+  if (need.sporeSpot) {
+    buildSheet(scene, TEX.sporeSpot, WHALE_SPOT.w, WHALE_SPOT.h, FRAMES.sporeSpot.warn.length, (ctx, i) => drawWhaleSpot(ctx, theme, i));
+  }
+  if (need.castaway) {
+    for (const [key, s] of [
+      [TEX.tess, WORLD1_SHEETS.tess],
+      [TEX.capsule, WORLD1_SHEETS.capsule],
+    ] as const) {
+      buildSheet(scene, key, s.w, s.h, s.frames, (ctx, i) => s.draw(ctx, theme, i));
+    }
+  }
+}
+
+export function destroyLevelArt(scene: Phaser.Scene): void {
+  removeTexture(scene, TEX.mushroom);
+  removeTexture(scene, TEX.trunk);
+  removeTexture(scene, TEX.sporeSpot);
+  removeTexture(scene, TEX.tess);
+  removeTexture(scene, TEX.capsule);
+}
+
 export interface ParallaxHandle {
   /** À appeler à chaque frame ; lit la position de scene.cameras.main. */
   update(time: number, delta: number): void;
   /** Taille logique de la vue après changement d'orientation / de fenêtre. */
   resize(width: number, height: number): void;
+  /** Gardien du monde (la méduse-baleine de la Jungle) affiché ou caché ; sans effet pour un thème qui n'en a pas. */
+  setCreature(visible: boolean): void;
+  /**
+   * La créature passe au-dessus de Kaï : son ombre balaie la vue, puis elle revient au loin. Renvoie la durée
+   * (ms), 0 si le thème n'a pas de créature ou si elle est cachée.
+   */
+  shadowPass(): number;
   destroy(): void;
+}
+
+/** Options du décor : distance de la créature (LevelData.creature ; 'far' par défaut). */
+export interface ParallaxOptions {
+  creature?: CreatureDistance;
 }
 
 /**
  * Crée l'arrière-plan à défilement parallaxe du thème (ciel galactique, planètes, silhouettes,
  * monstres géants qui bougent au loin, végétation proche), avec des depth entre DEPTH.parallaxFar
- * et DEPTH.parallaxNear.
+ * et DEPTH.parallaxNear (l'ombre de shadowPass passe devant le jeu).
  */
-export function createParallax(scene: Phaser.Scene, theme: ThemeId): ParallaxHandle {
-  return createParallaxImpl(scene, theme);
+export function createParallax(scene: Phaser.Scene, theme: ThemeId, opts?: ParallaxOptions): ParallaxHandle {
+  return createParallaxImpl(scene, theme, opts && opts.creature ? opts.creature : 'far');
 }

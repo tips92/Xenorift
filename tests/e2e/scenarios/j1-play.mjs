@@ -1,4 +1,6 @@
-// Plateforme 2D, Jungle (j1) lancée par ?stage=j1 : course à droite, saut (monte puis retombe),
+// Plateforme 2D, Jungle (j1) lancée par ?stage=j1 : arrivée (Kaï sort de la Comète posée, figé dans l'état
+// « enter », puis posé au départ ; la Comète repart à vide vers l'orbite, son « takeoff », sans rien déclencher),
+// course à droite, saut (monte puis retombe),
 // tir laser, pause par Échap (overlay ouvert, Kaï figé), reprise, victoire (__xr2d.win : combat du Blob-roi passé,
 // balise de LUMA activée, état exit, Kaï emporté par le faisceau, son, sortie en 2,6 s au plus) → écran de résultats
 // sans prime de boss.
@@ -34,10 +36,63 @@ function waitGrounded(t, label) {
   );
 }
 
+/** Avant t.goto : états successifs de la scène 2D (window.__states) et sons joués (window.__sfx). */
+async function recordStart(t) {
+  await t.page.addInitScript(() => {
+    window.__states = [];
+    window.__sfx = [];
+    const tick = () => {
+      const s = window.__xr2d && window.__xr2d.scene;
+      const st = s && s.state;
+      if (st && window.__states[window.__states.length - 1] !== st) window.__states.push(st);
+      const a = window.__xrShell && window.__xrShell.audio;
+      if (a && !a.__j1p) {
+        a.__j1p = true;
+        const orig = a.sfx;
+        a.sfx = function (id, o) {
+          window.__sfx.push(id);
+          return orig.call(this, id, o);
+        };
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+/** Arrivée de la scène : état, Comète du départ, Kaï. */
+function arrival(t) {
+  return t.ev(() => {
+    const s = window.__xr2d.scene;
+    const a = s.arrival;
+    const p = s.player;
+    return {
+      kind: a && a.kind,
+      landed: !!(a && a.landed),
+      done: !!(a && a.done),
+      ship: a ? { visible: a.comet.ship.visible, x: Math.round(a.comet.ship.x), y: Math.round(a.comet.ship.y) } : null,
+      state: s.state,
+      exitLaunched: !!(s.exit && s.exit.launched),
+      x: p.x,
+      feetY: p.feetY,
+      states: window.__states.slice(),
+      takeoff: window.__sfx.filter((id) => id === 'takeoff').length,
+    };
+  });
+}
+
 export default async function (t) {
+  await recordStart(t);
   await t.goto('?touch=1&unlock=1&stage=j1');
   await waitFor2dPlay(t);
   await waitGrounded(t, 'Kaï au sol au départ');
+  // Arrivée : Kaï a quitté le cockpit (état enter) et se tient au départ P (8, 11) ; la Comète est encore là.
+  const a0 = await arrival(t);
+  t.log('arrivée', JSON.stringify(a0));
+  assertEq([a0.kind, a0.landed, a0.done, a0.ship && a0.ship.visible], ['ship', true, false, true], 'arrivée en Comète : Kaï posé, Comète encore là');
+  assertEq(a0.states.slice(0, 2), ['enter', 'play'], 'états de la scène : arrivée (commandes coupées) puis jeu');
+  assertNear(a0.x, 8 * 64 + 32, 1, 'Kaï au départ P (x)');
+  assertNear(a0.feetY, 12 * 64, 1, 'Kaï au départ P (pieds)');
   await t.shot('start');
 
   // --- Course : x augmente
@@ -80,6 +135,13 @@ export default async function (t) {
   await t.shot('fire');
   t.log('lasers actifs (max)', maxLasers);
   assert(maxLasers > 0, 'J : au moins un tir laser actif');
+
+  // --- La Comète du départ est repartie : réacteur allumé (son), envolée hors de la vue, sans rien déclencher.
+  await waitFor(t, () => window.__xr2d.scene.arrival.done, { timeout: 8000, label: 'Comète du départ repartie en orbite' });
+  const a1 = await arrival(t);
+  t.log('Comète repartie', JSON.stringify(a1.ship));
+  assert(!a1.ship.visible && a1.ship.y < 12 * 64 - 900, `Comète montée hors de la vue puis masquée (${JSON.stringify(a1.ship)})`);
+  assertEq([a1.state, a1.exitLaunched, a1.takeoff], ['play', false, 1], 'Comète à vide : un décollage (son), partie en cours, sortie intacte');
 
   // --- Pause (Échap) : overlay ouvert, partie en pause, Kaï figé même flèche tenue
   await t.key('Escape', 60);
@@ -182,10 +244,14 @@ export default async function (t) {
   const save = await readSave(t);
   assert(save && save.best && save.best.j1, `record de j1 sauvegardé (sauvegarde : ${JSON.stringify(save)})`);
   // Mode test (?unlock=1) : tout est ouvert ; l'étape réussie se lit dans `cleared`.
-  const prog = await t.ev(() => window.__xrShell.info().stages.slice(0, 2));
+  const prog = await t.ev(() => {
+    const st = window.__xrShell.info().stages;
+    const i = st.findIndex((s) => s.id === 'j1');
+    return st.slice(i, i + 2);
+  });
   assertEq(
-    prog.map((s) => [s.id, s.cleared, s.unlocked]),
-    [['j1', true, true], ['f1', false, true]],
-    'j1 réussie, f1 non réussie (ouverte par le mode test)',
+    prog.map((s) => [s.cleared, s.unlocked]),
+    [[true, true], [false, true]],
+    `j1 réussie, l'étape suivante (${prog[1] && prog[1].id}) non réussie (ouverte par le mode test)`,
   );
 }

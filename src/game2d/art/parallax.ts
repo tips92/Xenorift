@@ -1,8 +1,12 @@
 import type Phaser from 'phaser';
 import type { ThemeId } from '../../core/types';
 import { DEPTH, VIEW_H } from '../constants';
-import { BG, WHALE, bgKey, ensureBackgroundTextures } from './draw/backgrounds';
+import type { CreatureDistance } from '../levels/types';
+import { BG, WHALE, WHALE_GREY_FAR, bgKey, ensureBackgroundTextures } from './draw/backgrounds';
+import { drawWhaleBody } from './draw/bosses';
 import type { ParallaxHandle } from './index';
+import { PALETTES } from './palette';
+import { makeCanvas, registerCanvas } from './util';
 
 // Arrière-plan à défilement parallaxe : ciel, astres, créatures géantes, silhouettes.
 // Chaque couche est une bande d'images répétées (même rendu qu'une TileSprite, sans copie
@@ -83,12 +87,97 @@ const PARALLAX_STYLES: Record<ThemeId, ParallaxStyle> = {
   },
 };
 
+/**
+ * Gardien du monde dans le décor selon sa distance (LevelData.creature) : taille, hauteur, dérive, part de gris du
+ * Vide (peu au loin, plus près, tout gris quand il domine). 'far' = la frame 'whale' de l'atlas 'fx' (gris de
+ * WHALE_GREY_FAR) ; les autres ont leur texture, dessinée à leur échelle.
+ */
+interface CreatureLook {
+  /** Échelle d'affichage (1 = WHALE, 460 px de large). */
+  scale: number;
+  /** Hauteur du centre (px) au départ, puis base et aléa à chaque retour. */
+  y0: number;
+  y: number;
+  yJitter: number;
+  /** Dérive vers la gauche (px/s) et part du défilement de la caméra. */
+  drift: number;
+  factor: number;
+  /** Largeur prise pour sortir de la vue et y revenir (px). */
+  span: number;
+  grey: number;
+  alpha: number;
+  depth: number;
+  /** Teinte des tentacules (blanc = couleurs d'origine). */
+  tentTint: number;
+}
+
+const CREATURES: Record<CreatureDistance, CreatureLook> = {
+  far: { scale: 0.82, y0: 190, y: 160, yJitter: 80, drift: 15, factor: 0.06, span: WHALE.w, grey: WHALE_GREY_FAR, alpha: 0.88, depth: DEPTH.parallaxFar + 9, tentTint: 0xffffff },
+  near: { scale: 1.3, y0: 175, y: 150, yJitter: 50, drift: 24, factor: 0.1, span: WHALE.w * 1.6, grey: 0.55, alpha: 0.92, depth: DEPTH.parallaxFar + 25, tentTint: 0xd0c8e4 },
+  looming: { scale: 2.1, y0: 200, y: 185, yJitter: 30, drift: 7, factor: 0.05, span: WHALE.w * 2.6, grey: 1, alpha: 0.96, depth: DEPTH.parallaxFar + 40, tentTint: 0x9c98ac },
+};
+
+/** Passage de la créature au-dessus de Kaï (shadowPass) : durée et opacité maximale de l'ombre. */
+const SHADOW_MS = 2600;
+const SHADOW_ALPHA = 0.75;
+/** Fondu de la créature du décor (s) : quand son ombre entre, puis à son retour au loin. */
+const CREATURE_FADE_S = 0.35;
+/** Ombre : marge du flou et longueur des tentacules sous la jupe (px, à l'échelle 1). */
+const SHADOW_PAD = 24;
+const SHADOW_TENT = 110;
+
+/** Texture de la créature : la frame de l'atlas au loin, sinon la sienne (dessinée une fois, gardée en cache). */
+function creatureTexture(scene: Phaser.Scene, theme: ThemeId, d: CreatureDistance): { key: string; frame: string | undefined; texScale: number } {
+  if (d === 'far') return { key: bgKey(theme, 'fx'), frame: 'whale', texScale: 1 };
+  const look = CREATURES[d];
+  const key = bgKey(theme, `creature-${d}`);
+  if (!scene.textures.exists(key)) {
+    const s = look.scale;
+    const c = makeCanvas(Math.ceil(WHALE.w * s), Math.ceil(WHALE.h * s));
+    drawWhaleBody(c.ctx, s, look.grey, { pal: PALETTES[theme] });
+    registerCanvas(scene, key, c.canvas);
+  }
+  return { key, frame: undefined, texScale: look.scale };
+}
+
+/** Ombre de la créature : silhouette sombre et floue, tentacules compris (gardée en cache). */
+function shadowTexture(scene: Phaser.Scene, theme: ThemeId): string {
+  const key = bgKey(theme, 'creature-shadow');
+  if (scene.textures.exists(key)) return key;
+  const w = WHALE.w + SHADOW_PAD * 2;
+  const h = WHALE.h + SHADOW_TENT + SHADOW_PAD * 2;
+  const body = makeCanvas(w, h);
+  const b = body.ctx;
+  b.translate(SHADOW_PAD, SHADOW_PAD);
+  drawWhaleBody(b, 1, 0, { solid: true, pal: PALETTES[theme] });
+  b.strokeStyle = '#000';
+  b.lineCap = 'round';
+  for (let k = 0; k < WHALE.tentacles.length; k++) {
+    const x = WHALE.tentacles[k];
+    b.lineWidth = 12 - k * 0.6;
+    b.beginPath();
+    b.moveTo(x, WHALE.tentY);
+    b.quadraticCurveTo(x + 14, WHALE.tentY + SHADOW_TENT * 0.5, x - 6 + (k % 3) * 8, WHALE.tentY + SHADOW_TENT * (0.8 + (k % 2) * 0.2));
+    b.stroke();
+  }
+  const out = makeCanvas(w, h);
+  const o = out.ctx;
+  o.filter = 'blur(7px)';
+  o.drawImage(body.canvas, 0, 0);
+  o.filter = 'none';
+  o.globalCompositeOperation = 'source-in';
+  o.fillStyle = '#0a0418';
+  o.fillRect(0, 0, w, h);
+  registerCanvas(scene, key, out.canvas);
+  return key;
+}
+
 function posMod(a: number, m: number): number {
   const r = a % m;
   return r < 0 ? r + m : r;
 }
 
-export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): ParallaxHandle {
+export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId, creature: CreatureDistance): ParallaxHandle {
   ensureBackgroundTextures(scene, theme);
   const style = PARALLAX_STYLES[theme];
   const cam = scene.cameras.main;
@@ -173,14 +262,20 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
   };
   for (const b of style.bodies) addBody(b.frame, b.fx, b.y, b.factor, b.halfW);
 
-  // ------------------------------------------------------------ Méduse-baleine + nuées
-  const WHALE_F = 0.06;
+  // ------------------------------------------------------------ Méduse-baleine (gardien du monde) + nuées
+  const look = CREATURES[creature];
   const TENT_SEG = 18;
-  const WHALE_SCALE = 0.82;
   let whale: Img | null = null;
+  let whaleTexScale = 1;
   const tentacles: Img[] = [];
   let whaleX = viewW * 0.7;
-  let whaleY = 190;
+  let whaleY = look.y0;
+  /** Affichée (setCreature) ; cachée aussi pendant son passage au-dessus de Kaï (shadowT >= 0, s écoulées), après
+   *  un fondu (creatureFade : 1 = pleine). */
+  let creatureOn = true;
+  let creatureFade = 1;
+  let shadow: Img | null = null;
+  let shadowT = -1;
   const FLOCKS = 3;
   const BIRDS = 7;
   const birds: Img[] = [];
@@ -205,16 +300,25 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
   };
 
   if (style.whale) {
+    const tex = creatureTexture(scene, theme, creature);
     for (let k = 0; k < WHALE.tentacles.length; k++) {
       for (let j = 0; j < TENT_SEG; j++) {
-        const t = img(0, 0, fxKey, 'tent', DEPTH.parallaxFar + 8);
+        const t = img(0, 0, fxKey, 'tent', look.depth - 1);
         t.setBlendMode(1);
+        if (look.tentTint !== 0xffffff) t.setTint(look.tentTint);
         tentacles.push(t);
       }
     }
-    whale = img(0, 0, fxKey, 'whale', DEPTH.parallaxFar + 9);
-    whale.setAlpha(0.88);
+    whale = img(0, 0, tex.key, tex.frame, look.depth);
+    whale.setAlpha(look.alpha);
+    whaleTexScale = tex.texScale;
   }
+
+  const showCreature = (on: boolean) => {
+    if (!whale) return;
+    whale.setVisible(on);
+    for (let i = 0; i < tentacles.length; i++) tentacles[i].setVisible(on);
+  };
   if (style.flocks) {
     for (let f = 0; f < FLOCKS; f++) {
       spawnFlock(f, true);
@@ -355,23 +459,50 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
       b.img.setPosition(x, b.y + dy * 0.03);
     }
 
-    if (whale) {
-      whaleX -= 15 * dt;
-      let sx = whaleX - camX * WHALE_F;
-      if (sx < -WHALE.w * 0.65 - 60) {
-        whaleX += viewW + WHALE.w * 1.3 + 120 + Math.random() * 400;
-        whaleY = 160 + Math.random() * 80;
-        sx = whaleX - camX * WHALE_F;
-      } else if (sx > viewW + WHALE.w * 1.5 + 600) {
-        whaleX -= viewW + WHALE.w * 1.3 + 120;
-        sx = whaleX - camX * WHALE_F;
+    if (shadow && shadowT >= 0) {
+      shadowT += dt;
+      const u = shadowT / (SHADOW_MS / 1000);
+      if (u >= 1) {
+        // Passée : elle revient au loin, par la droite.
+        shadowT = -1;
+        shadow.setVisible(false);
+        whaleX = camX * look.factor + viewW + look.span * 0.4;
+        creatureFade = 0;
+        showCreature(creatureOn);
+      } else {
+        const e = u * u * (3 - 2 * u);
+        const sw = shadow.displayWidth;
+        shadow.setPosition(viewW + sw * 0.5 - (viewW + sw) * e, viewH * 0.7 - Math.sin(u * Math.PI) * 40);
+        shadow.setAlpha(SHADOW_ALPHA * Math.sin(u * Math.PI));
+      }
+    }
+
+    // Ombre en cours : la créature s'efface, puis revient en fondu.
+    if (whale && creatureOn && whale.visible && shadowT >= 0) {
+      creatureFade = Math.max(0, creatureFade - dt / CREATURE_FADE_S);
+      if (creatureFade === 0) showCreature(false);
+    } else if (creatureFade < 1) {
+      creatureFade = Math.min(1, creatureFade + dt / CREATURE_FADE_S);
+    }
+    if (whale && creatureOn && whale.visible) {
+      whaleX -= look.drift * dt;
+      let sx = whaleX - camX * look.factor;
+      if (sx < -look.span * 0.65 - 60) {
+        whaleX += viewW + look.span * 1.3 + 120 + Math.random() * 400;
+        whaleY = look.y + Math.random() * look.yJitter;
+        sx = whaleX - camX * look.factor;
+      } else if (sx > viewW + look.span * 1.5 + 600) {
+        whaleX -= viewW + look.span * 1.3 + 120;
+        sx = whaleX - camX * look.factor;
       }
       const sy = whaleY + Math.sin(t * 0.42) * 12 + dy * 0.05;
       const rot = Math.sin(t * 0.33) * 0.035;
       whale.setPosition(sx, sy);
       whale.setRotation(rot);
-      const ws = WHALE_SCALE;
-      whale.setScale(ws * (1 + Math.sin(t * 1.1) * 0.012), ws * (1 + Math.sin(t * 1.1 + 1) * 0.025));
+      whale.setAlpha(look.alpha * creatureFade);
+      const ws = look.scale;
+      const is = ws / whaleTexScale;
+      whale.setScale(is * (1 + Math.sin(t * 1.1) * 0.012), is * (1 + Math.sin(t * 1.1 + 1) * 0.025));
       const cr = Math.cos(rot);
       const sr = Math.sin(rot);
       let n = 0;
@@ -386,7 +517,7 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
           const tm = tentacles[n++];
           tm.setPosition(ax + (Math.sin(ph) * (1.5 + j * 1.1) + j * j * 0.1) * ws, ay + j * 9 * len + Math.sin(ph * 0.7) * 1.5);
           tm.setScale((1.1 - j * 0.045) * ws);
-          tm.setAlpha(0.8 - j * 0.035);
+          tm.setAlpha((0.8 - j * 0.035) * creatureFade);
         }
       }
     }
@@ -507,6 +638,23 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
     layoutStrips();
   };
 
+  const setCreature = (visible: boolean) => {
+    if (destroyed || creatureOn === visible) return;
+    creatureOn = visible;
+    if (!visible || shadowT < 0) showCreature(visible);
+  };
+
+  const shadowPass = (): number => {
+    if (destroyed || !whale || !creatureOn) return 0;
+    if (shadowT >= 0) return Math.max(0, SHADOW_MS - shadowT * 1000);
+    if (!shadow) shadow = img(0, 0, shadowTexture(scene, theme), undefined, DEPTH.particles + 5);
+    // Assez grande pour couvrir la vue en passant ; entrée par la droite.
+    shadow.setScale((viewW * 1.1) / shadow.width).setAlpha(0).setVisible(true);
+    shadow.setPosition(viewW + shadow.displayWidth, viewH * 0.7);
+    shadowT = 0;
+    return SHADOW_MS;
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -517,5 +665,5 @@ export function createParallaxImpl(scene: Phaser.Scene, theme: ThemeId): Paralla
   layoutStrips();
   update(scene.time ? scene.time.now : 0, 16);
 
-  return { update, resize, destroy };
+  return { update, resize, setCreature, shadowPass, destroy };
 }

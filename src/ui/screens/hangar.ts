@@ -2,6 +2,7 @@ import {
   BASE_HEARTS,
   BASE_SHIELDS,
   BOOST_MULS,
+  CREW,
   formatMul,
   HANGAR_TABS,
   MAX_HEARTS_CAP,
@@ -18,7 +19,7 @@ import {
   type ItemState,
 } from '../../core/hangar';
 import { equipWeapon, getCrystals, getItemState, getSave, playLoadout, purchase } from '../../core/save';
-import type { StageDef, UpgradeStat, WeaponId } from '../../core/types';
+import type { CrewId, StageDef, UpgradeStat, WeaponId } from '../../core/types';
 import { WEAPON_IDS, WEAPONS } from '../../core/weapons';
 import { div, el, formatNumber, icon, play, prefersReducedMotion } from '../dom';
 import { departLabel } from '../flow';
@@ -63,6 +64,9 @@ const MSG_MS = 2600;
 
 /** Armes au féminin (accords : « Équipée », « de la Pompe ») ; les autres sont au masculin. */
 const FEMININE: Partial<Record<WeaponId, true>> = { shotgun: true };
+
+/** Équipière de l'Établi (niveaux 2 et 3 des améliorations, core/hangar.ts) : mention et aperçu une fois à bord. */
+const BENCH_CREW: CrewId = 'tess';
 
 /** Accord avec le nom de l'arme : agree('shotgun', 'Équipé') → « Équipée ». */
 function agree(w: WeaponId, word: string): string {
@@ -328,7 +332,8 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
       const s = getSave().ship;
       return { kind: 'ship', gun: s.gun, shield: s.shield, boost: s.boost };
     }
-    return { kind: 'kai', weapon: tab === 'bench' ? selected : playLoadout(ctx.settings).equipped };
+    if (tab === 'bench') return { kind: 'kai', weapon: selected, tess: getSave().crew.includes(BENCH_CREW) };
+    return { kind: 'kai', weapon: playLoadout(ctx.settings).equipped };
   }
 
   // ---------------------------------------------------------------- Rendu
@@ -360,6 +365,11 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
       const st = weaponStatus(selected);
       capTitle.textContent = WEAPONS[selected].name;
       capLine.append(el('span', `hg-caption-sub${st.equipped ? ' is-on' : ''}`, statusText(st)));
+      if (getSave().crew.includes(BENCH_CREW)) {
+        const crew = el('span', 'hg-caption-sub hg-crew');
+        crew.append(icon(ICONS.helmet, 'ico hg-crew-ico'), el('span', '', `${CREW[BENCH_CREW].name} à l’établi`));
+        capLine.append(crew);
+      }
     }
   }
 

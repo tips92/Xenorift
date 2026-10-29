@@ -20,8 +20,12 @@ export const THEME_COLORS: Record<ThemeId, ThemeColors> = {
   moon: { laser: 0x8ffcff, enemyBurst: 0xffa64d, spore: 0xff4fd8, crystal: 0xffb35c, dust: 0xd8cce8 },
 };
 
+/** Secousse de force 1 (intensité de Camera.shake : part de la taille de la vue). */
+const SHAKE_FULL = 0.01;
+
 export class Effects {
   readonly colors: ThemeColors;
+  private readonly cam: Phaser.Cameras.Scene2D.Camera;
   private readonly sparks: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly bursts: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly puffs: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -30,6 +34,7 @@ export class Effects {
 
   constructor(scene: Phaser.Scene, theme: ThemeId) {
     this.colors = THEME_COLORS[theme];
+    this.cam = scene.cameras.main;
 
     this.sparks = scene.add.particles(0, 0, TEX.spark, {
       emitting: false,
@@ -94,6 +99,19 @@ export class Effects {
       blendMode: Phaser.BlendModes.ADD,
     });
     this.trail.setDepth(DEPTH.items - 1);
+  }
+
+  /**
+   * Secousse de la caméra, seule porte d'entrée (une future option de confort la réglera ici) : `force` 1 = forte
+   * (coup du boss), 0,6 = coup reçu ; `ms` : durée (par défaut selon la force).
+   */
+  shake(force: number, ms = 120 + 260 * force): void {
+    if (force <= 0) return;
+    const i = SHAKE_FULL * force;
+    // Phaser ignore une secousse pendant une autre : la plus forte, ou celle qui dure plus, la remplace.
+    const s = this.cam.shakeEffect;
+    const replace = s.isRunning && (i > s.intensity.x || ms > s.duration * (1 - s.progress));
+    this.cam.shake(ms, i, replace);
   }
 
   /** Petites étincelles (impact de laser, cristal…). */

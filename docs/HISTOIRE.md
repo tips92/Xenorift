@@ -74,6 +74,15 @@ d'assaut). Une fois le plan récupéré, l'arme s'achète et s'améliore à l'é
 | 3 | Mira, biologiste | journal de bord des créatures, cœurs supplémentaires |
 | 4 | Rook, ancien pilote | améliorations avancées de la Comète |
 
+## Monde 1 : noms retenus (plan 04)
+
+| | Nom | Ce qui s'y passe |
+|---|---|---|
+| Niveau 1 | Lisière de Xéna | la Comète repart à vide ; tutoriel de LUMA ; ruine astréenne ; mini-boss : le **Blob-roi** (gelée couronnée) ; balise |
+| Niveau 2 | Canopée des spores | champignons ; la méduse-baleine, plus proche, agit (ombre, secousse qui abat un tronc, pluie de spores) ; **Tess** secourue près de sa capsule écrasée ; mini-boss : le **Scarabée-titan** (charge, carapace) ; balise |
+| Niveau 3 | Sanctuaire du gardien | radio brouillée de bout en bout ; la gardienne, la **méduse-baleine**, toute grise ; double saut |
+| Vol | Nébuleuse d'Azur | boss : le **léviathan de la nébuleuse** (4c) |
+
 ## Idées de combats
 
 - **Méduse-baleine** : plane au-dessus de Kaï et lâche des spores. Quand elle descend ses tentacules, son

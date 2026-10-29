@@ -1,5 +1,5 @@
 import type { ThemeId } from '../../../core/types';
-import { TILESET, TILE_FRAME } from '../keys';
+import { TILESET, TILE_FRAME, WALKWAY_FAMILY_COUNT, WALKWAY_VARIANTS } from '../keys';
 import { PALETTES, type ThemePalette } from '../palette';
 import {
   type Ctx,
@@ -21,8 +21,9 @@ import {
   wrapX,
   wrapXY,
 } from '../util';
+import { drawWalkway } from './world1';
 
-// Tileset 8x2 (64 px, marge 1, espacement 2, bords extrudés d'1 px).
+// Tileset 8x4 (64 px, marge 1, espacement 2, bords extrudés d'1 px).
 // Les tuiles de sol se raccordent sans couture horizontalement (surface continue) et verticalement.
 
 const T = 64;
@@ -1261,6 +1262,8 @@ interface TileStyle {
   fillAlt(ctx: Ctx, pal: ThemePalette): void;
   block(ctx: Ctx, pal: ThemePalette): void;
   platform(ctx: Ctx, pal: ThemePalette): void;
+  /** Plateforme traversable à motifs k (famille x 3 + variante, TILE_FRAME.WALKWAY + k). */
+  walkway(ctx: Ctx, pal: ThemePalette, k: number): void;
   hazard(ctx: Ctx, pal: ThemePalette): void;
   decor(ctx: Ctx, pal: ThemePalette, which: 0 | 1 | 2): void;
 }
@@ -1281,6 +1284,8 @@ const TILE_STYLES: Record<ThemeId, TileStyle> = {
     fillAlt: jungleFillAlt,
     block: jungleBlock,
     platform: junglePlatform,
+    // Branches, lianes et passerelles du monde 1.
+    walkway: (ctx, _pal, k) => drawWalkway(ctx, 'jungle', k),
     hazard: jungleHazard,
     decor: jungleDecor,
   },
@@ -1299,6 +1304,8 @@ const TILE_STYLES: Record<ThemeId, TileStyle> = {
     fillAlt: moonFillAlt,
     block: moonBlock,
     platform: moonPlatform,
+    // Pas encore de motifs : la plateforme de la Lune partout.
+    walkway: (ctx, pal) => moonPlatform(ctx, pal),
     hazard: moonHazard,
     decor: moonDecor,
   },
@@ -1340,6 +1347,10 @@ function drawTile(ctx: Ctx, index: number, st: TileStyle, pal: ThemePalette, bas
       return groundTile(ctx, st, pal, base, true, true, true);
     case TILE_FRAME.GROUND_FILL_ALT:
       return groundTile(ctx, st, pal, base, false, false, false, true);
+    default: {
+      const k = index - TILE_FRAME.WALKWAY;
+      if (k >= 0 && k < WALKWAY_FAMILY_COUNT * WALKWAY_VARIANTS) st.walkway(ctx, pal, k);
+    }
   }
 }
 
@@ -1353,7 +1364,7 @@ export function tileRect(index: number): { x: number; y: number } {
   };
 }
 
-/** Dessine le tileset complet (528x132) avec bords extrudés. */
+/** Dessine le tileset complet (TILESET.width x TILESET.height) avec bords extrudés. */
 export function drawTileset(theme: ThemeId): HTMLCanvasElement {
   const st = TILE_STYLES[theme];
   const pal = PALETTES[theme];
