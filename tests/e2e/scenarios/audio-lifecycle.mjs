@@ -15,6 +15,7 @@
 //  6. Interrupteur Musique dans les Options du menu Pause : coupé → plus aucune note ; réactivé → exactement un
 //     nouveau morceau (pas de double départ), même après des bascules rapides.
 import { activeScreen, assert, assertEq, clickText, fmt, readSave, waitFor, waitFor2dPlay, waitForScreen } from '../lib/helpers.mjs';
+import { SEEN_STORY, seedSave } from '../lib/core.mjs';
 import {
   audioState,
   cap,
@@ -118,6 +119,8 @@ async function toggleMusic(t) {
 
 export default async function (t) {
   await instrument(t);
+  // Cinématiques déjà vues (plan 04, choix 14) : JOUER, les cartes et la fin de j3 ne les jouent pas.
+  await seedSave(t, SEEN_STORY);
   await countTracks(t);
   await t.goto('?touch=1&unlock=1');
   await waitForScreen(t, 'title');

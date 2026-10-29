@@ -4,7 +4,17 @@ import type { UiCtx } from '../services';
 
 // Briques communes des écrans : contrat d'écran, boutons, en-têtes, étoiles.
 
-export type ScreenName = 'title' | 'select' | 'options' | 'intro' | 'results' | 'hangar' | 'fail' | 'end' | 'error';
+export type ScreenName =
+  | 'title'
+  | 'select'
+  | 'options'
+  | 'intro'
+  | 'cutscene'
+  | 'results'
+  | 'hangar'
+  | 'fail'
+  | 'end'
+  | 'error';
 
 export interface Screen {
   readonly name: ScreenName;

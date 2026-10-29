@@ -83,8 +83,9 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
     record.append(el('span', '', `Record : ${formatNumber(d.best)}`));
   }
   main.append(starsEl, scoreBox);
-  // Prime du boss vaincu (comprise dans le score), sous le score : la colonne des détails reste à 4 lignes.
-  if (stage.kind === 'platform' && result.bossBonus) {
+  // Prime du boss vaincu (comprise dans le score ; niveau 2D ou vol), sous le score : la colonne des détails reste à
+  // 4 lignes.
+  if (result.bossBonus) {
     const bonus = div('results-bonus');
     bonus.append(icon(ICONS.trophy, 'ico'), el('span', 'results-bonus-label', 'Boss vaincu'), el('b', 'results-bonus-value', `+${formatNumber(result.bossBonus)}`));
     main.append(bonus);

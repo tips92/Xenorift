@@ -7,7 +7,8 @@ import type { Bin } from './util';
 
 // Tir de la Comète (docs/plans/03-hangar.md, 3b) : canon (cadence, chauffe, surchauffe ; fiches de
 // core/shipGuns.ts), visée (cible la plus proche dans un cône devant la Comète), projectiles en InstancedMesh
-// (un seul appel de dessin) et impacts contre les astéroïdes et les ennemis. Aucune allocation en vol.
+// (un seul appel de dessin) et impacts contre les astéroïdes, les ennemis et les cibles d'un boss. Aucune
+// allocation en vol.
 // Repère : la Comète avance vers −Z ; le cône de visée a pour axe −Z (le lacet du modèle est décoratif).
 
 const _m = new THREE.Matrix4();
@@ -26,12 +27,15 @@ export const SHOT_CAP = 48;
 
 // ---------------------------------------------------------------- Visée
 
-export type AimKind = 'none' | 'rock' | 'enemy';
+export type AimKind = 'none' | 'rock' | 'enemy' | 'boss';
 
 /** Cible de la visée, objet réutilisé (remis à zéro par clearAim à chaque sous-pas). */
 export interface AimTarget {
   kind: AimKind;
-  /** Rocher : index dans AsteroidField.rocks ; ennemi : emplacement dans EnemyField (EnemyField.kindOf). −1 sans cible. */
+  /**
+   * Rocher : index dans AsteroidField.rocks ; ennemi : emplacement dans EnemyField (EnemyField.kindOf) ; boss : rang
+   * dans FlightBoss.targets. −1 sans cible.
+   */
   index: number;
   /** Distance centre à centre depuis la Comète (u) ; Infinity sans cible. */
   dist: number;
@@ -295,12 +299,21 @@ export class ShipGun {
 // ---------------------------------------------------------------- Projectiles
 
 /**
- * Impact d'un projectile (premier touché le long de son segment, rochers et ennemis confondus ; le projectile
- * s'éteint) : rocher `index` (AsteroidField.rocks) ou ennemi `index`
- * (emplacement d'EnemyField), dégâts du projectile, point d'impact. Fonction liée une fois (pas de fermeture
- * créée en vol).
+ * Impact d'un projectile (premier touché le long de son segment, rochers, ennemis et boss confondus ; le
+ * projectile s'éteint) : rocher `index` (AsteroidField.rocks), ennemi `index` (emplacement d'EnemyField) ou cible
+ * `index` du boss (FlightBoss.targets), dégâts du projectile, point d'impact. Fonction liée une fois (pas de
+ * fermeture créée en vol).
  */
-export type ShotHitFn = (kind: 'rock' | 'enemy', index: number, damage: number, x: number, y: number, z: number) => void;
+export type ShotHitFn = (kind: 'rock' | 'enemy' | 'boss', index: number, damage: number, x: number, y: number, z: number) => void;
+
+/**
+ * Cibles d'un boss pour les projectiles (FlightBoss de bosses/types.ts) : premier élément touché par le segment
+ * (x0, y0, z0) → (x1, y1, z1) d'un tir de rayon `r` (son rang, ou −1), et dégâts réservés par cible (claim).
+ */
+export interface ShotTargets {
+  shotTest(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, r: number): number;
+  readonly pending: Float32Array;
+}
 
 /** Fraction (0..1) du segment où il entre dans la sphère (cx, cy, cz, rr) ; point le plus proche s'il l'effleure. */
 function segmentEntry(
@@ -400,6 +413,7 @@ const STRIDE = 15;
 const T_NONE = 0;
 const T_ROCK = 1;
 const T_ENEMY = 2;
+const T_BOSS = 3;
 /** Fin de vie : le trait s'éteint en fondu sur cette durée (s). */
 const FADE_OUT = 0.08;
 /** Épaisseur minimale du trait par unité de distance à la caméra (u/u). */
@@ -495,8 +509,9 @@ export class ShotPool {
    * Le dernier tir parti (fire a renvoyé true) vise `target` (tir qui doit toucher : canHit de FlightRun) : ses
    * dégâts sont réservés sur la cible (pending) jusqu'à l'impact ou l'extinction du projectile. La visée ne
    * retient plus une cible que les tirs en route suffisent à détruire : pas de chauffe perdue en tir continu.
+   * Une cible de boss ne renaît pas (sa réservation n'a pas besoin de numéro d'occupant).
    */
-  claim(target: Readonly<AimTarget>, rocks: AsteroidField, enemies: EnemyField): void {
+  claim(target: Readonly<AimTarget>, rocks: AsteroidField, enemies: EnemyField, boss: ShotTargets | null): void {
     if (this.count === 0 || target.index < 0) return;
     const o = (this.count - 1) * STRIDE;
     const st = this.st;
@@ -510,16 +525,21 @@ export class ShotPool {
       st[o + S_TI] = i;
       st[o + S_TG] = enemies.serial[i];
       enemies.pending[i] += st[o + S_DMG];
+    } else if (target.kind === 'boss' && boss && i < boss.pending.length) {
+      st[o + S_TK] = T_BOSS;
+      st[o + S_TI] = i;
+      boss.pending[i] += st[o + S_DMG];
     }
   }
 
   /**
    * Un sous-pas : avance les projectiles, éteint ceux en fin de vie, teste le segment parcouru contre les
-   * rochers (AsteroidField.shotTest) et les ennemis (EnemyField.shotTest), rayon SHOT_R ; premier touché le
-   * long du segment, rochers et ennemis confondus : projectile éteint (réservation rendue), `onHit` appelé.
-   * Appelé à chaque sous-pas, dans toutes les phases (le pool se vide).
+   * rochers (AsteroidField.shotTest), les ennemis (EnemyField.shotTest) puis les cibles du boss (`boss`, null
+   * sans boss), rayon SHOT_R ; premier touché le long du segment (rochers d'abord, ennemis et boss jusqu'au point
+   * d'entrée du rocher ; un ennemi passe avant le boss, ils ne se croisent guère) : projectile éteint (réservation
+   * rendue), `onHit` appelé. Appelé à chaque sous-pas, dans toutes les phases (le pool se vide).
    */
-  update(h: number, time: number, rocks: AsteroidField, enemies: EnemyField, onHit: ShotHitFn): void {
+  update(h: number, time: number, rocks: AsteroidField, enemies: EnemyField, boss: ShotTargets | null, onHit: ShotHitFn): void {
     const st = this.st;
     let i = 0;
     while (i < this.count) {
@@ -527,7 +547,7 @@ export class ShotPool {
       st[o + S_LIFE] -= h;
       st[o + S_AGE] += h;
       if (st[o + S_LIFE] <= 0) {
-        this.release(o, rocks, enemies);
+        this.release(o, rocks, enemies, boss);
         this.remove(i);
         continue;
       }
@@ -552,12 +572,14 @@ export class ShotPool {
         ez = z0 + (z1 - z0) * te;
       }
       const enemy = enemies.shotTest(x0, y0, z0, ex, ey, ez, SHOT_R);
-      if (enemy >= 0 || rock >= 0) {
+      const part = enemy < 0 && boss ? boss.shotTest(x0, y0, z0, ex, ey, ez, SHOT_R) : -1;
+      if (enemy >= 0 || part >= 0 || rock >= 0) {
         const dmg = st[o + S_DMG];
-        this.release(o, rocks, enemies);
+        this.release(o, rocks, enemies, boss);
         this.remove(i);
-        // Ennemi : milieu du segment retenu ; rocher : point d'entrée dans sa sphère (étincelles à sa surface)
+        // Ennemi, boss : milieu du segment retenu ; rocher : point d'entrée dans sa sphère (étincelles à sa surface)
         if (enemy >= 0) onHit('enemy', enemy, dmg, (x0 + ex) * 0.5, (y0 + ey) * 0.5, (z0 + ez) * 0.5);
+        else if (part >= 0) onHit('boss', part, dmg, (x0 + ex) * 0.5, (y0 + ey) * 0.5, (z0 + ez) * 0.5);
         else onHit('rock', rock, dmg, ex, ey, ez);
         continue;
       }
@@ -601,7 +623,7 @@ export class ShotPool {
   }
 
   /** Rend à sa cible les dégâts réservés par le projectile d'état `o` (claim), s'il en a une. */
-  private release(o: number, rocks: AsteroidField, enemies: EnemyField): void {
+  private release(o: number, rocks: AsteroidField, enemies: EnemyField, boss: ShotTargets | null): void {
     const st = this.st;
     const tk = st[o + S_TK];
     if (tk === T_NONE) return;
@@ -611,6 +633,11 @@ export class ShotPool {
     if (tk === T_ROCK) {
       const p = rocks.pending[ti] - dmg;
       rocks.pending[ti] = p > 0 ? p : 0;
+    } else if (tk === T_BOSS) {
+      if (boss && ti < boss.pending.length) {
+        const p = boss.pending[ti] - dmg;
+        boss.pending[ti] = p > 0 ? p : 0;
+      }
     } else if (enemies.serial[ti] === st[o + S_TG]) {
       // Même occupant de l'emplacement qu'au départ du tir (sinon le compteur a été remis à zéro)
       const p = enemies.pending[ti] - dmg;

@@ -10,6 +10,7 @@
 //    retour → menu Pause, retour → reprise ; Échap → pause sans reprise immédiate (deux écouteurs), P → reprise ;
 //    Espace : défilement bloqué en jeu, pas dans le menu Pause.
 import { activeScreen, assert, assertEq, clickText, fmt, waitFor, waitFor2dPlay, waitForScreen } from '../lib/helpers.mjs';
+import { SEEN_STORY, seedSave } from '../lib/core.mjs';
 import {
   clickPauseButton,
   clickThen,
@@ -76,6 +77,8 @@ async function assertExits(t, n, msg) {
 
 export default async function (t) {
   await instrument(t);
+  // Cinématiques déjà vues (plan 04, choix 14) : JOUER, les cartes et la fin de j3 ne les jouent pas.
+  await seedSave(t, SEEN_STORY);
   await t.goto('?touch=1&unlock=1');
   await waitForScreen(t, 'title');
   const mod = await spyExitApp(t);

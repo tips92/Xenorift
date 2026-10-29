@@ -23,6 +23,8 @@ export interface View {
   readonly vw: number;
   /** Mouvements réduits : pas de secousses, éclairs atténués. */
   readonly reduced: boolean;
+  /** Bord gauche du bouton Passer (unités ; `vw` sans bouton) : il suit l'encoche (--sar), relu à chaque image. */
+  readonly skipLeft: number;
 }
 
 /** Réplique (textes : core/story.ts). */

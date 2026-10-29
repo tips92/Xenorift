@@ -36,7 +36,7 @@ import {
   shotLog,
   waitGunIdle,
 } from '../lib/game2d.mjs';
-import { pickStage, press, recordToasts, toasts, waitPause, pressPause } from '../lib/core.mjs';
+import { SEEN_STORY, STORY_MARKS, pickStage, press, recordToasts, seedSave, toasts, waitPause, pressPause } from '../lib/core.mjs';
 import { waitIntroCard } from '../lib/shell.mjs';
 
 export const meta = {
@@ -280,7 +280,15 @@ async function savedLoadout(t) {
   assertEq(save.loadout, DEFAULT_LOADOUT, 'ancienne sauvegarde réécrite : bloc loadout par défaut');
 
   // --- Arme possédée équipée et double saut appris : repris hors mode test, sans ligne Arme sur la carte
-  await putSave(t, { version: 1, unlocked: 0, best: {}, settings: {}, loadout: { equipped: 'rifle', owned: ['laser', 'rifle'], skills: { doubleJump: true } } });
+  // (prologue déjà vu : JOUER mène à la carte d'intro)
+  await putSave(t, {
+    version: 1,
+    unlocked: 0,
+    best: {},
+    settings: {},
+    loadout: { equipped: 'rifle', owned: ['laser', 'rifle'], skills: { doubleJump: true } },
+    story: { seen: STORY_MARKS },
+  });
   await t.goto('?touch=0');
   await press(t, 'title', 'Jouer');
   await waitIntroCard(t);
@@ -630,6 +638,8 @@ async function weapon(t, id, icons) {
 
 export default async function (t) {
   await recordToasts(t);
+  // Cinématiques déjà vues (plan 04, choix 14) : JOUER et les cartes mènent droit à la carte d'intro.
+  await seedSave(t, SEEN_STORY);
   await sessionWeapon(t);
   await savedLoadout(t);
 

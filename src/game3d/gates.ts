@@ -262,16 +262,30 @@ void main() {
 `;
 
 export const WARP_R = 26;
+/** Ouverture du portail placé en cours de vol (place) : il grandit et s'allume en OPEN_TIME s. */
+const OPEN_TIME = 1.4;
 
+/**
+ * Portail de distorsion : la distorsion part quand la Comète passe sa profondeur `z` (relue par FlightRun), s'il
+ * est ouvert. Parcours sans boss : ouvert dès le départ au bout du parcours (Course.warpZ) ; avec boss : fermé et
+ * caché jusqu'à la victoire, puis placé devant la Comète (place), où il s'ouvre.
+ */
 export class WarpPortal {
   readonly group = new THREE.Group();
   private readonly disk: THREE.ShaderMaterial;
   private readonly rings: THREE.Mesh[] = [];
   private readonly ringMats: THREE.ShaderMaterial[] = [];
-  private readonly z: number;
+  /** Profondeur du portail (test de distorsion de FlightRun). */
+  z: number;
+  /** Ouvert : affiché à l'approche, la distorsion peut partir. */
+  open: boolean;
+  /** Ouverture en cours (0..1) après place ; 1 : ouvert d'emblée. */
+  private openK: number;
 
-  constructor(z: number, theme: CourseTheme, bin: Bin) {
+  constructor(z: number, open: boolean, theme: CourseTheme, bin: Bin) {
     this.z = z;
+    this.open = open;
+    this.openK = open ? 1 : 0;
     this.group.position.set(0, 0, z);
     const a = new THREE.Color(theme.warpA);
     const b = new THREE.Color(theme.warpB);
@@ -316,14 +330,27 @@ export class WarpPortal {
     this.group.visible = false;
   }
 
+  /** Place le portail à la profondeur `z` et l'ouvre (il grandit et s'allume en OPEN_TIME s). */
+  place(z: number): void {
+    this.z = z;
+    this.group.position.z = z;
+    this.open = true;
+    this.openK = 0;
+  }
+
   update(dt: number, time: number, shipZ: number): void {
     const dist = shipZ - this.z;
-    if (dist > 2600 || dist < -60) {
+    if (!this.open || dist > 2600 || dist < -60) {
       this.group.visible = false;
       return;
     }
     this.group.visible = true;
-    const fade = 1 - smoothstep(1700, 2600, dist);
+    if (this.openK < 1) {
+      this.openK = Math.min(1, this.openK + dt / OPEN_TIME);
+      const k = smoothstep(0, 1, this.openK);
+      this.group.scale.setScalar(0.05 + 0.95 * k);
+    }
+    const fade = (1 - smoothstep(1700, 2600, dist)) * smoothstep(0, 0.6, this.openK);
     this.disk.uniforms.uTime.value = time;
     this.disk.uniforms.uFade.value = fade;
     for (const m of this.ringMats) {

@@ -189,7 +189,7 @@ export function lasers2d(t) {
   });
 }
 
-/** Attend que le vol 3D atteigne la phase `phase` ('intro', 'fly', 'warp', 'dead', 'timeout', 'done'). */
+/** Attend que le vol 3D atteigne la phase `phase` ('intro', 'fly', 'boss', 'warp', 'dead', 'timeout', 'done'). */
 export function waitFor3dPhase(t, phase, { timeout = 40000 } = {}) {
   return waitFor(t, (ph) => !!(window.__xr3d && window.__xr3d.info().phase === ph), {
     timeout,

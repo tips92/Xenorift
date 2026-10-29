@@ -41,7 +41,7 @@
 //  (SHIP_ENERGY.boostHeat et coolRate du canon léger, src/core/shipGuns.ts). Voir tests/e2e/README.md, « Scénario du
 //  hangar ».
 import { assert, assertEq, assertNear, fmt, readSave, screenText, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
-import { hudFlight, pickStage, press, pressPause, recordToasts, resultDetails, waitPause } from '../lib/core.mjs';
+import { STORY_MARKS, hudFlight, pickStage, press, pressPause, recordToasts, resultDetails, waitPause } from '../lib/core.mjs';
 import { pressBack, waitIntroCard } from '../lib/shell.mjs';
 
 export const meta = {
@@ -422,6 +422,9 @@ export default async function (t) {
   assertEq((await readSave(t)).version, 1, 'sauvegarde v1 : pas réécrite au chargement');
 
   // ---------------------------------------------------------------- B. j1 terminé : cristaux ajoutés à la réserve
+  // Même sauvegarde, cinématiques déjà vues (plan 04, choix 14) : le départ du hangar vers j2 et la victoire sur j3
+  // mènent droit à la carte d'intro et aux résultats.
+  await putSave(t, { ...V1, story: { seen: STORY_MARKS } });
   await t.goto('?touch=0&stage=j1');
   await waitFor2dPlay(t);
   await t.ev((n) => {

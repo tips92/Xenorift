@@ -53,6 +53,14 @@ function letterPitch(c: number): number {
   return isVowel(c) ? 1.08 + (c % 3) * 0.04 : 0.9 + (c % 5) * 0.03;
 }
 
+/**
+ * Hauteur du bip de voix (lumaBip) d'une lettre : selon la lettre, tremblée pour une voix brouillée, plus aiguë pour
+ * Tess. Commune à la radio et aux cinématiques (ui/screens/cutscene.ts).
+ */
+export function voicePitch(who: Speaker, mood: Mood, letter: number): number {
+  return letterPitch(letter) * (mood === 'scrambled' ? 0.82 + Math.random() * 0.24 : 1) * (who === 'tess' ? 1.2 : 1);
+}
+
 function tutorialDone(): boolean {
   return getSave().story.seen.includes(TUTORIAL_MARK);
 }
@@ -87,7 +95,7 @@ export function createRadio(
 
   function onBip(who: Speaker, mood: Mood, letter: number): void {
     // Tess (naufragée de j2) : voix un peu plus aiguë que LUMA.
-    bip.pitch = letterPitch(letter) * (mood === 'scrambled' ? 0.82 + Math.random() * 0.24 : 1) * (who === 'tess' ? 1.2 : 1);
+    bip.pitch = voicePitch(who, mood, letter);
     audio.sfx('lumaBip', bip);
   }
 

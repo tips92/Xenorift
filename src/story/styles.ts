@@ -1,6 +1,7 @@
 // Styles de la bulle de dialogue et du lecteur de cinématiques, injectés une seule fois depuis TypeScript
 // (comme src/input/styles.ts : styles.css appartient à l'interface). Look « néon » : verre sombre, contour
-// lumineux à la couleur de qui parle (--xb-c), bouton Passer en pastille.
+// lumineux à la couleur de qui parle (--xb-c), bouton Passer en pastille. Encoche : marges --sat, --sar, --sab,
+// --sal de styles.css (zones sûres de l'écran), sinon env() (pages d'aperçu).
 
 const STYLE_ID = 'xr-story-style';
 
@@ -114,15 +115,17 @@ const CSS = `
   height: 100%;
 }
 .cs-bubble {
-  left: calc(env(safe-area-inset-left, 0px) + clamp(12px, 3vw, 28px));
-  bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(10px, 3vh, 20px));
-  max-width: min(640px, calc(100% - 2 * clamp(12px, 3vw, 28px)));
+  --cs-sal: var(--sal, env(safe-area-inset-left, 0px));
+  --cs-sar: var(--sar, env(safe-area-inset-right, 0px));
+  left: calc(var(--cs-sal) + clamp(12px, 3vw, 28px));
+  bottom: calc(var(--sab, env(safe-area-inset-bottom, 0px)) + clamp(10px, 3vh, 20px));
+  max-width: min(640px, calc(100% - var(--cs-sal) - var(--cs-sar) - 2 * clamp(12px, 3vw, 28px)));
 }
 .cs-skip {
   position: absolute;
   z-index: 4;
-  top: calc(env(safe-area-inset-top, 0px) + clamp(8px, 2.4vh, 14px));
-  right: calc(env(safe-area-inset-right, 0px) + clamp(10px, 2.4vw, 18px));
+  top: calc(var(--sat, env(safe-area-inset-top, 0px)) + clamp(8px, 2.4vh, 14px));
+  right: calc(var(--sar, env(safe-area-inset-right, 0px)) + clamp(10px, 2.4vw, 18px));
   display: inline-flex;
   align-items: center;
   gap: 0.45em;

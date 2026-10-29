@@ -1684,7 +1684,14 @@ svg {
 
 .options-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
+  gap: 10px;
+}
+
+/* Boîtes du panneau (confirmation, cinématiques) : enveloppe sans boîte, chacune en plein écran. */
+.options-overlays {
+  display: contents;
 }
 
 /* ---- Boîte de confirmation */
@@ -1751,6 +1758,44 @@ svg {
   justify-content: center;
   gap: 10px;
   margin-top: 6px;
+}
+
+/* ---- Revoir les cinématiques (Options) : liste des cinématiques vues, aux couleurs de LUMA ; opaque (les Options
+   ne se lisent pas au travers, comme la confirmation d'achat du hangar). */
+
+.confirm--story {
+  background: rgba(3, 0, 10, 0.82);
+}
+
+.story-box {
+  border-color: rgba(63, 247, 255, 0.45);
+  background: linear-gradient(160deg, rgb(30, 16, 72), rgb(10, 4, 30));
+}
+
+.story-box .confirm-ico {
+  color: var(--cyan);
+  filter: drop-shadow(0 0 8px rgba(63, 247, 255, 0.7));
+}
+
+.story-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  margin: 2px 0 4px;
+}
+
+.story-item {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* ------------------------------------------------------------------ Cinématique (lecteur de src/story, plein cadre) */
+
+.screen--cutscene {
+  padding: 0;
+  background: #05010f;
 }
 
 /* ------------------------------------------------------------------ Carte d'introduction */
@@ -4040,6 +4085,14 @@ svg {
   box-shadow:
     0 4px 14px rgba(0, 0, 0, 0.35),
     0 0 14px rgba(255, 63, 210, 0.22);
+}
+
+/* Vol : centrée entre les zones sûres, sans toucher le joystick au repos (grandes commandes : ≈ 182 px du bord) ni
+   TIR et TURBO (≈ 130 px de l'autre bord), gaucher compris : de 844x390 (38vw) à 568x320 (188 px). */
+.hud[data-mode='flight'] .hud-boss {
+  left: var(--sal);
+  right: var(--sar);
+  width: clamp(170px, min(38vw, calc(100vw - var(--sal) - var(--sar) - 380px)), 420px);
 }
 
 .hud-boss.is-on {

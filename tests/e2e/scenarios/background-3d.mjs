@@ -9,7 +9,7 @@
 //  C. Pause Capacitor seule : progression figée ; après « resume », toujours en pause ; REPRENDRE → ça repart.
 import { assert, assertEq, center, fmt, info3d, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
 import { canvases } from '../lib/gl.mjs';
-import { nextViaHangar, stageBefore } from '../lib/core.mjs';
+import { SEEN_STORY, nextViaHangar, seedSave, stageBefore } from '../lib/core.mjs';
 import { touches } from '../lib/touch.mjs';
 import {
   cap,
@@ -63,6 +63,8 @@ async function visibleCanvases(t) {
 
 export default async function (t) {
   await instrument(t);
+  // Cinématiques déjà vues (plan 04, choix 14) : JOUER, les cartes et la fin de j3 ne les jouent pas.
+  await seedSave(t, SEEN_STORY);
   await t.goto('?touch=1&unlock=1');
   await waitFor(t, () => !!window.__xrShell, { timeout: 20000, label: 'coquille chargée' });
   const jungle = await stageBefore(t, 'f1');

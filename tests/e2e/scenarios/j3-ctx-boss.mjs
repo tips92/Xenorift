@@ -8,6 +8,7 @@
 //  C. perte définitive en plein combat : échec « Liaison graphique perdue » avec « Réessayer le combat » (plan 04,
 //     choix 7), qui repart du K dans un jeu Phaser neuf, gardienne à neuf et cachée.
 import { assert, assertEq, fmt, readSave, screenText, waitFor, waitForScreen } from '../lib/helpers.mjs';
+import { SEEN_STORY, seedSave } from '../lib/core.mjs';
 import {
   LOST_REASON,
   RESTORE_WAIT_MS,
@@ -64,6 +65,8 @@ function snap(t) {
 
 export default async function (t) {
   await recordUi(t);
+  // Libération déjà vue (plan 04, choix 14) : la victoire sur j3 mène droit aux résultats.
+  await seedSave(t, SEEN_STORY);
   await t.goto(URL);
   const g1 = await waitPlay(t);
   await t.ev(() => {

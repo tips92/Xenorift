@@ -1,10 +1,13 @@
-// Campagne complète depuis l'accueil, sauvegarde neuve : JOUER → carte d'intro → Lisière de Xéna (4 cristaux, pause
+// Campagne complète depuis l'accueil, sauvegarde neuve : JOUER → prologue (cinématique, coupée par Passer après
+// 1,5 s ; marque « prologue ») → carte d'intro → Lisière de Xéna (4 cristaux, pause
 // → RECOMMENCER : la partie repart du début, compte de cristaux remis à zéro ; 3 cristaux) → Blob-roi vaincu dans son
 // arène, puis Kaï court jusqu'à la balise de LUMA (« Boss vaincu +2 000 », « +3 cristaux ») → SUIVANT → hangar
 // (réserve 3, REDESCENDRE vers la Canopée des spores ; Échap ramène aux résultats, figés) → j2 (arrivée par le
 // faisceau, victoire par la balise, aucun cristal ; « Équipière : Tess ») → SUIVANT → hangar (Tess à l'Établi,
 // REDESCENDRE vers le Sanctuaire du gardien) → j3 (faisceau ; victoire = défaite de la méduse-baleine dans la scène,
-// à sa hauteur et dans la vue, sans sortie : « Compétence : double saut », « Boss vaincu +5 000 ») → SUIVANT → hangar (DÉCOLLER vers le Vol 1) → Vol 1
+// à sa hauteur et dans la vue, sans sortie ; puis la libération (cinématique, bandeau de la compétence, coupée par
+// Échap ; marque « liberation-1 ») : « Compétence : double saut », « Boss vaincu +5 000 ») → SUIVANT → hangar
+// (DÉCOLLER vers le Vol 1) → Vol 1
 // gagné
 // aussitôt (réserve + cristaux ramassés avant la victoire, 0 en général ; récompense « Plan : mitrailleur ») →
 // SUIVANT → hangar
@@ -12,7 +15,7 @@
 // réserve inchangée, les cristaux de la tentative sont perdus) → RÉESSAYER (3 vies, 2 cristaux) → victoire par la
 // Comète (réserve + cristaux de la nouvelle tentative seulement) → SUIVANT → hangar (DÉCOLLER vers le Vol 2) → Vol 2
 // → SUIVANT (pas de hangar après la dernière étape) → « FIN DE LA DÉMO » avec le score total (somme des records) et
-// les étoiles (3 par étape) → MENU → accueil qui propose de continuer. Étapes réussies et ouvertes lues dans
+// les étoiles (3 par étape : n/18) → MENU → accueil qui propose de continuer. Étapes réussies et ouvertes lues dans
 // __xrShell.info().stages, au départ et après chaque victoire, comparées à la règle (hors mode test : ouverte = la
 // première, une réussie ou la suivante d'une réussie) ; la fin vérifie que le parcours a joué toutes les étapes. Les
 // victoires et les morts passent par les aides DEV (__xr2d.boss.enter / win en j1 ; __xr2d.win, qui mène à la sortie
@@ -30,14 +33,29 @@ import {
   waitFor3dPhase,
   waitForScreen,
 } from '../lib/helpers.mjs';
-import { hudPlatform, nextViaHangar, press, pressPause, resultDetails, waitPause } from '../lib/core.mjs';
+import { hudPlatform, nextViaHangar, press, pressPause, resultDetails, skipCutscene, waitPause } from '../lib/core.mjs';
 
 export const meta = {
-  title: 'Campagne : accueil → j1 → j2 → j3 → f1 → m1 (échec, RÉESSAYER) → f2 → fin de la démo',
+  title: 'Campagne : accueil → prologue → j1 → j2 → j3 → libération → f1 → m1 (échec, RÉESSAYER) → f2 → fin de la démo',
   suites: ['full'],
   dev: true,
-  timeoutMs: 240000,
+  timeoutMs: 270000,
 };
+
+/** Cinématique `id` affichée, fondu fini, son horloge au-delà de `s` secondes : renvoie __xrShell.info().cutscene. */
+function waitCutscene(t, id, s) {
+  return waitFor(
+    t,
+    ([want, at]) => {
+      const i = window.__xrShell.info();
+      const f = document.querySelector('.fader');
+      return i.screen === 'cutscene' && i.cutscene && i.cutscene.id === want && i.cutscene.time >= at && !(f && f.classList.contains('is-on'))
+        ? i.cutscene
+        : false;
+    },
+    { timeout: 30000, label: `cinématique ${id} au-delà de ${s} s`, arg: [id, s] },
+  );
+}
 
 /** Carte d'intro de l'étape affichée (fondu terminé) ; renvoie son texte. Pendant l'intro l'enchaînement reste verrouillé. */
 async function waitIntro(t, title) {
@@ -165,9 +183,13 @@ export default async function (t) {
   const played = [];
   await assertProgress(t, played, 'au départ');
 
-  // ---------------------------------------------------------------- Jungle (j1)
+  // ---------------------------------------------------------------- Prologue (première étape lancée), puis Jungle (j1)
   await press(t, 'title', 'Jouer');
+  await waitCutscene(t, 'prologue', 1.5);
+  await t.shot('prologue');
+  await skipCutscene(t, () => t.page.locator('.screens [data-screen="cutscene"].is-active .cs-skip').click({ timeout: 5000 }), 'prologue : Passer (clic)');
   await waitIntro(t, 'Lisière de Xéna');
+  assertEq((await readSave(t)).story.seen, ['prologue'], 'prologue passé : marque enregistrée');
   await t.shot('intro-j1');
   await waitFor2dPlay(t);
   const start = await player2d(t);
@@ -258,7 +280,13 @@ export default async function (t) {
     return { state: s.state, boss: b.state, visible: b.body.visible, inView: b.y + 81 > s.cameras.main.worldView.y };
   });
   assertEq(seen, { state: 'exit', boss: 'beaten', visible: true, inView: true }, 'j3 : défaite visible, gardienne dans la vue 1,2 s après');
+  // Libération (première victoire sur j3), avant les résultats : bandeau de la compétence, puis Échap = Passer.
+  const lib = await waitCutscene(t, 'liberation', 7.2);
+  assertEq(lib.mark, 'liberation-1', 'j3 : libération du monde 1');
+  await t.shot('liberation');
+  await skipCutscene(t, () => t.key('Escape', 60), 'j3 : Échap = Passer (libération)');
   await waitForScreen(t, 'results', { timeout: 25000 });
+  assert((await readSave(t)).story.seen.includes('liberation-1'), 'libération passée : marque enregistrée');
   const j3Text = await screenText(t, 'results');
   assert(/NIVEAU TERMIN/i.test(j3Text), `j3 : écran « NIVEAU TERMINÉ » attendu (texte : ${j3Text.slice(0, 160)})`);
   assertEq(await resultsBank(t), { gain: null, bank: 3 }, 'j3 gagné sans cristal : réserve 3');
@@ -339,6 +367,7 @@ export default async function (t) {
   assertEq(save.blueprints, ['machinegun'], 'plan du mitrailleur enregistré');
   assertEq(save.crew, ['tess'], 'Tess dans l’équipage');
   assertEq(save.loadout.skills.doubleJump, true, 'double saut appris');
+  assertEq([...save.story.seen].sort(), ['liberation-1', 'prologue', 'tutorial-j1'], 'histoire : prologue, libération et tutoriel vus');
   const maxStars = ids.length * 3;
   const total = ids.reduce((s, id) => s + save.best[id].score, 0);
   const stars = ids.reduce((s, id) => s + save.best[id].stars, 0);

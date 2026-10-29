@@ -2,6 +2,7 @@ import { defaultPlayLoadout, shipLoadout } from '../src/core/hangar';
 import { STAGES } from '../src/core/stages';
 import type {
   AudioApi,
+  BossHud,
   FlightHud,
   HudApi,
   InputAction,
@@ -12,13 +13,16 @@ import type {
   Settings,
   StageDef,
   StageResult,
+  StartAt,
   ToastKind,
 } from '../src/core/types';
 import { startFlight } from '../src/game3d';
 
 // Page d'aperçu du mode vol 3D (outil de développement, hors jeu), avec des « hooks » simulés.
-// Paramètres : ?stage=f1|f2 &autopilot=1 &ts=1..8 &gun=0..3 &shield=0..2 &boost=0..2 (modules de la Comète du
-// hangar). Tir tant que J / X / F est tenu, turbo : Espace / Maj (même jauge d'énergie).
+// Paramètres : ?stage=<étape de vol de STAGES : f1, f2…> (inconnue : la première) &autopilot=1 &ts=1..8 &gun=0..3
+// &shield=0..2 &boost=0..2 (modules de la Comète du hangar) &boss=1 (départ au combat du boss du parcours, comme
+// ?at=boss dans le jeu ; ignoré sans boss). Tir tant que J / X / F est tenu, turbo : Espace / Maj (même jauge
+// d'énergie).
 
 interface Dev3d {
   autopilot(on?: boolean): void;
@@ -29,13 +33,15 @@ interface Dev3d {
   /** Place un ennemi devant la Comète (essaim : formation entière) ; nombre placé. */
   spawn?(type: string, distance?: number): number;
   fire?(on?: boolean): void;
+  boss?: { start(): boolean; win(): void; hit(n?: number): number };
 }
 
 const params = new URLSearchParams(location.search);
-const stageId = params.get('stage') === 'f2' ? 'f2' : 'f1';
-const stage = STAGES.find((s) => s.id === stageId) as StageDef;
+const flights = STAGES.filter((s) => s.kind === 'flight');
+const stage: StageDef = flights.find((s) => s.id === params.get('stage')) ?? flights[0];
 const auto = params.get('autopilot') === '1';
 const timeScale = Number(params.get('ts')) || 1;
+const atBoss = params.get('boss') === '1';
 // Équipement de départ (rien d'acheté), sauf les modules de la Comète demandés (niveaux bornés par shipLoadout).
 const loadout = defaultPlayLoadout();
 loadout.ship = shipLoadout({
@@ -64,8 +70,11 @@ const hudState: FlightHud = {
   crystals: 0,
 };
 let hudUpdates = 0;
+/** Barre de boss (copie : l'objet du jeu est réutilisé), null hors combat. */
+let bossState: BossHud | null = null;
 function renderHud(): void {
   const s = hudState;
+  const b = bossState;
   const bar = (v: number, n = 10): string => '█'.repeat(Math.round(v * n)).padEnd(n, '·');
   hudEl.textContent =
     `${stage.id} · ${stage.title}\n` +
@@ -75,6 +84,7 @@ function renderHud(): void {
     `Énergie  ${bar(s.heat)} ${s.gunLevel >= 1 ? `mitrailleuse ${s.gunLevel}` : 'canon léger'}${s.boosting ? ' TURBO' : ''}${s.overheated ? ' SURCHAUFFE' : ''}\n` +
     `Cristaux ${s.crystals}\n` +
     `Parcours ${bar(s.progress, 20)}\n` +
+    (b ? `Boss     ${bar(b.life)} ${b.name} · phase ${b.phase}/${b.phases}\n` : '') +
     `Tir J / X / F (tenu), turbo Espace / Maj\n` +
     `(maj HUD : ${hudUpdates})`;
 }
@@ -98,7 +108,10 @@ const hud: HudApi = {
     toastTimer = window.setTimeout(() => (toastEl.style.opacity = '0'), 900);
   },
   radio: (id) => console.log('[radio]', id),
-  updateBoss: () => undefined,
+  updateBoss(s: BossHud | null) {
+    bossState = s ? { ...s } : null;
+    renderHud();
+  },
 };
 
 // ------------------------------------------------------------------ Entrées simulées (clavier)
@@ -171,6 +184,9 @@ window.addEventListener('keydown', (e) => {
   else if (e.code === 'Digit1') dev()?.spawn?.('fighter', 70);
   else if (e.code === 'Digit2') dev()?.spawn?.('mine', 60);
   else if (e.code === 'Digit3') dev()?.spawn?.('swarm', 70);
+  else if (e.code === 'KeyB') dev()?.boss?.start();
+  else if (e.code === 'KeyV') dev()?.boss?.win();
+  else if (e.code === 'KeyC' && fightRetry) restart(fightRetry);
 });
 window.addEventListener('keyup', (e) => {
   if (setKey(e.code, false)) e.preventDefault();
@@ -224,13 +240,15 @@ const settings: Settings = {
 // ------------------------------------------------------------------ Partie
 let handle: ModeHandle | null = null;
 let paused = false;
+/** Point de reprise du dernier échec en plein combat (C : « Réessayer le combat »), null sinon. */
+let fightRetry: StartAt | null = null;
 
 function dev(): Dev3d | undefined {
   return (window as unknown as { __xr3d?: Dev3d }).__xr3d;
 }
 
 function showEnd(text: string): void {
-  endEl.textContent = text + '\n\nR : rejouer';
+  endEl.textContent = text + `\n\nR : rejouer${fightRetry ? ' · C : réessayer le combat' : ''}`;
   endEl.style.display = 'flex';
 }
 
@@ -242,21 +260,29 @@ const hooks: ModeHooks = {
   loadout,
   onComplete(r: StageResult) {
     console.log('[complete]', JSON.stringify(r));
+    fightRetry = null;
     showEnd(
       `Étape réussie ! ${'★'.repeat(r.stars)}${'☆'.repeat(3 - r.stars)}\n` +
-        `Score ${r.score} · Portails ${r.gates}/${r.gatesTotal} · ${(r.timeMs / 1000).toFixed(1)} s\n` +
+        `Score ${r.score}${r.bossBonus ? ` (boss vaincu +${r.bossBonus})` : ''} · Portails ${r.gates}/${r.gatesTotal} · ${(r.timeMs / 1000).toFixed(1)} s\n` +
         `Cristaux ${r.crystals ?? 0}/${r.crystalsTotal ?? 0} · Ennemis abattus ${r.enemies ?? 0}`,
     );
   },
-  onFail(reason: string) {
-    console.log('[fail]', reason);
+  onFail(reason: string, retry?: StartAt) {
+    console.log('[fail]', reason, retry ? 'point de reprise du combat' : '');
+    fightRetry = retry ?? null;
     showEnd(`Mission échouée : ${reason}`);
   },
 };
 
-function start(): void {
+/** Départ : `at` (« Réessayer le combat »), sinon ?boss=1 (début du combat), sinon le début du vol. */
+function start(at: StartAt | null = null): void {
   endEl.style.display = 'none';
   paused = false;
+  bossState = null;
+  renderHud();
+  const startAt = at ?? (atBoss ? { at: 'boss' as const } : null);
+  if (startAt) hooks.startAt = startAt;
+  else delete hooks.startAt;
   handle = startFlight(root, stage, hooks);
   const d = dev();
   if (d) {
@@ -265,10 +291,11 @@ function start(): void {
   }
 }
 
-function restart(): void {
+function restart(at: StartAt | null = null): void {
   handle?.destroy();
   handle = null;
-  start();
+  fightRetry = null;
+  start(at);
 }
 
 function togglePause(): void {

@@ -18,16 +18,18 @@
 //  E. phase 3 : plongée annoncée par son ombre au sol (1 s) qui blesse dessous, pas à côté ; cœur ouvert 4 s ;
 //  F. vie perdue : retour au K, gardienne à neuf et cachée, guêpes rangées, musique du niveau, méduse du décor
 //     revenue ; nouvel essai : 'guardian' puis musicLevel(0) explicite ;
-//  G. défaite (__xr2d.boss.win) : état 'exit', image de la défaite, cri, elle s'élève ; résultats ≤ 2,62 s plus
-//     tard (horloge de la scène) avec « Compétence : double saut » et « Boss vaincu +5 000 » ; double saut
-//     enregistré ; textures libérées ; puis j1 (partie suivante) : double saut actif et réel ;
+//  G. défaite (__xr2d.boss.win) : état 'exit', image de la défaite, cri, elle s'élève ; fin du niveau ≤ 2,62 s plus
+//     tard (horloge de la scène), puis la libération (cinématique de la première victoire, choix 14 : « GARDIEN
+//     LIBÉRÉ : Méduse-baleine » annoncé, coupée par le bouton Passer, marque « liberation-1 ») ; résultats avec
+//     « Compétence : double saut » et « Boss vaincu +5 000 » ; double saut enregistré ; textures libérées ; puis j1
+//     (partie suivante) : double saut actif et réel ; les victoires suivantes (H) mènent droit aux résultats ;
 //  H. « Réessayer le combat » (plan 04, choix 7), j3 depuis le début : cristaux, 2 ennemis abattus, pluie de spores
 //     jouée, puis le K 159 (instantané) ; vies épuisées en plein combat → « Réessayer le combat » : départ au K sans
 //     faisceau, 3 vies, état noté rendu (cristaux, HUD, ennemis morts, radio et pluie déjà jouées, sans reprise),
 //     gardienne à neuf et cachée, méduse du décor visible ; défaite → score sans prime de vies ; puis Rejouer, vies
 //     épuisées en combat → « Réessayer » simple : début du niveau (faisceau, rien de gardé).
 import { assert, assertEq, fmt, readSave, screenText, waitFor, waitFor2dPlay, waitForScreen } from '../lib/helpers.mjs';
-import { hudPlatform, press } from '../lib/core.mjs';
+import { hudPlatform, press, skipCutscene } from '../lib/core.mjs';
 import { ends, loseFight, pressScreen, progress2d, recordUi, snapFields, snapOf, waitGrounded, waitPlay } from '../lib/game2d.mjs';
 
 export const meta = {
@@ -733,7 +735,23 @@ export default async function (t) {
   );
   assert(!rising.kai && rising.hearts === d0.hearts, `G : Kaï figé au sol, aucun dégât (${fmt(rising)})`);
   await t.shot('defeat-rise');
+  // Première victoire sur j3 : la libération avant les résultats, passée par le bouton Passer.
+  const lib = await waitFor(
+    t,
+    () => {
+      const i = window.__xrShell.info();
+      const live = document.querySelector('.screens [data-screen="cutscene"] .cs > .xr-sr');
+      return i.cutscene && i.cutscene.id === 'liberation' && live && /GARDIEN LIBÉRÉ/.test(live.textContent)
+        ? { ...i.cutscene, live: live.textContent }
+        : false;
+    },
+    { timeout: 20000, label: 'G : libération, gardienne annoncée' },
+  );
+  assert(lib.mark === 'liberation-1' && /Méduse-baleine/.test(lib.live), `G : libération du monde 1 (${fmt(lib)})`);
+  await t.shot('liberation');
+  await skipCutscene(t, () => t.page.locator('.screens [data-screen="cutscene"].is-active .cs-skip').click({ timeout: 5000 }), 'G : Passer (clic)');
   await waitForScreen(t, 'results', { timeout: 15000 });
+  assert((await readSave(t)).story.seen.includes('liberation-1'), 'G : libération notée vue (Passer)');
   const fin = await t.ev(() => window.__bwFinish);
   assert(fin && fin.state === 'exit' && fin.at - d0.at >= DEFEAT_MS - 50 && fin.at - d0.at <= EXIT_MAX_MS, `G : résultats à la fin de la défaite (${fin && fin.at - d0.at} ms)`);
   const text = await screenText(t, 'results');

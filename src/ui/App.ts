@@ -1,5 +1,5 @@
-// Application : écrans (accueil, choix du niveau, options, pause, résultats) et enchaînement des étapes.
-// La signature exportée ne doit pas changer.
+// Application : écrans (accueil, choix du niveau, options, pause, résultats, cinématiques) et enchaînement des
+// étapes. La signature exportée ne doit pas changer.
 
 import '@fontsource/orbitron/500.css';
 import '@fontsource/orbitron/800.css';
@@ -16,6 +16,7 @@ import {
   isCleared,
   isFresh,
   isUnlocked,
+  markSeen,
   nextToPlay,
   playLoadout,
   recordResult,
@@ -38,13 +39,23 @@ import type {
 } from '../core/types';
 import { isWeaponId } from '../core/weapons';
 import { createInput } from '../input';
+import type { CutscenePlayer } from '../story';
 import { createSpaceBackground } from './background';
 import { deferred, delay, div, enableSecondFingerTaps, nextFrame } from './dom';
-import { playSubtitle, stageAfter } from './flow';
+import {
+  cutsceneAfter,
+  cutscenesBefore,
+  playSubtitle,
+  seenCutscenes,
+  stageAfter,
+  storyMusicLevel,
+  type StoryPlay,
+} from './flow';
 import { createHud } from './hud';
 import { ensureSvgDefs } from './icons';
 import { FADE_MS, createFader, createRotatePrompt } from './overlays';
 import type { Screen } from './screens/common';
+import { createCutsceneScreen, type StoryModule } from './screens/cutscene';
 import { createHangarScreen } from './screens/hangar';
 import { createIntroScreen } from './screens/intro';
 import { createOptionsScreen } from './screens/options';
@@ -58,7 +69,8 @@ import { createSafeAudio, createSafeInput, type UiCtx } from './services';
 /** Durée d'affichage de la carte d'intro avant de lancer l'étape. */
 const INTRO_MS = 2200;
 
-type Phase = 'menu' | 'intro' | 'playing';
+/** 'story' : une cinématique (avant la carte d'intro, avant les résultats, ou revue depuis les Options). */
+type Phase = 'menu' | 'intro' | 'story' | 'playing';
 /** Échec : `retry` = point de reprise rendu par le mode (« Réessayer le combat »), sinon null. */
 type Outcome = { ok: true; result: StageResult } | { ok: false; reason: string; retry: StartAt | null };
 
@@ -86,6 +98,19 @@ function loadMode(kind: StageKind): Promise<StartMode> {
   // Échec de chargement : on pourra réessayer.
   p.catch(() => {
     if (modeCache[kind] === p) delete modeCache[kind];
+  });
+  return p;
+}
+
+// Module des cinématiques, chargé à la demande comme les modes (préchargé après l'accueil).
+let storyCache: Promise<StoryModule> | null = null;
+
+function loadStory(): Promise<StoryModule> {
+  if (storyCache) return storyCache;
+  const p: Promise<StoryModule> = import('../story');
+  storyCache = p;
+  p.catch(() => {
+    if (storyCache === p) storyCache = null;
   });
   return p;
 }
@@ -182,6 +207,8 @@ export function startApp(): void {
   let run: Run | null = null;
   let pause: PauseOverlay | null = null;
   let introSkip: (() => void) | null = null;
+  /** Cinématique en cours (phase 'story'), jusqu'à sa fin ou son Passer. */
+  let story: { readonly play: StoryPlay; readonly player: CutscenePlayer } | null = null;
   /**
    * Arme imposée par ?weapon= (valide), null sinon. L'arme de la session vit dans core/save.ts
    * (setSessionWeapon : ?weapon=, puis le hangar en mode test), jamais enregistrée.
@@ -189,7 +216,10 @@ export function startApp(): void {
   let urlWeapon: WeaponId | null = null;
   /** ?weapon= inconnu : message affiché une fois, sur l'accueil ou au premier lancement (?stage=). */
   let weaponWarning = '';
-  /** ?at=boss (serveur de dev) : chaque niveau 2D lancé part du point de contrôle d'avant son arène. */
+  /**
+   * ?at=boss (serveur de dev) : chaque niveau 2D lancé part du point de contrôle d'avant son arène, un vol avec boss
+   * (f1) du début du combat.
+   */
   let urlStartAt: StartAt | null = null;
   let portrait = false;
   let backgrounded = false;
@@ -313,7 +343,25 @@ export function startApp(): void {
   }
 
   function makeOptions(): Screen {
-    return createOptionsScreen(ctx, { back: () => goTitle() });
+    return createOptionsScreen(ctx, {
+      back: () => goTitle(),
+      story: { list: () => seenCutscenes(getSave().story.seen), play: (p) => replayStory(p) },
+    });
+  }
+
+  /** Écran de menu dévoilé depuis le noir (après une étape, une cinématique…), musique du menu. */
+  async function revealMenu(flow: number, make: () => Screen): Promise<void> {
+    teardownRun();
+    hud.hide();
+    input.setLayout('none');
+    phase = 'menu';
+    bg.setVisible(true);
+    const s = make();
+    setScreen(s, true);
+    audio.music('menu');
+    await fader.clear();
+    if (flow !== flowId) return;
+    s.shown?.();
   }
 
   /** Affiche un écran de menu : fondu enchaîné entre menus, fondu au noir depuis le jeu. */
@@ -324,17 +372,7 @@ export function startApp(): void {
         abandonRun();
         await fader.toBlack();
         if (flow !== flowId) return;
-        teardownRun();
-        hud.hide();
-        input.setLayout('none');
-        phase = 'menu';
-        bg.setVisible(true);
-        const s = make();
-        setScreen(s, true);
-        audio.music('menu');
-        await fader.clear();
-        if (flow !== flowId) return;
-        s.shown?.();
+        await revealMenu(flow, make);
       } else {
         phase = 'menu';
         bg.setVisible(true);
@@ -384,6 +422,66 @@ export function startApp(): void {
     });
   }
 
+  // ---------------------------------------------------------------- Cinématiques (phase 'story')
+
+  /**
+   * Joue une cinématique dans l'enchaînement `flow`, du noir au noir (elle reste affichée sous le noir : l'écran
+   * suivant la libère). `record` : marque « vue » posée à la fin ou au Passer. Module introuvable : rien ne se
+   * joue (aucune marque), l'enchaînement continue. Renvoie false si un autre enchaînement a pris la main.
+   */
+  async function playStory(flow: number, play: StoryPlay, record: boolean): Promise<boolean> {
+    let mod: StoryModule;
+    try {
+      mod = await loadStory();
+    } catch (err) {
+      console.error('[ui] cinématiques indisponibles', err);
+      return flow === flowId;
+    }
+    if (flow !== flowId) return false;
+    phase = 'story';
+    hud.hide();
+    input.setLayout('none');
+    bg.setVisible(false);
+    const s = createCutsceneScreen(ctx, mod, play);
+    setScreen(s, true);
+    const cur = { play, player: s.start() };
+    story = cur;
+    // Musique du jeu ou du menu remplacée ; la libération passe tout de suite à la partie lumineuse.
+    audio.music('story');
+    audio.musicLevel(storyMusicLevel(play.id));
+    // Lancée en portrait ou en arrière-plan : arrêtée tout de suite, elle reprendra seule.
+    syncStory();
+    try {
+      await fader.clear();
+      if (flow !== flowId) return false;
+      await cur.player.done;
+    } finally {
+      if (story === cur) story = null;
+    }
+    if (flow !== flowId) return false;
+    if (record) markSeen(play.mark);
+    await fader.toBlack();
+    return flow === flowId;
+  }
+
+  /** Cinématique arrêtée en portrait et en arrière-plan (page cachée : le lecteur s'arrête seul), reprise seule. */
+  function syncStory(): void {
+    const p = story ? story.player : null;
+    if (!p) return;
+    if (isPlayable()) p.resume();
+    else p.pause();
+  }
+
+  /** Options › Revoir les cinématiques : `play` rejouée (marques inchangées), puis retour aux Options. */
+  function replayStory(play: StoryPlay): void {
+    navigate(async (flow) => {
+      await fader.toBlack();
+      if (flow !== flowId) return;
+      if (!(await playStory(flow, play, false))) return;
+      await revealMenu(flow, makeOptions);
+    });
+  }
+
   /** « Suivant » des résultats : hangar avant l'étape suivante (`back` : retour aux résultats), sinon la fin. */
   function goNext(stage: StageDef, back: () => void): void {
     const nxt = stageAfter(stage);
@@ -403,10 +501,10 @@ export function startApp(): void {
     while (!isPlayable() && flow === flowId) await delay(200);
   }
 
-  /** `startAt` : départ imposé (point de reprise d'un combat) ; sinon ?at=boss pour un niveau 2D. */
+  /** `startAt` : départ imposé (point de reprise d'un combat) ; sinon ?at=boss. */
   function startStage(stage: StageDef, withIntro: boolean, force = false, startAt: StartAt | null = null): void {
     navigate(async (flow) => {
-      const bg0 = bgCount;
+      let bg0 = bgCount;
       // Chargement du mode en parallèle du fondu et de l'intro.
       const modeP = loadMode(stage.kind);
       modeP.catch(noop);
@@ -419,6 +517,14 @@ export function startApp(): void {
       input.setLayout('none');
 
       if (withIntro) {
+        // Cinématiques pas encore vues (le prologue, avant la première étape lancée) : avant la carte d'intro.
+        const plays = cutscenesBefore(stage, getSave().story.seen);
+        for (const play of plays) {
+          if (!(await playStory(flow, play, true))) return;
+        }
+        // Arrière-plan pendant une cinématique : elle s'est arrêtée puis a repris, la suite démarre normalement.
+        // Sans cinématique, un arrière-plan pendant le premier fondu compte toujours.
+        if (plays.length > 0) bg0 = bgCount;
         phase = 'intro';
         const skip = deferred();
         introSkip = skip.resolve;
@@ -495,7 +601,8 @@ export function startApp(): void {
       onFail: (reason, retry) =>
         endRun(r, { ok: false, reason: typeof reason === 'string' ? reason : '', retry: retryPoint(retry) }),
     };
-    const at = startAt ?? (stage.kind === 'platform' ? urlStartAt : null);
+    // Point de reprise d'un combat, sinon ?at=boss (ignoré par une étape sans boss : f2, la Lune)
+    const at = startAt ?? urlStartAt;
     if (at) hooks.startAt = at;
 
     try {
@@ -570,6 +677,14 @@ export function startApp(): void {
         phase = 'menu';
         bg.setVisible(true);
         audio.music(null);
+        // Victoire : cinématique d'après pas encore vue (libération du gardien), avant les résultats.
+        const after = results ? cutsceneAfter(r.stage, getSave().story.seen) : null;
+        if (after) {
+          if (!(await playStory(flow, after, true))) return;
+          phase = 'menu';
+          bg.setVisible(true);
+          audio.music(null);
+        }
         let s: Screen;
         if (results) {
           s = makeResults(results, false);
@@ -695,6 +810,15 @@ export function startApp(): void {
       goTitle(true);
       return;
     }
+    // Cinématique : retour = Passer (pas pendant les fondus, voir plus haut).
+    if (phase === 'story') {
+      const p = story ? story.player : null;
+      if (p && p.state === 'playing') {
+        audio.sfx('click', { pitch: 0.85 });
+        p.skip();
+      }
+      return;
+    }
     if (navLock) return;
     if (screen && screen.back && screen.back()) return;
     if (source === 'android') exitApp();
@@ -718,6 +842,7 @@ export function startApp(): void {
     portrait = p;
     rotate.setVisible(p);
     if (p) pauseGame();
+    syncStory();
   }
 
   function onBackground(): void {
@@ -727,6 +852,7 @@ export function startApp(): void {
     // Son coupé d'abord : le clic de la pause ne doit pas ressortir au retour.
     audio.suspend();
     pauseGame();
+    syncStory();
   }
 
   function onForeground(): void {
@@ -734,6 +860,7 @@ export function startApp(): void {
     backgrounded = false;
     audio.resume();
     checkOrientation();
+    syncStory();
   }
 
   window.addEventListener('resize', checkOrientation);
@@ -879,6 +1006,18 @@ export function startApp(): void {
           })),
           crystals: getCrystals(),
           weapon: getSessionWeapon(),
+          // Cinématique en cours (phase 'story') et marques de l'histoire (cinématiques vues, tutoriel).
+          cutscene: story
+            ? {
+                id: story.play.id,
+                mark: story.play.mark,
+                time: story.player.time,
+                duration: story.player.duration,
+                paused: story.player.paused,
+                state: story.player.state,
+              }
+            : null,
+          seen: [...getSave().story.seen],
           backgrounded,
           navLock,
           fading: fader.busy,
@@ -890,9 +1029,10 @@ export function startApp(): void {
     };
   }
 
-  // Préchargement des modes une fois l'accueil affiché.
+  // Préchargement des modes et des cinématiques une fois l'accueil affiché.
   window.setTimeout(() => {
     loadMode('platform').catch(noop);
     loadMode('flight').catch(noop);
+    loadStory().catch(noop);
   }, 1500);
 }

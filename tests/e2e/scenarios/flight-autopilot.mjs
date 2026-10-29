@@ -1,7 +1,10 @@
 // Vols complets au pilote automatique (__xr3d.autopilot) à vitesse normale, sans raccourci (ni win, ni advance,
 // ni timeScale) : Vol 1 (16 portails) puis Vol 2 (22 portails) lancé depuis le choix du niveau dans la même page.
 // Chaque vol : aucun portail manqué, ni explosion ni temps écoulé, distorsion puis « VOL RÉUSSI » avec
-// 16/16 (puis 22/22). Le renderer three.js est réutilisé : un seul canevas 3D dans la page à la fin.
+// 16/16 (puis 22/22). Vol 1 (plan 04, étape 17) : le pilote automatique finit aussi le combat du boss (phase 'boss'
+// après le dernier portail : il s'aligne sur les cibles exposées et tient TIR), puis rejoint le portail ouvert à la
+// victoire : « Boss vaincu +3 000 » aux résultats. Le renderer three.js est réutilisé : un seul canevas 3D dans la
+// page à la fin.
 // Combat (plan 03, 3b) : le pilote automatique tient TIR quand une cible peut être touchée, prend le turbo loin des
 // portails sur une énergie froide (jauge partagée avec le tir) et s'écarte des mines et des orbes ; il finit
 // avec au moins un bouclier, des ennemis abattus et des cristaux ramassés ; appels de dessin relevés chaque
@@ -9,20 +12,27 @@
 // ni ennemi, ni orbe, ni tir, ni cristal en vol, compteurs à zéro, cristaux du HUD à 0) ; « +N cristaux » de
 // chaque vol, réserve enregistrée = cristaux de f1 + f2.
 import { assert, assertEq, readSave, screenText, waitFor, waitForScreen } from '../lib/helpers.mjs';
-import { gameCanvases, hudFlight, pickStage, press, resultDetails } from '../lib/core.mjs';
+import { SEEN_STORY, gameCanvases, hudFlight, pickStage, press, resultDetails, seedSave } from '../lib/core.mjs';
 
 export const meta = {
-  title: 'Vols complets au pilote automatique : f1 (16/16) et f2 (22/22)',
+  title: 'Vols complets au pilote automatique : f1 (16/16 et son boss) et f2 (22/22)',
   suites: ['full'],
   dev: true,
   timeoutMs: 420000,
 };
 
-/** Durée maximale d'un vol (temps réel) : f1 dure ~1 min à vitesse normale, f2 un peu plus. */
+/** Durée maximale d'un vol (temps réel) : f1 dure ~1 min à vitesse normale (plus son combat), f2 un peu plus. */
 const FLIGHT_MAX_MS = 180000;
+/** Durée maximale du combat du boss de f1 au pilote automatique (temps réel, du début du combat à la distorsion). */
+const BOSS_MAX_MS = 60000;
+/** Prime du boss de f1 (FLIGHT_BOSSES de src/game3d/bosses/index.ts). */
+const BOSS_BONUS = 3000;
 
-/** Pilote automatique du départ à l'écran de résultats ; vérifie chaque seconde l'état du vol. */
-async function autoFlight(t, id, gatesTotal) {
+/**
+ * Pilote automatique du départ à l'écran de résultats ; vérifie chaque seconde l'état du vol. `boss` : parcours avec
+ * un combat de boss après le dernier portail, que le pilote doit gagner.
+ */
+async function autoFlight(t, id, gatesTotal, boss = false) {
   // Nouvelle partie de ce vol (la précédente a disparu avec son __xr3d).
   await waitFor(t, (n) => !!(window.__xr3d && window.__xr3d.info().gatesTotal === n), {
     timeout: 60000,
@@ -73,18 +83,34 @@ async function autoFlight(t, id, gatesTotal) {
   let minShield = Infinity;
   let maxCalls = 0;
   let shotMid = false;
+  let shotBoss = false;
+  let bossAt = 0;
+  let bossLast = null;
   const phases = new Set();
   for (;;) {
     const s = await t.ev(() => {
       const a = window.__xr3d;
       const r = document.querySelector('.screens [data-screen="results"].is-active');
-      return { info: a ? a.info() : null, results: !!r };
+      return { info: a ? a.info() : null, boss: a ? a.boss.info() : null, results: !!r };
     });
     if (s.info) {
       last = s.info;
       phases.add(s.info.phase);
       minShield = Math.min(minShield, s.info.shield);
-      if (s.info.phase === 'fly') maxCalls = Math.max(maxCalls, s.info.drawCalls);
+      if (s.info.phase === 'fly' || s.info.phase === 'boss') maxCalls = Math.max(maxCalls, s.info.drawCalls);
+      if (s.info.phase === 'boss') {
+        assert(boss, `${id} : pas de combat de boss sur ce parcours (${JSON.stringify(s.boss)})`);
+        bossLast = s.boss;
+        if (!bossAt) {
+          bossAt = Date.now();
+          t.log(`${id} : combat du boss après ${Math.round((bossAt - t0) / 1000)} s (${s.info.gates}/${gatesTotal} portails, chrono ${s.info.timeLeft})`);
+        }
+        assert(Date.now() - bossAt < BOSS_MAX_MS, `${id} : combat du boss gagné par le pilote automatique en moins de ${BOSS_MAX_MS / 1000} s (${JSON.stringify(s.boss && { state: s.boss.state, left: s.boss.touchesLeft })})`);
+        if (!shotBoss && s.boss.state === 'fight') {
+          shotBoss = true;
+          await t.shot(`${id}-boss`);
+        }
+      }
       assert(
         !['dead', 'timeout'].includes(s.info.phase),
         `${id} : le pilote automatique ne doit ni exploser ni manquer de temps (phase ${s.info.phase}, ${JSON.stringify(s.info)})`,
@@ -111,11 +137,20 @@ async function autoFlight(t, id, gatesTotal) {
   assert(last.enemies.killed > 0 && last.crystals > 0, `${id} : ennemis abattus et cristaux ramassés par les tirs du pilote automatique (${JSON.stringify({ enemies: last.enemies, crystals: last.crystals })})`);
   assert(phases.has('warp') || phases.has('done'), `${id} : la distorsion finale doit avoir eu lieu (phases vues : ${[...phases].join(', ')})`);
   assertEq(last.gates, gatesTotal, `${id} : portails franchis en fin de vol`);
+  if (boss) {
+    assert(phases.has('boss') && bossLast && bossLast.beaten, `${id} : combat du boss gagné par le pilote automatique (${JSON.stringify(bossLast && { state: bossLast.state, left: bossLast.touchesLeft, beaten: bossLast.beaten })})`);
+    t.log(`${id} : combat du boss gagné (≈ ${Math.round((Date.now() - bossAt) / 1000)} s jusqu'aux résultats)`);
+  }
   await waitForScreen(t, 'results', { timeout: 15000 });
   const text = await screenText(t, 'results');
   assert(/VOL RÉUSSI/i.test(text), `${id} : écran « VOL RÉUSSI » attendu (texte : ${text.slice(0, 160)})`);
   const det = await resultDetails(t);
   assertEq(det.Portails, `${gatesTotal}/${gatesTotal}`, `${id} : ligne Portails des résultats`);
+  const prime = await t.ev(() => {
+    const e = document.querySelector('.screens [data-screen="results"].is-active .results-bonus-value');
+    return e ? e.textContent.replace(/\s/g, '') : null;
+  });
+  assertEq(prime, boss ? `+${BOSS_BONUS}` : null, `${id} : prime du boss aux résultats${boss ? '' : ' (aucune sans boss)'}`);
   // Cristaux du vol : « +N cristaux » (au moins ceux du dernier relevé : le vol a pu en ramasser après)
   const gain = await t.ev(() => {
     const g = document.querySelector('.screens [data-screen="results"].is-active .detail-gain');
@@ -137,8 +172,10 @@ async function assertOneThreeCanvas(t, label) {
 }
 
 export default async function (t) {
+  // Prologue déjà vu (plan 04, choix 14) : la carte f2 des Niveaux mène droit à sa carte d'intro.
+  await seedSave(t, SEEN_STORY);
   await t.goto('?touch=0&unlock=1&stage=f1');
-  const g1 = await autoFlight(t, 'f1', 16);
+  const g1 = await autoFlight(t, 'f1', 16, true);
   await assertOneThreeCanvas(t, 'après f1');
   assertEq((await readSave(t)).crystals, g1, 'réserve enregistrée = cristaux de f1');
 

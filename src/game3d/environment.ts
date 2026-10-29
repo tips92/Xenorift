@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import type { CourseId } from '../core/types';
-import type { CourseTheme } from './courses';
+import type { CourseTheme, Vec3Tuple } from './courses';
 import { Creature, type CreatureSpec } from './creatures';
 import { Planet, type PlanetSpec } from './planets';
 import type { Rng } from './rng';
 import { StarField } from './sky';
 import type { Bin } from './util';
 
-// Décor lointain de chaque parcours : étoiles, planètes, créature géante.
+// Décor lointain de chaque parcours (SCENERY) : étoiles, planètes, créature géante.
 // Tout est placé par rapport à la caméra (à « l'infini ») : aucun effet de parallaxe parasite.
 
 const NEBULA_PLANETS: PlanetSpec[] = [
@@ -161,6 +161,24 @@ function wormSpec(light: THREE.Vector3): CreatureSpec {
   };
 }
 
+/** Décor d'un parcours, hors étoiles (thème du parcours). */
+interface Scenery {
+  planets: readonly PlanetSpec[];
+  /** Créature géante, selon la direction de sa lumière. */
+  creature(light: THREE.Vector3): CreatureSpec;
+  /** Direction de la lumière de la créature (normalisée à la construction). */
+  creatureLight: Vec3Tuple;
+  /** Rang dans planets de la planète autour de laquelle tourne la créature ; null : la caméra. */
+  anchor: number | null;
+}
+
+/** Par parcours : un parcours sans décor fait échouer tsc. */
+const SCENERY: Record<CourseId, Scenery> = {
+  nebula: { planets: NEBULA_PLANETS, creature: leviathanSpec, creatureLight: [-0.4, 0.8, 0.45], anchor: null },
+  // Le ver tourne autour de la géante à anneaux.
+  asteroids: { planets: ASTEROID_PLANETS, creature: wormSpec, creatureLight: [-0.82, 0.38, 0.46], anchor: 1 },
+};
+
 export class Environment {
   readonly group = new THREE.Group();
   private readonly stars: StarField;
@@ -172,19 +190,15 @@ export class Environment {
   constructor(course: CourseId, theme: CourseTheme, rng: Rng, bin: Bin, pr: number, glowMat: THREE.ShaderMaterial) {
     this.stars = new StarField(theme, rng, bin, pr);
     this.group.add(this.stars.group);
-    const specs = course === 'nebula' ? NEBULA_PLANETS : ASTEROID_PLANETS;
-    for (const s of specs) {
+    const sc = SCENERY[course];
+    for (const s of sc.planets) {
       const p = new Planet(s, bin);
       this.planets.push(p);
       this.group.add(p.group);
     }
-    if (course === 'nebula') {
-      this.creature = new Creature(leviathanSpec(new THREE.Vector3(-0.4, 0.8, 0.45).normalize()), glowMat, bin);
-      this.creatureAnchor = null;
-    } else {
-      this.creature = new Creature(wormSpec(new THREE.Vector3(-0.82, 0.38, 0.46).normalize()), glowMat, bin);
-      this.creatureAnchor = this.planets[1];
-    }
+    const l = sc.creatureLight;
+    this.creature = new Creature(sc.creature(new THREE.Vector3(l[0], l[1], l[2]).normalize()), glowMat, bin);
+    this.creatureAnchor = sc.anchor === null ? null : this.planets[sc.anchor];
     this.group.add(this.creature.group);
   }
 

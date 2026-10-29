@@ -1,5 +1,5 @@
 import type { ModeHandle, ModeHooks, StageDef } from '../core/types';
-import { CONTEXT_LOST_REASON, FlightRun } from './flight';
+import { CONTEXT_LOST_REASON, FlightRun, UnknownCourseError } from './flight';
 import { ContextLostError } from './renderer';
 
 // Mode vol spatial 3D (Three.js) : la Comète file dans un couloir de portails jusqu'au grand
@@ -14,9 +14,14 @@ export function startFlight(container: HTMLElement, stage: StageDef, hooks: Mode
       destroy: () => run.destroy(),
     };
   } catch (err) {
-    // WebGL indisponible (vieux appareil, contexte perdu…) : on sort proprement de l'étape.
+    // WebGL indisponible (vieux appareil, contexte perdu…) ou parcours inconnu : on sort proprement de l'étape.
     console.error('[flight3d] démarrage impossible', err);
-    const reason = err instanceof ContextLostError ? CONTEXT_LOST_REASON : 'Mode 3D indisponible sur cet appareil';
+    const reason =
+      err instanceof ContextLostError
+        ? CONTEXT_LOST_REASON
+        : err instanceof UnknownCourseError
+          ? err.message
+          : 'Mode 3D indisponible sur cet appareil';
     let failed = false;
     const timer = window.setTimeout(() => {
       failed = true;

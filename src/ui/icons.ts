@@ -1,4 +1,5 @@
-import type { PowerUpKind, StageDef, ThemeId, UpgradeStat, WeaponId } from '../core/types';
+import { stageCourse } from '../core/stages';
+import type { CourseId, PowerUpKind, StageDef, ThemeId, UpgradeStat, WeaponId } from '../core/types';
 
 // Icônes vectorielles en ligne (aucun fichier image). Les couleurs passent par `currentColor`
 // ou par les dégradés partagés définis une seule fois dans le document (ensureSvgDefs).
@@ -184,14 +185,16 @@ const STAGE_SANCTUARY = `<svg ${V64}>
 <circle cx="32" cy="44" r="5.5" fill="#ff4fd8"/><circle cx="32" cy="44" r="2.2" fill="#ffe6fa"/>
 </svg>`;
 
-/** Icône des étapes de plateforme, par thème ; quelques étapes ont la leur (par identifiant). */
+/** Icône des étapes de plateforme, par thème, et des vols, par parcours ; quelques étapes ont la leur (par identifiant). */
 const PLATFORM_ICONS: Record<ThemeId, string> = { jungle: STAGE_JUNGLE, moon: STAGE_MOON };
+const FLIGHT_ICONS: Record<CourseId, string> = { nebula: STAGE_NEBULA, asteroids: STAGE_ASTEROIDS };
 const STAGE_ICONS: Readonly<Record<string, string>> = { j2: STAGE_CANOPY, j3: STAGE_SANCTUARY };
 
 export function stageIcon(stage: StageDef): string {
   if (Object.prototype.hasOwnProperty.call(STAGE_ICONS, stage.id)) return STAGE_ICONS[stage.id];
-  if (stage.kind === 'platform') return PLATFORM_ICONS[stage.theme];
-  return stage.levelId === 'asteroids' ? STAGE_ASTEROIDS : STAGE_NEBULA;
+  const course = stageCourse(stage);
+  // Plateforme, ou parcours inconnu (refusé par check-levels) : icône du thème.
+  return course ? FLIGHT_ICONS[course] : PLATFORM_ICONS[stage.theme];
 }
 
 // ---------------------------------------------------------------- Dégradés partagés

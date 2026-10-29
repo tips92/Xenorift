@@ -30,6 +30,10 @@ export type Vec3Tuple = readonly [number, number, number];
 export type EnemyKind = 'fighter' | 'mine' | 'swarm';
 export const ENEMY_KINDS = ['fighter', 'mine', 'swarm'] as const satisfies readonly EnemyKind[];
 
+/** Boss de vol (game3d/bosses : FLIGHT_BOSSES), combattu après le dernier portail (CourseDef.boss). */
+export const FLIGHT_BOSS_IDS = ['leviathan'] as const;
+export type FlightBossId = (typeof FLIGHT_BOSS_IDS)[number];
+
 /** Vagues d'ennemis d'un parcours (réglages de genWaves ; champs ajoutables par le module ennemis). */
 export interface WavePlan {
   /** Nombre de vagues (moins si la place manque : portails, rochers). */
@@ -158,6 +162,12 @@ export interface CourseDef {
   bigInside: boolean;
   /** Vagues d'ennemis (graine dérivée : WAVE_SEED_XOR). */
   waves: WavePlan;
+  /**
+   * Boss combattu après le dernier portail (phase 'boss' de flight.ts : chrono figé, portail de distorsion ouvert
+   * à la victoire). Ses rochers au-delà du dernier portail sont retirés APRÈS la génération (clearArena) : portails,
+   * rochers d'avant, vagues et distorsion restent ceux de la graine.
+   */
+  boss?: FlightBossId;
   theme: CourseTheme;
 }
 
@@ -294,6 +304,7 @@ export const COURSES: Record<CourseId, CourseDef> = {
       swarmMax: 6,
       startGate: 1,
     },
+    boss: 'leviathan',
     theme: NEBULA_THEME,
   },
   // Vol 2 : ceinture dense, ~90 s, gros rochers à la dérive dans le couloir.
@@ -697,7 +708,11 @@ function clampN(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-export function buildCourse(id: CourseId): Course {
+/**
+ * Parcours tel que la graine le donne, avant le retrait des rochers de l'arène du boss (buildCourse). Exporté pour
+ * les tests : il reste identique au parcours d'avant la phase de boss (hachage COURSE_FP de flight-combat).
+ */
+export function generateCourse(id: CourseId): Course {
   const def = COURSES[id];
   const rng = mulberry32(def.seed);
   const gates = genGates(def, rng);
@@ -707,4 +722,23 @@ export function buildCourse(id: CourseId): Course {
   // Après les rochers, avec son propre générateur : portails et rochers inchangés.
   const waves = genWaves(def, gates, path, warpZ, rocks);
   return { def, gates, rocks, path, waves, warpZ, length: -warpZ };
+}
+
+/**
+ * Arène du boss : rochers au-delà du dernier portail retirés, une fois tout généré (vagues comprises, qui en
+ * dépendent). Triés par z décroissant : ce sont les derniers, les rangs des autres (et leurs cristaux,
+ * rockDropsCrystal) ne bougent pas. Aucune vague n'est au-delà du dernier portail (genWaves, plan 03).
+ */
+function clearArena(course: Course): void {
+  const last = course.gates[course.gates.length - 1].z;
+  let n = course.rocks.length;
+  while (n > 0 && course.rocks[n - 1].z < last) n--;
+  course.rocks.length = n;
+}
+
+/** Parcours d'une partie : la graine, puis l'arène de son boss s'il en a un (f2 : identique à generateCourse). */
+export function buildCourse(id: CourseId): Course {
+  const course = generateCourse(id);
+  if (course.def.boss) clearArena(course);
+  return course;
 }

@@ -7,7 +7,7 @@
 // en vol de f1 et f2 : identiques au 1er et au dernier tour (un InstancedMesh, une géométrie ou une texture d'ennemi,
 // de tir ou de cristal non libérés s'y verraient ; le tas JS ne les voit pas).
 import { assert, assertEq, waitFor, waitFor2dPlay, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
-import { domNodes, gameCanvases, heapMB, measureFps, nextViaHangar, pickStage, press } from '../lib/core.mjs';
+import { SEEN_STORY, domNodes, gameCanvases, heapMB, measureFps, nextViaHangar, pickStage, press, seedSave } from '../lib/core.mjs';
 
 export const meta = {
   title: 'Endurance : 3 tours de campagne (mémoire, images/s, canevas)',
@@ -27,6 +27,8 @@ const heapLimit = (first) => Math.round((first * 1.3 + 2) * 10) / 10;
 const NODES_SLACK = 40;
 
 export default async function (t) {
+  // Cinématiques déjà vues (plan 04, choix 14) : JOUER, les cartes et la fin de j3 ne les jouent pas.
+  await seedSave(t, SEEN_STORY);
   await t.goto('?touch=1&unlock=1');
   await waitForScreen(t, 'title');
   const STAGES = (await t.ev(() => window.__xrShell.info().stages)).map((s) => [s.id, s.kind === 'flight' ? '3d' : '2d']);

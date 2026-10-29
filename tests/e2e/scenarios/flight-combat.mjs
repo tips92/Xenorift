@@ -2,7 +2,9 @@
 // le tir et le turbo) : tir de la Comète, visée, astéroïdes destructibles, cristaux du vol, ennemis, énergie.
 //  0. Parcours (import du module dans la page) : vagues déterministes (deux constructions identiques, types et
 //     effectifs attendus), hors des portails et de leur ligne d'approche (fenêtres de genWaves recopiées) ; portails,
-//     rochers (tous les champs), trajectoire et distorsion de f1 / f2 identiques à ceux d'avant 3b (hachage recopié).
+//     rochers (tous les champs), trajectoire et distorsion de f1 / f2 générés (generateCourse) identiques à ceux
+//     d'avant 3b (hachage recopié) ; parcours d'une partie (buildCourse, plan 04 étape 17) : f2 identique, f1 (boss)
+//     sans les rochers au-delà du dernier portail, tout le reste identique.
 //  A. f1, canon léger, pilote automatique (il tient TIR sur les cibles atteignables) : chasseur posé tout de suite,
 //     abattu en 3 coups (2 sons « touché ») ; mine posée à 60 u abattue en < 1 s sans bouclier perdu (50 points,
 //     1 cristal lâché au pas même de sa mort, puis ramassé) ; chasseur abattu (150 points, 2 cristaux) ; rochers
@@ -68,7 +70,8 @@ const WAVES = {
   nebula: 'mine1 swarm5 mine1 swarm6 fighter1 mine2',
   asteroids: 'mine2 swarm6 fighter1 mine1 swarm7 fighter2 mine3 swarm7 fighter2 mine1',
 };
-const CRYSTALS_TOTAL = { f1: 23, f2: 98 };
+/** Cristaux possibles (rochers du couloir + vagues) ; f1 : 23 avant l'arène du boss, dont un rocher retiré (plan 04, 17). */
+const CRYSTALS_TOTAL = { f1: 22, f2: 98 };
 /**
  * Zones des portails et fenêtres des vagues (genWaves de src/game3d/courses.ts) : une vague n'occupe jamais
  * [g.z − GATE_EXIT, g.z + GATE_APPROACH] ; sa fenêtre [z + lo, z + hi] (chasseur : lo − (n − 1) × 28 pour une paire).
@@ -78,14 +81,15 @@ const WAVE_WINDOW = { mine: [-40, 36], swarm: [-14, 12], fighter: [-75, 30] };
 const FIGHTER_STAGGER = 28;
 /**
  * Hachage FNV-1a de JSON.stringify({ gates, rocks, path, warpZ }) (tous les champs des rochers), recalculé ici dans
- * la page sur buildCourse : les vagues ont leur propre générateur, rien d'autre ne doit bouger (records et autres
- * scénarios). Relevé dans Chrome sur le code d'avant 3b (commit f4275db, courses.ts construit par esbuild) et sur
- * celui-ci : identiques. Sous Node, les valeurs diffèrent (nebula c716de59, asteroids c61a1b0c : fonctions Math.*
- * d'une autre version de V8), identiques elles aussi entre les deux codes.
+ * la page sur generateCourse (parcours tel que la graine le donne) : les vagues ont leur propre générateur, rien
+ * d'autre ne doit bouger (records et autres scénarios). Relevé dans Chrome sur le code d'avant 3b (commit f4275db,
+ * courses.ts construit par esbuild) et sur celui-ci : identiques. Sous Node, les valeurs diffèrent (nebula c716de59,
+ * asteroids c61a1b0c : fonctions Math.* d'une autre version de V8), identiques elles aussi entre les deux codes.
+ * `arena` : rochers au-delà du dernier portail, retirés par buildCourse d'un parcours à boss (f1 ; relevé sous Node).
  */
 const COURSE_FP = {
-  nebula: { gates: 16, rocks: 216, hash: '4ccfce4c' },
-  asteroids: { gates: 22, rocks: 818, hash: '24a39915' },
+  nebula: { gates: 16, rocks: 216, hash: '4ccfce4c', boss: true, arena: 12 },
+  asteroids: { gates: 22, rocks: 818, hash: '24a39915', boss: false, arena: 0 },
 };
 /**
  * Variantes de spawn (0..1 : orientation et phase de l'essaim, côté du virage du chasseur, clignotement de la mine)
@@ -603,8 +607,23 @@ async function checkCourses(t) {
       };
       const out = {};
       for (const id of ['nebula', 'asteroids']) {
-        const a = m.buildCourse(id);
-        const b = m.buildCourse(id);
+        const a = m.generateCourse(id);
+        const b = m.generateCourse(id);
+        // Parcours d'une partie : la graine, puis (boss) les rochers au-delà du dernier portail retirés ; le reste
+        // (portails, rochers d'avant, rangs, vagues, trajectoire, distorsion) identique
+        const play = m.buildCourse(id);
+        const last = a.gates[a.gates.length - 1].z;
+        const kept = a.rocks.filter((r) => r.z >= last);
+        const build = {
+          boss: !!play.def.boss,
+          removed: a.rocks.length - play.rocks.length,
+          // Arène du boss vide (sans boss : rien de retiré, les rochers d'après le dernier portail restent)
+          beyond: play.def.boss ? play.rocks.filter((r) => r.z < last).length : 0,
+          same:
+            JSON.stringify({ g: play.gates, p: play.path, w: play.warpZ, v: play.waves, l: play.length }) ===
+            JSON.stringify({ g: a.gates, p: a.path, w: a.warpZ, v: a.waves, l: a.length }),
+          rocks: JSON.stringify(play.rocks) === JSON.stringify(play.def.boss ? kept : a.rocks),
+        };
         // Fenêtre de chaque vague contre la zone de chaque portail (écart minimal, négatif = chevauchement)
         let gap = Infinity;
         let worst = null;
@@ -629,6 +648,7 @@ async function checkCourses(t) {
           inside: a.waves.every((w) => Math.hypot(w.x, w.y) < m.CORRIDOR_R && w.z < 0 && w.z > a.warpZ),
           gateGap: Math.round(gap * 10) / 10,
           worst,
+          build,
         };
       }
       return out;
@@ -645,6 +665,12 @@ async function checkCourses(t) {
     assert(r.gateGap >= 0, `${id} : aucune vague dans un portail ni sur sa ligne d'approche (écart ${r.gateGap} u, ${fmt(r.worst)})`);
     assertEq([r.gates, r.rocks], [fp.gates, fp.rocks], `${id} : nombre de portails et de rochers inchangé`);
     assertEq(r.hash, fp.hash, `${id} : portails, rochers, trajectoire et distorsion identiques à f4275db (hachage)`);
+    // Parcours d'une partie (buildCourse) : arène du boss vidée de ses rochers, rien d'autre ne bouge
+    assertEq(
+      r.build,
+      { boss: fp.boss, removed: fp.arena, beyond: 0, same: true, rocks: true },
+      `${id} : parcours d'une partie = la graine${fp.boss ? ', sans les rochers au-delà du dernier portail' : ''}`,
+    );
   }
 }
 

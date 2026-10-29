@@ -6,7 +6,7 @@
 //  B. même parcours, contexte restauré pendant le vol -> m1 réutilise le MÊME jeu, image identique à celle
 //     du jeu neuf de A (textures rechargées pendant le sommeil), et répond.
 import { assert, fmt, info3d, screenText, waitFor, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
-import { nextViaHangar, stageBefore } from '../lib/core.mjs';
+import { SEEN_STORY, nextViaHangar, seedSave, stageBefore } from '../lib/core.mjs';
 import {
   WEBGL,
   assertPlays,
@@ -69,6 +69,8 @@ async function assertFlightUndisturbed(t, loss, label) {
 export default async function (t) {
   await recordUi(t);
 
+  // Cinématiques déjà vues (plan 04, choix 14) : JOUER, les cartes et la fin de j3 ne les jouent pas.
+  await seedSave(t, SEEN_STORY);
   await t.goto('?touch=1&unlock=1');
   await waitFor(t, () => !!window.__xrShell, { timeout: 20000, label: 'coquille chargée' });
   const jungle = await stageBefore(t, 'f1');

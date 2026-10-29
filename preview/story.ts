@@ -2,12 +2,12 @@ import '@fontsource/orbitron/800.css';
 import '@fontsource/exo-2/400.css';
 import '@fontsource/exo-2/600.css';
 import { createAudio } from '../src/audio';
-import type { SfxId } from '../src/core/types';
 import { createBubble } from '../src/story/bubble';
 import { PROLOGUE_LINES } from '../src/core/story';
 import { type CutscenePlayer, DEFAULT_LIBERATION, playCutscene } from '../src/story/player';
 import { PORTRAIT_FRAMES, PORTRAIT_SIZE, drawPortrait } from '../src/story/portraits';
-import type { CutsceneCue, CutsceneId, LiberationParams, Mood, Speaker } from '../src/story/types';
+import type { CutsceneAudio, CutsceneCue, CutsceneId, LiberationParams, Mood, Speaker } from '../src/story/types';
+import { cutsceneAudio } from '../src/ui/screens/cutscene';
 
 // Page d'aperçu des cinématiques (outil de développement, hors jeu et hors typecheck).
 // Paramètres : ?cut=prologue|liberation &t=<s> (départ à cet instant) &hold=1 (figé sur cet instant : captures
@@ -20,23 +20,10 @@ const root = document.getElementById('root') as HTMLElement;
 const panel = document.getElementById('panel') as HTMLElement;
 if (params.get('ui') === '0') panel.hidden = true;
 
-/** Proposition de traduction des repères en effets existants (l'interface fera la sienne). */
-const CUE_SFX: Record<CutsceneCue, { id: SfxId; volume?: number; pitch?: number }> = {
-  bip: { id: 'click', volume: 0.22, pitch: 2.1 },
-  signal: { id: 'checkpoint', volume: 0.5, pitch: 1.5 },
-  rift: { id: 'warp', volume: 0.8 },
-  whoosh: { id: 'boost', volume: 0.7 },
-  impact: { id: 'crash', volume: 0.7 },
-  landing: { id: 'boost', volume: 0.5, pitch: 0.6 },
-  vide: { id: 'lose', volume: 0.5, pitch: 0.7 },
-  heal: { id: 'powerup' },
-  core: { id: 'crystal', pitch: 0.8 },
-  skill: { id: 'win', volume: 0.8 },
-  takeoff: { id: 'takeoff' },
-};
-
 const sound = params.get('sound') === '1' ? createAudio() : null;
 if (sound) window.addEventListener('pointerdown', () => sound.unlock(), { once: true });
+/** Sons du jeu (ui/screens/cutscene.ts : CUE_SFX, bips lumaBip à la hauteur de la radio). */
+const gameSound: CutsceneAudio | null = sound ? cutsceneAudio(sound) : null;
 
 interface CueLog {
   c: CutsceneCue;
@@ -92,12 +79,20 @@ function start(cut: CutsceneId, t = 0, hold = false): CutscenePlayer {
   story.cues = [];
   story.result = null;
   const t0 = performance.now();
+  const note = (c: CutsceneCue): void => {
+    story.cues.push({ c, t: Math.round((story.handle ? story.handle.time : t) * 1000) / 1000, at: Math.round(performance.now() - t0) });
+  };
   const h = playCutscene(root, cut, {
     audio: {
       cue(c) {
-        story.cues.push({ c, t: Math.round((story.handle ? story.handle.time : t) * 1000) / 1000, at: Math.round(performance.now() - t0) });
-        const s = CUE_SFX[c];
-        if (sound) sound.sfx(s.id, { volume: s.volume, pitch: s.pitch });
+        note(c);
+        if (gameSound) gameSound.cue(c);
+        renderLog();
+      },
+      // Bips notés comme des repères 'bip' (journal, story-preview), joués comme dans le jeu.
+      bip(who, mood, letter) {
+        note('bip');
+        if (gameSound && gameSound.bip) gameSound.bip(who, mood, letter);
         renderLog();
       },
     },

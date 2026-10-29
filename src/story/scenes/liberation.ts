@@ -67,6 +67,13 @@ const JUMP1 = 50;
 const JUMP2 = 42;
 /** Centre du bandeau « NOUVELLE COMPÉTENCE » (unités). */
 const BANNER2_Y = 68;
+/** Demi-largeur du bandeau « NOUVELLE COMPÉTENCE » (unités). */
+const BANNER2_HALF = 280;
+/**
+ * Écart entre le bandeau et le bouton Passer (unités) : sur un écran étroit ou sous une encoche (Passer décalé par
+ * --sar), le bandeau, centré, rétrécit pour s'arrêter avant le bord gauche de Passer (`View.skipLeft`).
+ */
+const SKIP_GAP = 8;
 
 /** Polices des bandeaux (Orbitron chargée par l'interface ; repli sans empattement). */
 const FONT_TITLE = "'Orbitron', 'Exo 2', system-ui, sans-serif";
@@ -433,16 +440,17 @@ export function createLiberation(params: LiberationParams): CutsceneScript {
     if (b1 > 0) drawSprite(ctx, a.banner1, 0, vw * 0.5, 42 - (1 - b1) * 8, 1, 0, b1, k);
     const b2 = window4(t, T.skill, T.skill + 0.35, T.shipIn + 0.2, T.shipIn + 0.7);
     if (b2 > 0) {
-      const sxs = 0.7 + 0.3 * easeOut(seg(t, T.skill, T.skill + 0.4));
+      const fit = Math.max(0.6, Math.min(1, (v.skipLeft - SKIP_GAP - vw * 0.5) / BANNER2_HALF));
+      const sxs = (0.7 + 0.3 * easeOut(seg(t, T.skill, T.skill + 0.4))) * fit;
       const by = BANNER2_Y;
-      drawSpriteXY(ctx, a.banner2, vw * 0.5, by, sxs, 1, 0, b2, k);
+      drawSpriteXY(ctx, a.banner2, vw * 0.5, by, sxs, fit, 0, b2, k);
       // Reflet qui balaie le bandeau
       const sw = seg(t, T.skill + 0.3, T.skill + 1.3);
       if (sw > 0 && sw < 1) {
         ctx.save();
         ctx.setTransform(k, 0, 0, k, 0, 0);
         ctx.beginPath();
-        ctx.rect(vw * 0.5 - 280 * sxs, by - 46, 560 * sxs, 92);
+        ctx.rect(vw * 0.5 - BANNER2_HALF * sxs, by - 46 * fit, 2 * BANNER2_HALF * sxs, 92 * fit);
         ctx.clip();
         ctx.globalCompositeOperation = 'lighter';
         drawSprite(ctx, a.sweep, 0, vw * 0.5 - 300 + sw * 600, by, 1, 0.35, b2 * 0.9, k);

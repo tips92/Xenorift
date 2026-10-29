@@ -1,13 +1,15 @@
 // Contrats partagés entre tous les modules du jeu.
 // Toute modification ici doit être répercutée dans chaque module qui les implémente.
 
-import type { BOSS_IDS, COURSE_IDS, MUSIC_IDS, THEME_IDS } from './ids';
+import type { BOSS_IDS, COURSE_IDS, CUTSCENE_IDS, MUSIC_IDS, THEME_IDS } from './ids';
 import type { RADIO } from './story';
 import type { WeaponMods } from './weapons';
 
 export type StageKind = 'platform' | 'flight';
 export type ThemeId = (typeof THEME_IDS)[number];
 export type CourseId = (typeof COURSE_IDS)[number];
+/** Cinématique (src/story) : 'prologue', 'liberation' (paramétrée par le monde). */
+export type CutsceneId = (typeof CUTSCENE_IDS)[number];
 
 /** Place d'une étape dans son monde : niveaux 1 à 3, 4 = le vol qui le quitte. */
 export type StagePart = 1 | 2 | 3 | 4;
@@ -39,9 +41,13 @@ export interface StageDef {
   levelId: string;
   /** Thème visuel (pour un vol : la planète que l'on quitte). */
   theme: ThemeId;
-  /** Cinématiques jouées avant la carte d'intro et avant les résultats (identifiants : étape 14 du plan 04). */
-  before?: string;
-  after?: string;
+  /**
+   * Cinématiques, jouées seulement si elles ne sont pas encore vues (ui/flow.ts) : `before` avant la carte d'intro
+   * (le prologue de j1 : avant toute étape lancée par JOUER, une carte ou le hangar), `after` après une victoire,
+   * avant les résultats.
+   */
+  before?: CutsceneId;
+  after?: CutsceneId;
   /** Récompenses de la réussite (vide : aucune). */
   rewards: readonly StageReward[];
   /** Boss de l'arène du niveau 2D (le même que LevelData.boss). */
@@ -429,7 +435,10 @@ export interface BestScore {
   stars: 1 | 2 | 3;
 }
 
-/** Histoire : marques des cinématiques vues et des tutoriels terminés (identifiants : étapes 4 et 14 du plan 04). */
+/**
+ * Histoire : marques des cinématiques vues (cutsceneMark de core/story.ts : 'prologue', 'liberation-1'…) et des
+ * tutoriels terminés ('tutorial-j1').
+ */
 export interface StoryProgress {
   seen: string[];
 }

@@ -16,3 +16,9 @@ export const MUSIC_IDS = ['menu', 'jungle', 'moon', 'nebula', 'asteroids', 'boss
 /** Boss des arènes 2D (game2d/engine/bosses : createBoss), case 'M' d'un niveau (LevelData.boss) ; 'whale' : la
  *  méduse-baleine, gardienne du monde 1. */
 export const BOSS_IDS = ['blobKing', 'beetleTitan', 'whale'] as const;
+
+/**
+ * Cinématiques (src/story) : étapes de WORLDS qui en jouent une avant leur carte d'intro (`before`) ou avant leurs
+ * résultats (`after`) ; marques « vues » dans SaveData.story.seen (core/story.ts : cutsceneMark).
+ */
+export const CUTSCENE_IDS = ['prologue', 'liberation'] as const;

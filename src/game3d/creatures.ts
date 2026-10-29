@@ -7,6 +7,7 @@ import type { Bin } from './util';
 // (quelques centaines de sommets, tampons réutilisés).
 // Vol 1 : léviathan bioluminescent (nageoires translucides, yeux et leurre lumineux).
 // Vol 2 : ver cosmique rocheux aux jointures incandescentes qui tourne autour de la planète à anneaux.
+// Ce qui distingue chaque genre est dans LOOKS.
 
 export type CreatureKind = 'leviathan' | 'worm';
 
@@ -143,9 +144,94 @@ const _q = new THREE.Quaternion();
 const _qa = new THREE.Quaternion();
 const _qb = new THREE.Quaternion();
 
+/** Repères des anneaux du corps, recalculés à chaque image (tampons réutilisés). */
+interface Rings {
+  readonly n: number;
+  readonly pts: THREE.Vector3[];
+  readonly fwd: THREE.Vector3[];
+  readonly right: THREE.Vector3[];
+  readonly up: THREE.Vector3[];
+  readonly quats: THREE.Quaternion[];
+  readonly radii: Float32Array;
+}
+
+/** Ce qui distingue un genre de créature : corps, nageoires, points lumineux. */
+interface CreatureLook {
+  /** Branche du shader du corps (uKind). */
+  shader: number;
+  /** Aplatissement vertical du corps (1 : section ronde). */
+  flat: number;
+  /** Nageoires translucides : 2 pectorales et 2 lobes de queue. */
+  fins: boolean;
+  /** Nombre de points lumineux pour n anneaux. */
+  lightCount(n: number): number;
+  /** Point lumineux i : couleur spotB (sinon spotA) et taille. */
+  lightB(i: number): boolean;
+  lightSize(i: number): number;
+  /** Positions des points lumineux (x, y, z à la suite). */
+  placeLights(r: Rings, time: number, out: Float32Array): void;
+}
+
+/** Léviathan : yeux et leurre au bout d'une antenne. */
+function leviathanLights(r: Rings, time: number, lp: Float32Array): void {
+  const hi = 2;
+  const hr = r.radii[hi];
+  for (let k = 0; k < 2; k++) {
+    _v.set((k === 0 ? 1 : -1) * hr * 0.62, hr * 0.32, hr * 0.2).applyQuaternion(r.quats[hi]).add(r.pts[hi]);
+    lp[k * 3] = _v.x;
+    lp[k * 3 + 1] = _v.y;
+    lp[k * 3 + 2] = _v.z;
+  }
+  _v.set(Math.sin(time * 1.3) * hr * 0.25, hr * 1.6 + Math.sin(time * 2.1) * hr * 0.15, hr * 1.9)
+    .applyQuaternion(r.quats[0])
+    .add(r.pts[0]);
+  lp[6] = _v.x;
+  lp[7] = _v.y;
+  lp[8] = _v.z;
+}
+
+/** Ver : lueur de la gueule, puis braises le long du dos. */
+function wormLights(r: Rings, _time: number, lp: Float32Array): void {
+  _v.copy(r.fwd[0]).multiplyScalar(r.radii[0] * 0.2).add(r.pts[0]);
+  lp[0] = _v.x;
+  lp[1] = _v.y;
+  lp[2] = _v.z;
+  const count = lp.length / 3;
+  for (let k = 1; k < count; k++) {
+    const i = Math.min(r.n - 1, k * 5);
+    _v.copy(r.up[i]).multiplyScalar(r.radii[i] * 1.02).add(r.pts[i]);
+    lp[k * 3] = _v.x;
+    lp[k * 3 + 1] = _v.y;
+    lp[k * 3 + 2] = _v.z;
+  }
+}
+
+/** Par genre : un genre oublié fait échouer tsc. */
+const LOOKS: Record<CreatureKind, CreatureLook> = {
+  leviathan: {
+    shader: 0,
+    flat: 0.82,
+    fins: true,
+    lightCount: () => 3,
+    lightB: (i) => i < 2,
+    lightSize: (i) => (i < 2 ? 34 : 70),
+    placeLights: leviathanLights,
+  },
+  worm: {
+    shader: 1,
+    flat: 1,
+    fins: false,
+    lightCount: (n) => 1 + Math.floor(n / 5),
+    lightB: (i) => i === 0,
+    lightSize: (i) => (i === 0 ? 150 : 60),
+    placeLights: wormLights,
+  },
+};
+
 export class Creature {
   readonly group = new THREE.Group();
   private readonly spec: CreatureSpec;
+  private readonly look: CreatureLook;
   private readonly n: number;
   private readonly posAttr: THREE.BufferAttribute;
   private readonly nrmAttr: THREE.BufferAttribute;
@@ -153,13 +239,7 @@ export class Creature {
   private readonly fins: THREE.InstancedMesh | null = null;
   private readonly lightPos: Float32Array;
   private readonly lightAttr: THREE.BufferAttribute;
-  private readonly lightCount: number;
-  private readonly pts: THREE.Vector3[] = [];
-  private readonly fwd: THREE.Vector3[] = [];
-  private readonly right: THREE.Vector3[] = [];
-  private readonly up: THREE.Vector3[] = [];
-  private readonly quats: THREE.Quaternion[] = [];
-  private readonly radii: Float32Array;
+  private readonly rings: Rings;
   private readonly bodyU: { uTime: { value: number } };
   private readonly finU: { uTime: { value: number } } | null = null;
   private readonly cosT: Float32Array;
@@ -167,16 +247,19 @@ export class Creature {
 
   constructor(spec: CreatureSpec, glowMaterial: THREE.ShaderMaterial, bin: Bin) {
     this.spec = spec;
+    const look = LOOKS[spec.kind];
+    this.look = look;
     const n = spec.rings;
     this.n = n;
-    this.radii = new Float32Array(n);
+    const rings: Rings = { n, pts: [], fwd: [], right: [], up: [], quats: [], radii: new Float32Array(n) };
+    this.rings = rings;
     for (let i = 0; i < n; i++) {
-      this.radii[i] = spec.radius(i, n);
-      this.pts.push(new THREE.Vector3());
-      this.fwd.push(new THREE.Vector3());
-      this.right.push(new THREE.Vector3());
-      this.up.push(new THREE.Vector3());
-      this.quats.push(new THREE.Quaternion());
+      rings.radii[i] = spec.radius(i, n);
+      rings.pts.push(new THREE.Vector3());
+      rings.fwd.push(new THREE.Vector3());
+      rings.right.push(new THREE.Vector3());
+      rings.up.push(new THREE.Vector3());
+      rings.quats.push(new THREE.Quaternion());
     }
     this.cosT = new Float32Array(RADIAL + 1);
     this.sinT = new Float32Array(RADIAL + 1);
@@ -225,7 +308,7 @@ export class Creature {
           uSpotB: { value: new THREE.Color(spec.spotB) },
           uLight: { value: spec.light },
           uPattern: { value: spec.pattern },
-          uKind: { value: spec.kind === 'worm' ? 1 : 0 },
+          uKind: { value: look.shader },
         },
       }),
     );
@@ -233,7 +316,7 @@ export class Creature {
     body.frustumCulled = false;
     this.group.add(body);
 
-    if (spec.kind === 'leviathan') {
+    if (look.fins) {
       // Nageoires translucides (2 pectorales + 2 lobes de queue)
       const s = new THREE.Shape();
       s.moveTo(0, -0.3);
@@ -266,20 +349,19 @@ export class Creature {
     }
 
     // Points lumineux : yeux + leurre (léviathan) ou gueule + braises dorsales (ver)
-    this.lightCount = spec.kind === 'leviathan' ? 3 : 1 + Math.floor(n / 5);
-    this.lightPos = new Float32Array(this.lightCount * 3);
-    const col = new Float32Array(this.lightCount * 3);
-    const size = new Float32Array(this.lightCount);
-    const alpha = new Float32Array(this.lightCount).fill(1);
+    const lightCount = look.lightCount(n);
+    this.lightPos = new Float32Array(lightCount * 3);
+    const col = new Float32Array(lightCount * 3);
+    const size = new Float32Array(lightCount);
+    const alpha = new Float32Array(lightCount).fill(1);
     const ca = new THREE.Color(spec.spotA);
     const cb = new THREE.Color(spec.spotB);
-    for (let i = 0; i < this.lightCount; i++) {
-      const c = spec.kind === 'leviathan' ? (i < 2 ? cb : ca) : i === 0 ? cb : ca;
+    for (let i = 0; i < lightCount; i++) {
+      const c = look.lightB(i) ? cb : ca;
       col[i * 3] = c.r;
       col[i * 3 + 1] = c.g;
       col[i * 3 + 2] = c.b;
-      if (spec.kind === 'leviathan') size[i] = i < 2 ? 34 : 70;
-      else size[i] = i === 0 ? 150 : 60;
+      size[i] = look.lightSize(i);
     }
     const lg = bin.add(new THREE.BufferGeometry());
     this.lightAttr = new THREE.BufferAttribute(this.lightPos, 3).setUsage(THREE.DynamicDrawUsage);
@@ -295,35 +377,36 @@ export class Creature {
   update(time: number, anchor: THREE.Vector3): void {
     const spec = this.spec;
     const n = this.n;
+    const { pts, fwd, right, up, quats, radii } = this.rings;
     this.group.position.copy(anchor);
     this.bodyU.uTime.value = time;
     if (this.finU) this.finU.uTime.value = time;
-    for (let i = 0; i < n; i++) spec.path(time - i * spec.lag, i, this.pts[i]);
+    for (let i = 0; i < n; i++) spec.path(time - i * spec.lag, i, pts[i]);
 
     // Repères des anneaux, sans vrille : le dos reste orienté vers le haut
     for (let i = 0; i < n; i++) {
-      if (i === 0) _t.subVectors(this.pts[0], this.pts[1]);
-      else if (i === n - 1) _t.subVectors(this.pts[n - 2], this.pts[n - 1]);
-      else _t.subVectors(this.pts[i - 1], this.pts[i + 1]);
+      if (i === 0) _t.subVectors(pts[0], pts[1]);
+      else if (i === n - 1) _t.subVectors(pts[n - 2], pts[n - 1]);
+      else _t.subVectors(pts[i - 1], pts[i + 1]);
       if (_t.lengthSq() < 1e-6) _t.set(0, 0, 1);
-      const f = this.fwd[i].copy(_t).normalize();
-      const r = this.right[i].crossVectors(Y_AXIS, f);
+      const f = fwd[i].copy(_t).normalize();
+      const r = right[i].crossVectors(Y_AXIS, f);
       if (r.lengthSq() < 1e-6) r.set(1, 0, 0);
       r.normalize();
-      this.up[i].crossVectors(f, r);
-      _mb.makeBasis(r, this.up[i], f);
-      this.quats[i].setFromRotationMatrix(_mb);
+      up[i].crossVectors(f, r);
+      _mb.makeBasis(r, up[i], f);
+      quats[i].setFromRotationMatrix(_mb);
     }
 
     // Sommets du tube
     const pos = this.posAttr.array as Float32Array;
     const nrm = this.nrmAttr.array as Float32Array;
+    const flat = this.look.flat;
     for (let i = 0; i < n; i++) {
-      const p = this.pts[i];
-      const r = this.right[i];
-      const u = this.up[i];
-      const rad = this.radii[i];
-      const flat = spec.kind === 'leviathan' ? 0.82 : 1;
+      const p = pts[i];
+      const r = right[i];
+      const u = up[i];
+      const rad = radii[i];
       for (let j = 0; j <= RADIAL; j++) {
         const s = this.sinT[j];
         const c = this.cosT[j];
@@ -342,68 +425,38 @@ export class Creature {
     this.posAttr.needsUpdate = true;
     this.nrmAttr.needsUpdate = true;
 
-    const lp = this.lightPos;
-    if (spec.kind === 'leviathan') {
-      if (this.fins) {
-        // Nageoires pectorales (battement) et lobes de queue
-        const flap = Math.sin(time * 1.15) * 0.45;
-        const pi = 5;
-        const pr = this.radii[pi];
-        for (let k = 0; k < 2; k++) {
-          const side = k === 0 ? 1 : -1;
-          _v.set(side * pr * 0.7, -pr * 0.2, 0).applyQuaternion(this.quats[pi]).add(this.pts[pi]);
-          _qa.setFromAxisAngle(Z_AXIS, side * flap);
-          _qb.setFromAxisAngle(Y_AXIS, side * 0.3);
-          _q.copy(this.quats[pi]).multiply(_qa).multiply(_qb);
-          _s.set(side * pr * 3.4, 1, pr * 2.3);
-          _m.compose(_v, _q, _s);
-          this.fins.setMatrixAt(k, _m);
-        }
-        const ti = n - 2;
-        const tr = Math.max(this.radii[ti], this.radii[4] * 0.12);
-        const tflap = Math.sin(time * 1.6 + 1.0) * 0.4;
-        const tailScale = this.radii[4] * 1.5;
-        for (let k = 0; k < 2; k++) {
-          const side = k === 0 ? 1 : -1;
-          _v.set(0, 0, -tr).applyQuaternion(this.quats[ti]).add(this.pts[ti]);
-          _qa.setFromAxisAngle(Z_AXIS, side * tflap);
-          _qb.setFromAxisAngle(Y_AXIS, side * 0.93);
-          _q.copy(this.quats[ti]).multiply(_qa).multiply(_qb);
-          _s.set(side * tailScale, 1, tailScale * 0.7);
-          _m.compose(_v, _q, _s);
-          this.fins.setMatrixAt(2 + k, _m);
-        }
-        this.fins.instanceMatrix.needsUpdate = true;
-      }
-      // Yeux et leurre au bout d'une antenne
-      const hi = 2;
-      const hr = this.radii[hi];
+    if (this.fins) {
+      // Nageoires pectorales (battement) et lobes de queue
+      const flap = Math.sin(time * 1.15) * 0.45;
+      const pi = 5;
+      const pr = radii[pi];
       for (let k = 0; k < 2; k++) {
-        _v.set((k === 0 ? 1 : -1) * hr * 0.62, hr * 0.32, hr * 0.2).applyQuaternion(this.quats[hi]).add(this.pts[hi]);
-        lp[k * 3] = _v.x;
-        lp[k * 3 + 1] = _v.y;
-        lp[k * 3 + 2] = _v.z;
+        const side = k === 0 ? 1 : -1;
+        _v.set(side * pr * 0.7, -pr * 0.2, 0).applyQuaternion(quats[pi]).add(pts[pi]);
+        _qa.setFromAxisAngle(Z_AXIS, side * flap);
+        _qb.setFromAxisAngle(Y_AXIS, side * 0.3);
+        _q.copy(quats[pi]).multiply(_qa).multiply(_qb);
+        _s.set(side * pr * 3.4, 1, pr * 2.3);
+        _m.compose(_v, _q, _s);
+        this.fins.setMatrixAt(k, _m);
       }
-      _v.set(Math.sin(time * 1.3) * hr * 0.25, hr * 1.6 + Math.sin(time * 2.1) * hr * 0.15, hr * 1.9)
-        .applyQuaternion(this.quats[0])
-        .add(this.pts[0]);
-      lp[6] = _v.x;
-      lp[7] = _v.y;
-      lp[8] = _v.z;
-    } else {
-      // Lueur de la gueule, puis braises le long du dos
-      _v.copy(this.fwd[0]).multiplyScalar(this.radii[0] * 0.2).add(this.pts[0]);
-      lp[0] = _v.x;
-      lp[1] = _v.y;
-      lp[2] = _v.z;
-      for (let k = 1; k < this.lightCount; k++) {
-        const i = Math.min(n - 1, k * 5);
-        _v.copy(this.up[i]).multiplyScalar(this.radii[i] * 1.02).add(this.pts[i]);
-        lp[k * 3] = _v.x;
-        lp[k * 3 + 1] = _v.y;
-        lp[k * 3 + 2] = _v.z;
+      const ti = n - 2;
+      const tr = Math.max(radii[ti], radii[4] * 0.12);
+      const tflap = Math.sin(time * 1.6 + 1.0) * 0.4;
+      const tailScale = radii[4] * 1.5;
+      for (let k = 0; k < 2; k++) {
+        const side = k === 0 ? 1 : -1;
+        _v.set(0, 0, -tr).applyQuaternion(quats[ti]).add(pts[ti]);
+        _qa.setFromAxisAngle(Z_AXIS, side * tflap);
+        _qb.setFromAxisAngle(Y_AXIS, side * 0.93);
+        _q.copy(quats[ti]).multiply(_qa).multiply(_qb);
+        _s.set(side * tailScale, 1, tailScale * 0.7);
+        _m.compose(_v, _q, _s);
+        this.fins.setMatrixAt(2 + k, _m);
       }
+      this.fins.instanceMatrix.needsUpdate = true;
     }
+    this.look.placeLights(this.rings, time, this.lightPos);
     this.lightAttr.needsUpdate = true;
   }
 }

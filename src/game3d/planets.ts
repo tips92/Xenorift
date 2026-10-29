@@ -8,6 +8,9 @@ import type { Bin } from './util';
 
 export type PlanetKind = 'jungle' | 'moon' | 'gas';
 
+/** Branche du shader de surface (uKind) de chaque genre : un genre oublié fait échouer tsc. */
+const SURFACE_SHADER: Record<PlanetKind, number> = { jungle: 0, moon: 1, gas: 2 };
+
 export interface PlanetSpec {
   kind: PlanetKind;
   radius: number;
@@ -183,7 +186,7 @@ export class Planet {
     this.offset = new THREE.Vector3(spec.offset[0], spec.offset[1], spec.offset[2]);
     this.drift = new THREE.Vector3(spec.drift[0], spec.drift[1], spec.drift[2]);
     this.spin = spec.spin;
-    const kind = spec.kind === 'jungle' ? 0 : spec.kind === 'moon' ? 1 : 2;
+    const kind = SURFACE_SHADER[spec.kind];
     const atm = new THREE.Color(spec.atmosphere);
 
     const geo = bin.add(new THREE.SphereGeometry(spec.radius, 72, 48));

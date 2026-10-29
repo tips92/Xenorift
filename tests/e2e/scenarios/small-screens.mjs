@@ -1,5 +1,7 @@
 // Petits écrans de téléphone en paysage (740x360, 640x320) : accueil, choix du niveau (bouton Hangar ; barre du
-// monde avec ◀ ▶ ; cartes de chaque page, ▶ jusqu'à la dernière), carte d'intro, commandes tactiles et HUD en jeu,
+// monde avec ◀ ▶ ; cartes de chaque page, ▶ jusqu'à la dernière), prologue (plan 04, choix 14 : marques de
+// l'histoire effacées avant chaque taille ; Passer, bulle et son texte entiers, sans chevauchement, Passer d'au
+// moins 44 px de haut ; puis Passer touché), carte d'intro, commandes tactiles et HUD en jeu,
 // menu Pause. Rien d'important ne sort de l'écran, n'est coupé ni ne déborde, la page ne défile pas, les commandes
 // ne se chevauchent pas. Puis portrait (390x844) en pleine
 // partie : invite « Tourne ton téléphone » et partie mise en pause ; retour en paysage : invite masquée, menu
@@ -95,7 +97,8 @@ async function checkSize(t, w, h) {
   const tag = `${w}x${h}`;
   await t.page.setViewportSize({ width: w, height: h });
 
-  // --- Accueil
+  // --- Accueil (marques de l'histoire effacées : le prologue passera au JOUER de cette taille)
+  await forgetStory(t);
   await t.goto('?touch=1&unlock=1');
   await waitForScreen(t, 'title');
   await assertNoPageScroll(t, `accueil ${tag}`);
@@ -147,8 +150,28 @@ async function checkSize(t, w, h) {
   await t.key('Escape', 60);
   await waitForScreen(t, 'title');
 
-  // --- Carte d'intro (JOUER : Jungle), mesurée une fois ses animations d'entrée finies (~1,1 s sur 2,2 s)
+  // --- Prologue (JOUER, premier lancement) : Passer et bulle lisibles, puis Passer touché
   await press(t, 'title', 'Jouer');
+  const CS = '.screens [data-screen="cutscene"].is-active';
+  await waitFor(
+    t,
+    (sel) => {
+      const b = document.querySelector(`${sel} .cs[data-cutscene="prologue"] .cs-bubble`);
+      const f = document.querySelector('.fader');
+      return !!b && !b.classList.contains('is-hidden') && getComputedStyle(b).opacity === '1' && !(f && f.classList.contains('is-on'));
+    },
+    { timeout: 15000, interval: 50, label: `prologue ${tag} : bulle affichée`, arg: CS },
+  );
+  await assertNoPageScroll(t, `prologue ${tag}`);
+  await assertLayout(t, [`${CS} .cs-skip`, `${CS} .cs-bubble`, `${CS} .xr-bubble-text`, `${CS} .xr-bubble-name`], `prologue ${tag}`);
+  const [skipR] = await rects(t, `${CS} .cs-skip`);
+  const [bubbleR] = await rects(t, `${CS} .cs-bubble`);
+  assert(skipR && bubbleR && !overlaps(skipR, bubbleR), `prologue ${tag} : Passer et bulle sans chevauchement (${fmt({ skipR, bubbleR })})`);
+  assert(skipR.h >= 44 && skipR.w >= 48, `prologue ${tag} : Passer de ${Math.round(skipR.w)}x${Math.round(skipR.h)} px`);
+  await t.shot(`prologue-${tag}`);
+  await t.page.locator(`${CS} .cs-skip`).click({ timeout: 5000 });
+
+  // --- Carte d'intro (après le prologue), mesurée une fois ses animations d'entrée finies (~1,1 s sur 2,2 s)
   const I = '.screens [data-screen="intro"].is-active';
   await waitFor(
     t,
@@ -336,6 +359,22 @@ function patchSave(t, patch) {
     if (settings) save.settings = { ...save.settings, ...settings };
     localStorage.setItem(KEY, JSON.stringify(save));
   }, patch);
+}
+
+/** Efface les marques de l'histoire de la sauvegarde (rien sans page chargée ni sauvegarde) : le prologue rejouera. */
+function forgetStory(t) {
+  return t.ev(() => {
+    try {
+      const KEY = 'xeno-rift-save-v1';
+      const save = JSON.parse(localStorage.getItem(KEY));
+      if (save && typeof save === 'object') {
+        save.story = { seen: [] };
+        localStorage.setItem(KEY, JSON.stringify(save));
+      }
+    } catch {
+      // Page vide (about:blank) ou sauvegarde illisible : rien à effacer.
+    }
+  });
 }
 
 /** Modifie les réglages de la sauvegarde ; pris en compte au prochain chargement de la page. */

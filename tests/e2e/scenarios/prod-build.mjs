@@ -5,7 +5,7 @@
 // La position du vaisseau est lue par le crochet des outils de dev de three.js (présent même en production).
 import { assert, assertEq, waitFor, waitForScreen } from '../lib/helpers.mjs';
 import { contextLog, logContexts } from '../lib/gl.mjs';
-import { gameCanvases, hudFlight, hudPlatform, press, screenLuma, shipPos, trackThreeScenes, waitHud } from '../lib/core.mjs';
+import { SEEN_STORY, gameCanvases, hudFlight, hudPlatform, press, screenLuma, seedSave, shipPos, trackThreeScenes, waitHud } from '../lib/core.mjs';
 
 export const meta = {
   title: 'Build de production : accueil → intro → j1 au clavier, vol f1 affiché',
@@ -24,6 +24,8 @@ async function assertNoLostContext(t, label) {
 export default async function (t) {
   await logContexts(t);
   await trackThreeScenes(t);
+  // Cinématiques déjà vues (plan 04, choix 14) : JOUER mène à la carte d'intro (script d'init, sans aide DEV).
+  await seedSave(t, SEEN_STORY);
 
   // ---------------------------------------------------------------- Accueil, sans aides DEV
   await t.goto('?touch=0');

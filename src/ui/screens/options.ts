@@ -2,13 +2,14 @@ import { resetProgress } from '../../core/save';
 import type { Settings } from '../../core/types';
 import { TOUCH_OPACITY_STEPS, TOUCH_SIZE_STEPS, touchStep } from '../../input/touch';
 import { div, el, icon } from '../dom';
+import type { StoryPlay } from '../flow';
 import { ICONS } from '../icons';
 import type { UiCtx } from '../services';
 import { button, screenHeader, screenRoot, type Screen } from './common';
 
 // Panneau d'options (utilisé par l'écran Options et par le menu Pause) : rubriques Général et Commandes,
 // interrupteurs et sélecteurs à 3 crans appliqués immédiatement, réinitialisation de la progression avec
-// confirmation intégrée.
+// confirmation intégrée ; écran Options seulement : « Revoir les cinématiques » (liste des cinématiques vues).
 
 type Group = 'general' | 'controls';
 type ToggleKey = 'music' | 'sfx' | 'haptics' | 'tilt' | 'unlockAll' | 'leftHanded';
@@ -53,13 +54,20 @@ const CHOICES: readonly ChoiceDef[] = [
 export interface OptionsPanel {
   readonly el: HTMLElement;
   /**
-   * Boîte de confirmation (plein écran), à placer HORS de la zone qui défile : celle-ci a un masque de fondu
-   * qui rognerait la boîte.
+   * Boîtes plein écran (confirmation, liste des cinématiques), à placer HORS de la zone qui défile : celle-ci a un
+   * masque de fondu qui rognerait les boîtes.
    */
   readonly overlay: HTMLElement;
-  /** Ferme la boîte de confirmation si elle est ouverte (renvoie true dans ce cas). */
+  /** Ferme la boîte ouverte s'il y en a une (renvoie true dans ce cas). */
   back(): boolean;
   dispose(): void;
+}
+
+/** « Revoir les cinématiques » (écran Options, pas la Pause) : cinématiques vues et lecture (App.ts). */
+export interface StoryReplay {
+  /** Cinématiques déjà vues, dans l'ordre de la campagne (relu à chaque ouverture de la liste). */
+  list(): readonly StoryPlay[];
+  play(p: StoryPlay): void;
 }
 
 interface ToggleRow {
@@ -89,7 +97,7 @@ function section(title: string, cls: string): Section {
   return { root, head, grid };
 }
 
-export function createOptionsPanel(ctx: UiCtx): OptionsPanel {
+export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null): OptionsPanel {
   const root = div('options');
   const general = section('Général', 'general');
   const controls = section('Commandes', 'controls');
@@ -301,6 +309,72 @@ export function createOptionsPanel(ctx: UiCtx): OptionsPanel {
     cls: 'btn-danger btn-sm',
     onPress: openConfirm,
   });
+
+  // ---------------------------------------------------------------- Revoir les cinématiques
+
+  const storyBox = div('confirm confirm--story');
+  storyBox.setAttribute('role', 'dialog');
+  storyBox.setAttribute('aria-modal', 'true');
+  storyBox.setAttribute('aria-label', 'Revoir les cinématiques');
+  const storyPanel = div('panel confirm-box story-box');
+  const storyList = div('story-list');
+  let storyOpen = false;
+
+  function closeStory(): void {
+    if (!storyOpen) return;
+    storyOpen = false;
+    storyBox.classList.remove('is-open');
+  }
+
+  /** Liste relue à chaque ouverture : une réinitialisation la vide aussitôt. */
+  function openStory(): void {
+    if (!story || storyOpen) return;
+    storyOpen = true;
+    storyList.replaceChildren();
+    const seen = story.list();
+    for (const p of seen) {
+      const b = button(ctx, {
+        label: p.title,
+        sub: p.sub,
+        icon: ICONS.play,
+        cls: 'btn-sm story-item',
+        onPress: () => {
+          closeStory();
+          story.play(p);
+        },
+      });
+      b.dataset.cutscene = p.id;
+      storyList.append(b);
+    }
+    if (seen.length === 0) {
+      storyList.append(el('p', 'confirm-text', 'Aucune pour l’instant : elles se débloquent en jouant.'));
+    }
+    storyBox.classList.add('is-open');
+  }
+
+  if (story) {
+    storyPanel.append(
+      icon(ICONS.play, 'ico confirm-ico'),
+      el('h3', 'confirm-title', 'Cinématiques'),
+      storyList,
+      button(ctx, { label: 'Fermer', cls: 'btn-sm', onPress: closeStory }),
+    );
+    storyBox.append(storyPanel);
+    // Toucher le fond ferme la boîte.
+    storyBox.addEventListener('click', (e) => {
+      if (e.target === storyBox) {
+        ctx.audio.sfx('click', { pitch: 0.85 });
+        closeStory();
+      }
+    });
+    const storyBtn = button(ctx, {
+      label: 'Revoir les cinématiques',
+      icon: ICONS.play,
+      cls: 'btn-sm options-story',
+      onPress: openStory,
+    });
+    footer.append(storyBtn);
+  }
   footer.append(resetBtn);
 
   confirmActions.append(
@@ -323,7 +397,7 @@ export function createOptionsPanel(ctx: UiCtx): OptionsPanel {
     el(
       'p',
       'confirm-text',
-      'Les étapes débloquées, tous les records, ton équipement (armes, compétences), ta réserve de cristaux et les achats du hangar seront perdus. Tes réglages sont conservés.',
+      'Les étapes débloquées, tous les records, ton équipement (armes, compétences), ta réserve de cristaux et les achats du hangar seront perdus, et les cinématiques se rejoueront. Tes réglages sont conservés.',
     ),
     confirmActions,
   );
@@ -339,10 +413,19 @@ export function createOptionsPanel(ctx: UiCtx): OptionsPanel {
   root.append(general.root, controls.root, footer);
   sync();
 
+  // Les deux boîtes, posées ensemble hors de la zone qui défile (enveloppe sans boîte : display: contents).
+  const overlays = div('options-overlays');
+  overlays.append(confirm);
+  if (story) overlays.append(storyBox);
+
   return {
     el: root,
-    overlay: confirm,
+    overlay: overlays,
     back(): boolean {
+      if (storyOpen) {
+        closeStory();
+        return true;
+      }
       if (!confirmOpen) return false;
       closeConfirm();
       return true;
@@ -350,13 +433,14 @@ export function createOptionsPanel(ctx: UiCtx): OptionsPanel {
     dispose(): void {
       disposed = true;
       closeConfirm();
+      closeStory();
     },
   };
 }
 
-export function createOptionsScreen(ctx: UiCtx, a: { back(): void }): Screen {
+export function createOptionsScreen(ctx: UiCtx, a: { back(): void; story: StoryReplay }): Screen {
   const root = screenRoot('options');
-  const panel = createOptionsPanel(ctx);
+  const panel = createOptionsPanel(ctx, a.story);
   root.append(screenHeader(ctx, 'Options', a.back));
   const body = div('screen-body options-body');
   body.append(panel.el);

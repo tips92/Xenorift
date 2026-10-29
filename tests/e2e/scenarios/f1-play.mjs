@@ -2,8 +2,9 @@
 // pilotage (gauche, droite, haut déplacent le vaisseau), turbo (Espace : vitesse en hausse, jauge d'énergie qui
 // chauffe), tir seulement quand J est tenu (aucun tir sans appui, même avec une mine atteignable devant la Comète),
 // portails comptés dans le HUD, pause par le bouton du HUD (vol figé)
-// puis REPRENDRE,
-// victoire (__xr3d.win) → écran « VOL RÉUSSI » avec le décompte des portails, progression sauvegardée.
+// puis REPRENDRE, combat du boss lancé tout de suite (__xr3d.boss.start : chrono figé, barre de boss) et gagné
+// (__xr3d.boss.win : portail ouvert, distorsion en l'atteignant) → écran « VOL RÉUSSI » avec le décompte des
+// portails et la prime du boss, progression sauvegardée.
 import { assert, assertEq, info3d, readSave, screenText, waitFor, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
 import {
   hudFlight,
@@ -18,7 +19,7 @@ import {
 import { assertNoAutoFire } from '../lib/game3d.mjs';
 
 export const meta = {
-  title: 'Vol 1 : compte à rebours, pilotage, turbo et tir (énergie), portails, pause, victoire',
+  title: 'Vol 1 : compte à rebours, pilotage, turbo et tir (énergie), portails, pause, boss, victoire',
   suites: ['smoke', 'full'],
   dev: true,
   timeoutMs: 120000,
@@ -147,20 +148,38 @@ export default async function (t) {
   const q1 = await info3d(t);
   assert(q1.progress > q0.progress, `après REPRENDRE, la progression doit repartir (${q0.progress} -> ${q1.progress})`);
 
-  // --- Victoire : distorsion puis écran de résultats
-  await t.ev(() => window.__xr3d.win());
+  // --- Combat du boss (plan 04, étape 17) : lancé tout de suite (__xr3d.boss.start : portails restants comptés
+  // franchis), chrono figé, barre de boss ; boss vaincu (boss.win) : portail ouvert devant la Comète, distorsion en
+  // l'atteignant, puis écran de résultats avec la prime (f1-boss : le combat en détail)
+  await t.ev(() => window.__xr3d.autopilot(false));
+  assert(await t.ev(() => window.__xr3d.boss.start()), 'combat du boss lancé (__xr3d.boss.start)');
+  await waitFor(t, () => !!document.querySelector('.hud-boss.is-on'), { timeout: 3000, label: 'barre de boss affichée' });
+  const k0 = await info3d(t);
+  await t.wait(800);
+  const k1 = await info3d(t);
+  assertEq([k0.phase, k1.phase, k1.timeLeft], ['boss', 'boss', k0.timeLeft], 'combat du boss : chrono figé');
+  await t.shot('boss');
+  await waitFor(t, () => window.__xr3d.boss.info().state === 'fight', { timeout: 5000, label: 'boss au combat' });
+  await t.ev(() => window.__xr3d.boss.win());
+  const won = await t.ev(() => window.__xr3d.boss.info());
+  assert(won.beaten && won.portal.open, `boss vaincu, portail ouvert (${JSON.stringify({ beaten: won.beaten, portal: won.portal })})`);
   const fin = await waitFor(t, () => window.__xr3d && ['warp', 'done'].includes(window.__xr3d.info().phase) && window.__xr3d.info(), {
-    timeout: 5000,
-    label: 'phase warp après la victoire',
+    timeout: 15000,
+    label: 'phase warp au portail ouvert après la victoire',
   });
   await waitForScreen(t, 'results', { timeout: 25000 });
   const text = await screenText(t, 'results');
   assert(/VOL RÉUSSI/i.test(text), `écran « VOL RÉUSSI » attendu (texte : ${text.slice(0, 160)})`);
   const det = await resultDetails(t);
   t.log('résultats', JSON.stringify(det));
-  // win() franchit les portails restants ; seuls ceux manqués pendant le pilotage manuel manquent.
+  // boss.start() franchit les portails restants ; seuls ceux manqués pendant le pilotage manuel manquent.
   assert(fin.gates >= 12, `presque tous les portails attendus après la victoire, obtenu ${fin.gates}/16`);
   assertEq(det.Portails, `${fin.gates}/16`, 'ligne Portails de l’écran de résultats');
+  const prime = await t.ev(() => {
+    const e = document.querySelector('.screens [data-screen="results"].is-active .results-bonus-value');
+    return e ? e.textContent.replace(/\s/g, '') : null;
+  });
+  assertEq(prime, '+3000', 'prime du boss sur les résultats');
   await t.shot('results');
   const save = await readSave(t);
   assert(save && save.best && save.best.f1 && save.best.f1.score > 0, `record de f1 sauvegardé (sauvegarde : ${JSON.stringify(save)})`);

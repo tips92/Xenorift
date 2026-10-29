@@ -20,14 +20,15 @@ Avec npm, les options passent après `--` : `npm run e2e -- --suite full`. Noms 
 `--prod` seul garde la suite smoke par défaut : seul `menu` y tourne.
 
 Durées sur cette machine (fourchettes : la seconde valeur, mesurée au bilan de 4b, sur une machine peut-être
-chargée par une autre séance) : `smoke` ≈ 1 min 40 (`npm test` ≈ 2 min 10 en tout), `full` ≈ 41 à 48 min (dont
+chargée par une autre séance) : `smoke` ≈ 1 min 40 (`npm test` ≈ 2 min 10 en tout), `full` ≈ 43 à 50 min (dont
 `flight-autopilot` ≈ 2 min 45, `flight-combat` ≈ 1 min 45 seul et 2 min 25 dans la suite, `stress-laps` ≈ 2 min 55
 à 3 min 20, `small-screens` ≈ 3 à 4 min 20, `weapons` ≈ 1 min 40 à 2 min 35, `audio-lifecycle` ≈ 1 min 20,
-`hangar` ≈ 1 min 30 à 1 min 45, `luma-radio` ≈ 3 min 20 à 3 min 40, `campaign-flow` ≈ 1 min 20,
+`hangar` ≈ 1 min 30 à 1 min 45, `luma-radio` ≈ 3 min 20 à 3 min 40, `campaign-flow` ≈ 1 min 45,
 `boss-mini` ≈ 1 min 30, `boss-titan` ≈ 1 min 10, `boss-whale` ≈ 1 min 50, `j3-ctx-boss` ≈ 45 s,
-`progress-ids` ≈ 50 s à 1 min 25, `powerups` ≈ 45 s et `j2-play` ≈ 1 min 15),
-`diag` ≈ 7 min 20 à 9 min
-(dont `audio-world1` ≈ 2 min 15 à 3 min, `boss-bot` ≈ 1 min 50 à 2 min 05 et `story-preview` ≈ 55 s),
+`progress-ids` ≈ 50 s à 1 min 25, `powerups` ≈ 45 s, `j2-play` ≈ 1 min 15, `story-flow` ≈ 1 min 25 et `f1-boss`
+≈ 2 min),
+`diag` ≈ 8 min 30 à 10 min
+(dont `theme-captures` ≈ 1 min 50, `audio-world1` ≈ 2 min 15 à 3 min, `boss-bot` ≈ 1 min 50 à 2 min 05 et `story-preview` ≈ 55 s),
 `--prod --suite full` ≈ 2 min 10.
 
 - **Serveur** : scénarios dev : le lanceur réutilise le serveur de dev déjà ouvert sur http://localhost:5173/
@@ -55,7 +56,7 @@ chargée par une autre séance) : `smoke` ≈ 1 min 40 (`npm test` ≈ 2 min 10 
 |---|---|
 | `smoke` | rapide, lancée par `npm test` (`menu`, `j1-play`, `f1-play`, `touch-controls`, `back-button`) ; chaque scénario smoke est aussi dans `full` |
 | `full` | tous les vrais tests (avec assertions) |
-| `diag` | mesures et diagnostics (bancs d'essai, journaux, captures de l'aperçu graphique `art-preview`, captures par thème `theme-captures`, pages d'aperçu du monde 1 : sons et musiques `audio-world1`, cinématiques et bulle `story-preview`, boss `bosses-preview`, dessins du décor `props-preview` ; durée des combats des mini-boss par une IA de test `boss-bot`) : affichent des chiffres ou des images, sans vrai verdict (sauf `theme-captures` comparé à une référence, les contrôles d'`audio-world1` et `story-preview`, et les victoires de `boss-bot`) |
+| `diag` | mesures et diagnostics (bancs d'essai, journaux, captures de l'aperçu graphique `art-preview`, captures par thème et par parcours de vol `theme-captures`, pages d'aperçu du monde 1 : sons et musiques `audio-world1`, cinématiques et bulle `story-preview`, boss `bosses-preview`, dessins du décor `props-preview` ; durée des combats des mini-boss par une IA de test `boss-bot`) : affichent des chiffres ou des images, sans vrai verdict (sauf `theme-captures` comparé à une référence, les contrôles d'`audio-world1` et `story-preview`, et les victoires de `boss-bot`) |
 | `all` | `full` + `diag` |
 
 ## Écrire un scénario
@@ -129,6 +130,12 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
 - Aides par domaine, à lire avant d'écrire un scénario du même genre :
   - `core.mjs` (vol, campagne, tactile, petits écrans, endurance ; sauf mention contraire, sans aides DEV,
     donc utilisable aussi sur le build de production) :
+    `seedSave(t, patch)` (avant `t.goto` : script d'init qui écrit `{ version: 2, ...patch }` comme sauvegarde
+    seulement si elle MANQUE, à chaque chargement ; marche en `--prod`), `SEEN_STORY` (`{ story: { seen:
+    STORY_MARKS } }` : cinématiques du monde 1 déjà vues, voir « Cinématiques »), `STORY_MARKS`, `SAVE_KEY`,
+    `skipCutscene(t, act, label)` (DEV, `__xrShell` : passe la cinématique en cours par `act()`, touche, clic ou
+    retour, la suit image par image jusqu'à ce qu'elle quitte la main et exige qu'elle ait été coupée à plus de 2 s
+    de sa fin : une cinématique finie seule ne prouve pas le Passer),
     `trackThreeScenes` + `shipPos` (position du vaisseau via le crochet `__THREE_DEVTOOLS__` de three),
     `hudFlight` / `hudPlatform`, `waitHud`, `resultDetails`, `recordToasts` / `toasts`, `press`, `nextViaHangar`
     (« Suivant » des résultats, puis le bouton de départ du hangar, « Atterrir », « Redescendre » ou « Décoller » :
@@ -195,7 +202,7 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   `heat` / `overheated` (jauge d'énergie, chauffée par le tir et le turbo), `range`
   (portée, u), `shotsActive` (tirs en vol), `shotsFired` (tirs partis depuis le départ), `lastMuzzle` (bouche du
   dernier tir : 0, ou 0 / 1 en alternance pour la mitrailleuse), `target` (`{ type: 'rock' | 'fighter' | 'mine' |
-  'swarm', dist, hit }` ou null), `enemies` (`fighter`, `mine`, `swarm` vivants, `killed` : abattus par les tirs),
+  'swarm' | 'boss', dist, hit }` ou null ; en phases `fly` et `boss`), `enemies` (`fighter`, `mine`, `swarm` vivants, `killed` : abattus par les tirs),
   `orbsActive`, `waves`, `crystals` (ramassés pendant ce vol) / `crystalsTotal` / `crystalsActive` (en vol, pas encore
   ramassés), `crystalsDropped` (cristaux lâchés depuis le départ : ils apparaissent au sous-pas même de la
   destruction), `rocksDestroyed`, `points` (rochers, ennemis, cristaux), `drawCalls` (`renderer.info.render.calls`
@@ -210,10 +217,13 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   bouton, rien ne tire), `settle()` (Comète remise sur la trajectoire idéale à son z, sans vitesse latérale, énergie
   froide, turbo coupé, orbes ennemies retirées : à appeler dans la même tâche que `spawn` et la trace, après une trace jusqu'à un
   avancement fixé (`i.progress >= …`), sinon l'issue dépend du vol en temps réel qui précède, plus lent à froid :
-  endroit du parcours, rochers, chauffe)), `window.__xrShell` (`info` : `phase`, `screen` (écran affiché), `loadout` (`equipped`, `owned`,
+  endroit du parcours, rochers, chauffe)), `boss` (boss du parcours, f1 : voir « Combat du boss en vol » plus bas ;
+  `info()` null sans boss), `window.__xrShell` (`info` : `phase`, `screen` (écran affiché), `loadout` (`equipped`, `owned`,
   `skills`), `play` (équipement effectif complet : améliorations `mods` par arme, `maxHearts`, `ship` :
   `maxShields`, `boostDrainMul` (chauffe du turbo), `boostFillMul` (refroidissement de l'énergie), `gunLevel`,
-  `crew` : équipage à bord), `stages` (chaque étape de `STAGES`, dans l'ordre :
+  `crew` : équipage à bord), `cutscene` (cinématique en cours : `id`, `mark`, `time`, `duration`, `paused`, `state`
+  `playing | ended | skipped` ; null hors phase `story` et dès sa fin), `seen` (marques de l'histoire de la
+  sauvegarde), `stages` (chaque étape de `STAGES`, dans l'ordre :
   `id`, `kind`, `world`, `cleared` (réussie), `unlocked` (ouverte, mode test compris)), `crystals` (réserve), `weapon`
   (l'arme de la session) ; `cap` ; `addCrystals(n)` : ajoute des cristaux à la réserve, enregistrée, sans redessiner l'écran
   affiché : l'appeler avant d'ouvrir le hangar ; `radio()` : radio de LUMA, voir plus bas). `__xr3d` disparaît quand la
@@ -226,10 +236,10 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   `?unlock=1` (mode test, enregistré dans la sauvegarde : 4 armes et double saut, conditions du hangar levées mais
   pas les prix), `?weapon=laser|machinegun|shotgun|rifle` (arme de la session ; inconnue : message et laser),
   `?touch=1` / `?touch=0`. Serveur de dev seulement : `?at=boss` (`ModeHooks.startAt`) : chaque niveau 2D lancé part
-  du point de contrôle d'avant son arène (ignoré sans arène).
+  du point de contrôle d'avant son arène, un vol avec boss (f1) du début de son combat (ignoré sans arène ni boss).
 - Sauvegarde (`localStorage` `xeno-rift-save-v1`) en version 2 depuis le plan 03 : `crystals`, `upgrades` (par arme),
   `ship` (`gun`, `shield`, `boost`), `extraHearts`, `crew`, `blueprints`, `story` (`seen` : marques de l'histoire,
-  absent des anciennes sauvegardes) en plus de `unlocked`, `best`, `settings`, `loadout`. Une sauvegarde version 1
+  `prologue`, `liberation-1`, `tutorial-j1` ; absent des anciennes sauvegardes) en plus de `unlocked`, `best`, `settings`, `loadout`. Une sauvegarde version 1
   écrite à la main est migrée (pas remise à zéro), réécrite en version 2 au premier enregistrement ; pour poser des
   achats avant le chargement, écrire une version 2 (voir `patchSave` de `small-screens`). Progression par
   identifiants (plan 04) : une étape est réussie si son id figure dans `best`, ouverte si c'est la première, une
@@ -239,7 +249,10 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
 - Clavier : flèches / WASD, Espace = saut (2D) et turbo (vol), K = saut, Haut/W = haut (visée, portes ; ne fait
   plus sauter), Bas/S = accroupi (+ Saut : descente d'une plateforme `=` ou mobile), J/X/F = tir, Maj = turbo,
   Échap/P = pause, Entrée/Espace passent l'intro.
-- Écrans : `.screens [data-screen=title|select|options|intro|results|hangar|fail|end|error]` ; pause :
+- Écrans : `.screens [data-screen=title|select|options|intro|cutscene|results|hangar|fail|end|error]` ; cinématique
+  (phase `story`) : `.cs[data-cutscene="prologue|liberation"]`, bouton `.cs-skip` (Passer), bulle `.cs-bubble`, annonces
+  des bandeaux dans `.cs > .xr-sr` ; Options : `.options-story` (Revoir les cinématiques), liste
+  `.confirm--story.is-open .story-item[data-cutscene]` ; pause :
   `.overlay.pause.is-open`, bouton `.btn-primary` (REPRENDRE) ; HUD : `.hud-pause`, jauge `.hud-heat[data-weapon]`
   (`--heat-step` : graduations, `.is-over` : SURCHAUFFE), anneaux `.hud-powers .hud-power.is-on[data-kind=speed|
   rapid|shield]` (`.is-ending` : fin proche), cœurs `.hud-hearts .hud-heart` (`.is-empty`), boucliers du vol
@@ -284,14 +297,20 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   tactiles, confirmation, mention « Tess à l’établi » en mode test (équipage posé dans la sauvegarde), captures aux 4
   tailles ; aussi en `--prod`, sans ce qui demande les aides DEV) ; `art-preview` (diag) capture `preview/art.html` (Kaï et
   son bras, poses accroupies, portes, stand de tir des 4 armes) pour une revue à l'œil.
-- **Refonte sans changement visible** : `theme-captures` (diag, ≈ 45 s) capture tout ce qui dépend du thème 2D de façon
-  reproductible : `preview/art.html` (planche, stand de tir, 3 vues du monde, avec avance rapide de la parallaxe) de
-  chaque thème, avec `Math.random` semé et une horloge virtuelle (1/60 s par image, `performance.now` et
-  `requestAnimationFrame` remplacés, pages `preview/` seulement) figée à l'image 90, textes Phaser masqués (police
-  chargée à un moment variable), plus l'empreinte des pixels de chaque texture ; puis le choix du niveau (une capture
-  par page : `ui-select-w<monde>`) et la carte d'intro de chaque étape de `STAGES` (lu dans `/src/core/stages.ts` ;
-  carte touchée par `pickStage`), avec `animations: 'disabled'` et le fond des menus masqué (ses
-  calques animés varient d'une unité sur quelques pixels). Il écrit `hashes.json` dans son dossier de captures.
+- **Refonte sans changement visible** : `theme-captures` (diag, ≈ 1 min 50) capture tout ce qui dépend du thème 2D et
+  du parcours de vol de façon reproductible : `preview/art.html` (planche, stand de tir, 3 vues du monde, avec avance
+  rapide de la parallaxe) de chaque thème, avec `Math.random` semé et une horloge virtuelle (1/60 s par image,
+  `performance.now` et `requestAnimationFrame` remplacés, pages `preview/` seulement) figée à l'image 90, textes
+  Phaser masqués (police chargée à un moment variable), plus l'empreinte des pixels de chaque texture ; puis le choix
+  du niveau (une capture par page : `ui-select-w<monde>`) et la carte d'intro de chaque étape de `STAGES` (lu dans
+  `/src/core/stages.ts` ; carte touchée par `pickStage`), avec `animations: 'disabled'` et le fond des menus masqué
+  (ses calques animés varient d'une unité sur quelques pixels) ; enfin `preview/flight.html` de chaque étape de vol
+  de `STAGES` (844x390, `flight-<étape>-<vue>` : début et milieu du travelling d'intro, vol en pilote automatique à
+  8 et 40 s ; le léviathan de f1 est dans les 3 dernières vues, le ver de f2 au moins dans celle de 8 s), même aléa,
+  horloge à 1/20 s par image figée à l'image voulue (paramètres d'URL `xrFreeze` et `xrStep`, lus par le script
+  d'horloge, ignorés par les pages), toast masqué (effacé par un minuteur réel), avec `__xr3d.info()` à l'image
+  figée (portails, chrono, appels de dessin, programmes… comparés aussi). Deux exécutions du même code donnent les
+  mêmes pixels, vol compris (vérifié à l'étape 13 du plan 04). Il écrit `hashes.json` dans son dossier de captures.
   Usage : une exécution avant la refonte, copier `tests/e2e/out/theme-captures/` hors de `out/` (vidé à chaque
   passage), puis relancer après avec `XR_CAPTURES_REF=<copie>` : il échoue sur le moindre pixel ou la moindre
   texture différente, et sur une capture présente d'un seul côté, et écrit `diff-<capture>.png` (pixels différents
@@ -525,6 +544,32 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   recopiées : hauteurs de rebond (`MUSHROOM_BOUNCE_TILES`, `MUSHROOM_BOUNCE_HELD_TILES`), `MAX_RISE_V`, `MAX_FALL`,
   colonnes de j2 (champignons, fenêtres, tronc, rocher, portes, Tess, arène, pluie), `DROPS` et `WARN_MS` de
   `src/game2d/engine/sporeRain.ts`.
+- **Cinématiques (plan 04, étapes 14 à 16, choix 14)** : une cinématique se joue d'elle-même la première fois, puis
+  elle est notée vue dans `story.seen` (à sa fin ou au Passer) : le prologue (marque `prologue`) avant la carte d'intro
+  de la première étape lancée par JOUER, une carte des Niveaux ou le hangar (jamais par `?stage=`, REJOUER ni
+  Réessayer, sans carte d'intro), la libération (`liberation-1`, monde 1) après la première victoire sur j3, avant
+  les résultats (`?stage=j3` compris). Retour Android, Échap et Retour arrière = Passer ; Entrée et Espace ne passent
+  pas ; arrêtée en arrière-plan, page cachée ou portrait, elle reprend seule ; Options › « Revoir les cinématiques »
+  (liste des cinématiques vues, rejouées sans changer les marques) ; « Réinitialiser la progression » les remet à
+  non vues. **Tout scénario qui passe par JOUER, une carte des Niveaux, le départ du hangar ou une victoire sur j3
+  démarre cinématiques vues** (`seedSave(t, SEEN_STORY)` avant `t.goto`, ou `story: { seen: STORY_MARKS }` dans une
+  sauvegarde écrite par le test : `back-button`, `background-intro`, `audio-lifecycle`, `prod-build`, `stress-laps`,
+  `background-3d`, `j1-ctx-asleep`, `j3-ctx-boss`, `flight-autopilot`, `weapons`, `hangar` (dès B), `theme-captures`) ;
+  seuls `story-flow`, `campaign-flow` (prologue coupé par le bouton Passer, libération par Échap), `boss-whale` (G :
+  libération coupée par le bouton ; chaque Passer vérifié par `skipCutscene`), `progress-ids` (prologue de chaque sauvegarde injectée au premier lancement, aussi
+  en `--prod`) et `small-screens` (prologue à chaque taille : marques effacées avant, Passer et bulle mesurés) les
+  jouent. `story-flow` (full, dev, ≈ 1 min 25) : `?stage=j1` sur une sauvegarde neuve sans prologue ; JOUER → prologue
+  (musique `story` niveau 0, repère « signal », bips `lumaBip` ≥ 118 ms d'écart), Entrée / Espace sans effet, page
+  cachée, pause Capacitor et portrait qui l'arrêtent (horloge figée) puis reprise seule, Passer et bulle de 844x390 à
+  640x320 avec une encoche simulée (`--sal` / `--sar` posées sur `:root`), retour Android = Passer (coupé) → carte
+  d'intro, marque enregistrée ; second JOUER et carte j1 sans prologue ; `?stage=j3` gagné → libération (music null puis
+  `story` niveau 1, « NOUVELLE COMPÉTENCE : DOUBLE SAUT » annoncé, repères dans l'ordre, captures du bandeau à
+  640x320 et 844x390, avec et sans encoche de 44 px, cinématique figée par une pause Capacitor : le bandeau rétrécit
+  pour s'arrêter avant Passer, `View.skipLeft` de `src/story`) jouée jusqu'au bout → résultats « Compétence : double saut » ; REJOUER gagné sans libération ;
+  Options › Revoir (liste en `<button>`, libération revue, Retour arrière = Passer, coupée → Options, marques
+  inchangées), Réinitialiser (liste vide, prologue rejoué au JOUER suivant, coupé par un clic sur Passer) ; musique coupée : nœuds audio revenus
+  au graphe fixe. Repères sonores → effets : `CUE_SFX` et `cutsceneAudio` de `src/ui/screens/cutscene.ts` (bips :
+  `voicePitch` de `src/ui/radio.ts`), repris tels quels par `/preview/story.html?sound=1`.
 - **Campagne à 6 étapes** (`j1 j2 j3 f1 m1 f2`, 18 étoiles) : les scénarios lisent les étapes plutôt que de les recopier. `menu` et
   `progress-ids` (aussi en `--prod`) prennent l'ordre des cartes des Niveaux (verrous attendus d'après les étapes
   réussies, étoiles du monde et total « n/3 × cartes ») ; `campaign-flow` (j2 réussie : « Équipière : Tess », Tess à
@@ -534,13 +579,16 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   suivent `STAGES` ; `j1-ctx-asleep` et `background-3d` jouent le niveau qui précède f1 (`stageBefore` : j3, gagné par
   `__xr2d.win()`) ; `j1-play` lit l'étape suivante de j1 ; `hangar` et `small-screens` passent par j2 (« Redescendre »),
   `hangar` puis par j3 (double saut déjà appris par sa sauvegarde de départ : pas de ligne « Compétence ») avant le
-  Vol 1 ; `campaign-flow` joue j3 (arrivée par le faisceau,
-  défaite du gardien par `__xr2d.win()` pendant son arrivée, jouée à sa hauteur et dans la vue, « Compétence : double saut », prime +5 000, double saut enregistré) ; `menu`
+  Vol 1 ; `campaign-flow` commence par le prologue et joue j3 (arrivée par le faisceau,
+  défaite du gardien par `__xr2d.win()` pendant son arrivée, jouée à sa hauteur et dans la vue, puis la libération,
+  « Compétence : double saut », prime +5 000, double saut enregistré ; à la fin, marques `prologue`, `liberation-1`
+  et `tutorial-j1`) ; `menu`
   vérifie l'ordre `j1 j2 j3 f1` du monde 1 et les trois titres.
 - **Progression (plan 04)** : `progress-ids` (full, aussi en `--prod`, ≈ 50 s ; ≈ 30 s sans sa partie E) injecte des
   sauvegardes (neuve, version 1 « unlocked: 3 » et « unlocked: 2 », version 2 avec ou sans `story` ; « unlocked: 3 »
   avec j1 f1 m1 réussis ouvre aussi j2 et f2, JOUER → j2 ; version 2 avec j2 réussie et l'équipage vide : Tess rendue
-  au chargement, mention « Tess à l’établi » `.hg-caption .hg-crew` au hangar) et vérifie sur la
+  au chargement, mention « Tess à l’établi » `.hg-caption .hg-crew` au hangar ; sans marque `prologue`, le premier
+  lancement de chaque sauvegarde, par JOUER ou par une carte, passe par le prologue, touché « Passer ») et vérifie sur la
   page : ligne sous JOUER (« Nouvelle aventure », « Continuer · … »), carte d'intro lancée par JOUER (Échap revient à
   l'accueil avant le lancement), verrous, records et étoiles (cartes, monde, total), page ouverte, plan du
   mitrailleur rendu à qui a fini f1 (état de l'arme au hangar), retour du hangar sur la même page, glissements (doigt
@@ -571,7 +619,9 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
 - **Scénario du combat en vol (plan 03, 3b ; TIR et énergie du 29/10/2026)** : `flight-combat` (full, ≈ 1 min 45) :
   0. parcours construits dans la page (`import('/src/game3d/courses.ts')`) : vagues déterministes et attendues, hors
   des portails et de leur ligne d'approche (fenêtres de `genWaves` recopiées), portails, rochers (tous les champs),
-  trajectoire et distorsion identiques à ceux d'avant 3b (hachage `COURSE_FP` relevé dans Chrome sur f4275db) ;
+  trajectoire et distorsion de la graine (`generateCourse`) identiques à ceux d'avant 3b (hachage `COURSE_FP` relevé
+  dans Chrome sur f4275db) ; parcours d'une partie (`buildCourse`) : f2 identique, f1 sans les 12 rochers au-delà
+  du dernier portail (arène du boss, plan 04 étape 17 ; un cristal possible de moins : `CRYSTALS_TOTAL` f1 = 22) ;
   A. f1, canon léger, pilote automatique (il tient TIR sur les cibles atteignables) : aucun tir au départ sans appui,
   chasseur abattu en 3 coups (sons « touché » des ennemis, volume 0,8), mine `spawn('mine', 60)` abattue en < 0,9 s,
   points exacts, cristaux lâchés au pas même de la mort (`crystalsDropped` : 1 mine, 2 chasseur) puis ramassés (HUD),
@@ -614,12 +664,52 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   `small-screens` (HUD du combat, TIR et TURBO de 844x390 à 568x320, aussi turbo en marche et en surchauffe ;
   rubrique Commandes de la Pause sans « Tir manuel »), `touch-controls` (pas de tir automatique : `assertNoAutoFire` ;
   joystick + TURBO + TIR, TIR levé seul), `f1-play` (pas de tir automatique : `assertNoAutoFire` ; turbo et J au
-  clavier : énergie du HUD), `background-3d` (joystick, TURBO et TIR relâchés en
+  clavier : énergie du HUD ; combat du boss lancé par `boss.start()`, gagné par `boss.win()`), `background-3d`
+  (joystick, TURBO et TIR relâchés en
   arrière-plan) et `hangar` (module Turbo : chauffe du turbo et refroidissement mesurés) ; `flight-autopilot` exige
-  au moins un bouclier, des ennemis abattus, des cristaux et moins de 150 appels de dessin, une partie neuve au départ
-  de chaque vol (rien de la précédente) et la réserve = cristaux de f1 + f2 ; `f1-ctx-loss` abat une mine (TIR tenu
-  par `fire`) après chaque restauration sur place ; `stress-laps` compare géométries, textures et programmes du
-  renderer à l'entrée en vol au 1er et au dernier tour.
+  au moins un bouclier, des ennemis abattus, des cristaux et moins de 150 appels de dessin (combat compris), une partie
+  neuve au départ de chaque vol (rien de la précédente), le boss de f1 battu par le pilote automatique (moins de 60 s
+  de combat, « Boss vaincu +3 000 » aux résultats ; aucune prime pour f2) et la réserve = cristaux de f1 + f2 ;
+  `f1-ctx-loss` abat une mine (TIR tenu par `fire`) après chaque restauration sur place ; `stress-laps` compare
+  géométries, textures et programmes du renderer à l'entrée en vol au 1er et au dernier tour.
+- **Combat du boss en vol (plan 04, étape 17 ; choix 7 et 15, décisions 20 et 21)** : un parcours avec boss
+  (`CourseDef.boss` : f1, boss PROVISOIRE de `src/game3d/bosses/provisional.ts` en attendant le léviathan de
+  l'étape 18 : noyau blindé, rail de 3 cibles par phase, 2 phases, orbes) passe en phase `'boss'` dès le dernier
+  portail franchi ou manqué (`info().phase`) : chrono et avancement figés (seule la perte de tous les boucliers fait
+  échouer), musique `boss`, son `bossAppear`, message « Chrono figé ! », portail de distorsion fermé (caché) jusqu'à
+  la victoire, puis ouvert ≈ 230 u devant la Comète (« Portail ouvert ! ») : la distorsion part en l'atteignant ;
+  score = temps restant au début du combat + portails + sans dégâts + points + prime (`StageResult.bossBonus`,
+  « Boss vaincu +3 000 » aux résultats). Une touche par cible exposée, quelle que soit l'arme ; le noyau (dernière
+  cible, jamais exposée) arrête les tirs (son `bossArmor`). On ne tire qu'en tenant TIR (le pilote automatique tient
+  TIR quand une cible peut être touchée et s'aligne sur la cible exposée la plus proche). Comète détruite (ou liaison
+  graphique perdue) en plein combat : `onFail(motif, { at: 'boss', snapshot })` → « Réessayer le combat » : reprise
+  au début de l'arène (30 u après le dernier portail) après le compte à rebours, sans phase `fly`, boucliers pleins,
+  état noté au début du combat rendu (`snapshot` : `course`, `timeLeft`, `flightTime`, `gatesPassed`, `points`,
+  `crystals`, `rocksDestroyed`, `enemiesKilled` ; forme de `src/game3d/snapshot.ts`), boss à neuf, musique `boss`
+  dès le compte à rebours, sans prime sans dégâts ; un nouvel essai perdu rend le même instantané ; « Réessayer »
+  simple = tout le vol. Boss vaincu puis liaison graphique perdue pour de bon avant le portail : issue décidée, étape
+  gagnée (prime comprise), comme une distorsion commencée. `?at=boss` (DEV) part du combat sans instantané (portails comptés franchis, chrono plein) ;
+  `/preview/flight.html?stage=f1&boss=1` aussi (B : combat tout de suite, V : boss vaincu, C : réessayer le combat).
+  Aides `__xr3d.boss` : `info()` (`id`, `name`, `bonus`, `music`, `state` `idle | appear | fight | shift | dying |
+  gone`, `phase`, `phases`, `touches`, `touchesLeft`, `beaten` (prime acquise), `fight` (combat commencé), `atBoss`
+  (départ au combat), `retry` (nouvel essai : instantané lu), `noDamage`, `snapshot`, `hud` (barre affichée), `portal`
+  (`open`, `z`, `dist` : distance de la Comète), `ship` (`x`, `y`, `z`), `targets` (`x`, `y`, `z`, `r`, `open`, `alive` ;
+  le noyau en dernier), `visible`), `start()` (en phase `fly` : portails restants comptés franchis, Comète posée au
+  début de l'arène, combat lancé ; renvoie vrai), `win()` (vaincu comme par les tirs : prime, portail ouvert ;
+  `__xr3d.win()`, lui, passe le combat sans prime et part en distorsion tout de suite), `hit(n = 1)` (une touche par
+  cible exposée, comme un tir ; s'arrête au changement de phase, cibles fermées 1,3 s ; renvoie les touches
+  restantes). `f1-boss` (full, dev, ≈ 2 min) : A. f1 au pilote automatique en avance rapide jusqu'au dernier portail,
+  chrono figé (jeu et HUD), barre « Léviathan » en 6 crans (`.boss-mark` : 1 repère de phase, 4 crans), aucun programme
+  compilé depuis le départ (`info().programs`), appels de dessin < 150, Comète pilotée par des flèches simulées vers
+  une cible (cible visée et atteignable, aucun tir), TIR tenu (`fire`) : une touche, TIR tactile, phase 2 (barre à
+  moitié), perte puis restauration du contexte en plein combat (combat intact), victoire → portail → distorsion →
+  résultats et score exact ; B. boucliers vidés par les orbes (pilote coupé) → « Réessayer le combat » (état rendu,
+  jamais de phase `fly`) → perdu de nouveau → « Réessayer » simple → `boss.start()` → perdu → « Réessayer le combat »
+  → victoire sans prime sans dégâts ; C. `?at=boss`, perte définitive du contexte en plein combat → « Réessayer le
+  combat » sur un contexte neuf, puis boss vaincu et perte définitive avant le portail : issue décidée, « VOL
+  RÉUSSI » avec la prime, un seul écran de résultats ; D. barre de 844x390 à 568x320 (grandes commandes, gaucher) sans chevaucher TIR,
+  TURBO, le joystick au repos, PAUSE ni le HUD du vol (`.hud[data-mode='flight'] .hud-boss` : 188 px à 568 px de
+  large). Valeurs **recopiées en dur** : `BOSS` (nom, touches, phases, prime), `PORTAL_AHEAD`, `SCORE`, `START_TIME`.
 - Champs privés du moteur lisibles dans la page (TypeScript ne les cache pas à l'exécution) : `scene.gun`
   (`burstLeft`, `sinceShotMs`, `heat`, `overheated`), `scene.player.invulnMs`, `enemies.list[i]` (`awake`,
   `body.blocked.down`) : préférer une attente d'état (`waitFor`) à une durée fixe.

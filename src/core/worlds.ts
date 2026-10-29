@@ -1,4 +1,4 @@
-import type { BossId, CrewId, SkillId, StagePart, StageReward, ThemeId, WeaponId } from './types';
+import type { BossId, CrewId, CutsceneId, SkillId, StagePart, StageReward, ThemeId, WeaponId } from './types';
 
 // Table des mondes (docs/plans/04-monde-1.md, point 1) : par monde, son gardien, son naufragé, le boss de son vol
 // et ses étapes dans l'ordre de la campagne. core/stages.ts en tire STAGES ; les textes sont dans core/story.ts.
@@ -11,9 +11,9 @@ export interface WorldStage {
   readonly part: StagePart;
   /** Niveau 2D (registre de game2d/levels) ou parcours de vol (CourseId). */
   readonly levelId: string;
-  /** Cinématiques avant la carte d'intro et avant les résultats (étape 14). */
-  readonly before?: string;
-  readonly after?: string;
+  /** Cinématiques avant la carte d'intro et avant les résultats (StageDef.before / after). */
+  readonly before?: CutsceneId;
+  readonly after?: CutsceneId;
   /** Données à la réussite, réappliquées au chargement (core/save.ts). */
   readonly rewards?: readonly StageReward[];
   /** Boss de l'arène du niveau 2D : le même que LevelData.boss (vérifié par check-levels). */
@@ -41,9 +41,16 @@ export const WORLDS: readonly WorldDef[] = [
     castaway: 'tess',
     flightBoss: { name: 'Léviathan de la nébuleuse', blueprint: 'machinegun' },
     stages: [
-      { id: 'j1', part: 1, levelId: 'jungle', boss: 'blobKing' },
+      { id: 'j1', part: 1, levelId: 'jungle', boss: 'blobKing', before: 'prologue' },
       { id: 'j2', part: 2, levelId: 'jungle2', boss: 'beetleTitan', rewards: [{ kind: 'crew', id: 'tess' }] },
-      { id: 'j3', part: 3, levelId: 'jungle3', boss: 'whale', rewards: [{ kind: 'skill', id: 'doubleJump' }] },
+      {
+        id: 'j3',
+        part: 3,
+        levelId: 'jungle3',
+        boss: 'whale',
+        after: 'liberation',
+        rewards: [{ kind: 'skill', id: 'doubleJump' }],
+      },
       { id: 'f1', part: 4, levelId: 'nebula', rewards: [{ kind: 'blueprint', id: 'machinegun' }] },
     ],
   },

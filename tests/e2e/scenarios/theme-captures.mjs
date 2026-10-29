@@ -1,9 +1,12 @@
-// Diagnostic : captures reproductibles de tout ce qui dépend du thème 2D, pour vérifier qu'une refonte ne change
-// aucun pixel. Pages preview/art.html (planche, stand de tir, monde : 3 vues dont une avance rapide de la
-// parallaxe) de chaque thème, avec un aléa semé et une horloge virtuelle (1/60 s par image) figée à l'image
-// FREEZE_FRAME, textes Phaser masqués (police chargée à un moment variable) ; empreinte de chaque texture
-// générée. Interface : choix du niveau (une capture par page, donc par monde) et carte d'intro de chaque étape de
-// STAGES (animations CSS arrêtées, fond des menus masqué), classes et icônes des cartes.
+// Diagnostic : captures reproductibles de tout ce qui dépend du thème 2D et du parcours de vol, pour vérifier
+// qu'une refonte ne change aucun pixel. Pages preview/art.html (planche, stand de tir, monde : 3 vues dont une
+// avance rapide de la parallaxe) de chaque thème, avec un aléa semé et une horloge virtuelle (1/60 s par image)
+// figée à l'image FREEZE_FRAME, textes Phaser masqués (police chargée à un moment variable) ; empreinte de chaque
+// texture générée. Interface : choix du niveau (une capture par page, donc par monde) et carte d'intro de chaque
+// étape de STAGES (animations CSS arrêtées, fond des menus masqué), classes et icônes des cartes. Vol : page
+// preview/flight.html de chaque étape de vol de STAGES, même aléa et même horloge (FLIGHT_VIEWS : début et milieu
+// du travelling d'intro, vol en pilote automatique), toast masqué (son effacement suit l'horloge réelle), avec
+// __xr3d.info() à l'image figée (phase, portails, chrono, appels de dessin…).
 // Écrit hashes.json dans son dossier de captures. Avec XR_CAPTURES_REF=<dossier d'une exécution précédente>
 // (copié hors de tests/e2e/out, vidé à chaque passage), compare pixel par pixel, texture par texture, et échoue
 // sur la moindre différence, capture manquante d'un côté ou de l'autre comprise (image diff-<capture>.png :
@@ -13,15 +16,15 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { assert, waitFor, waitForScreen, clickText } from '../lib/helpers.mjs';
-import { pickStage, waitSelectPage } from '../lib/core.mjs';
+import { SEEN_STORY, pickStage, seedSave, waitSelectPage } from '../lib/core.mjs';
 
 const { PNG } = createRequire(import.meta.url)('playwright-core/lib/utilsBundle');
 
 export const meta = {
-  title: 'Captures par thème (preview/art.html, choix du niveau, intros) : comparaison au pixel avec XR_CAPTURES_REF',
+  title: 'Captures par thème et par parcours (preview/art.html, choix du niveau, intros, preview/flight.html) : comparaison au pixel avec XR_CAPTURES_REF',
   suites: ['diag'],
   dev: true,
-  timeoutMs: 240000,
+  timeoutMs: 420000,
   viewport: { width: 844, height: 390 },
   // La page d'aperçu n'a pas d'icône : Chrome demande /favicon.ico (404 du serveur de dev).
   allowConsole: [/^Failed to load resource: the server responded with a status of 404/],
@@ -40,10 +43,29 @@ const ART_VIEWS = [
   // Caméra en mouvement, méduse-baleine replacée à droite (aléa).
   { view: 'world', size: [1280, 720], extra: '&speed=90&ff=40', tag: 'world-run-ff40' },
 ];
+/**
+ * Vol (preview/flight.html, 844x390) : image figée `freeze` d'une horloge virtuelle qui avance de `step` / 60 s
+ * par image (3 : 1/20 s, le plus grand pas du vol sans écrêtage) ; intro de 3 s, puis vol.
+ */
+const FLIGHT_VIEWS = [
+  // Caméra devant la Comète : planète de départ derrière elle.
+  { tag: 'intro-a', freeze: 1, step: 3 },
+  // Milieu du travelling vers la poursuite.
+  { tag: 'intro-b', freeze: 30, step: 3 },
+  // Vol en pilote automatique (tir, rochers, portails, planètes et créature devant).
+  { tag: 'fly-8s', freeze: 160, step: 3, extra: '&autopilot=1' },
+  { tag: 'fly-40s', freeze: 800, step: 3, extra: '&autopilot=1' },
+];
 
-/** Aperçu seulement : Math.random semé, horloge virtuelle, gel à FREEZE_FRAME (textes masqués juste avant). */
-function freezeScript({ seed, freezeAt }) {
+/**
+ * Aperçu seulement : Math.random semé, horloge virtuelle, gel à FREEZE_FRAME (textes masqués juste avant). Paramètres
+ * d'URL lus ici (la page les ignore) : xrFreeze (image du gel), xrStep (pas de l'horloge, en 1/60 s).
+ */
+function freezeScript({ seed, freezeAt: freezeDefault }) {
   if (!location.pathname.includes('/preview/')) return;
+  const q = new URLSearchParams(location.search);
+  const freezeAt = Number(q.get('xrFreeze')) || freezeDefault;
+  const step = Number(q.get('xrStep')) || 1;
   let s = seed >>> 0;
   Math.random = () => {
     s = (s + 0x6d2b79f5) >>> 0;
@@ -67,7 +89,7 @@ function freezeScript({ seed, freezeAt }) {
           return;
         }
         frame++;
-        now = (frame * 1000) / 60;
+        now = (frame * step * 1000) / 60;
         window.__xrFreeze.frame = frame;
         if (frame === freezeAt) {
           const sc = window.__artScene;
@@ -147,7 +169,7 @@ function diffImage(a, b) {
 }
 
 export default async function (t) {
-  const result = { art: {}, ui: {} };
+  const result = { art: {}, ui: {}, flight: {} };
   const shots = {};
   const shoot = async (tag) => {
     const file = path.join(t.out, `${tag}.png`);
@@ -176,6 +198,8 @@ export default async function (t) {
   }
 
   // ------------------------------------------------------------ Interface : choix du niveau et intros
+  // Prologue déjà vu (plan 04, choix 14) : une carte des Niveaux mène droit à sa carte d'intro.
+  await seedSave(t, SEEN_STORY);
   await t.page.setViewportSize(meta.viewport);
   let stages = [];
   for (let n = -1; n < stages.length; n++) {
@@ -190,7 +214,7 @@ export default async function (t) {
     if (n < 0) {
       // Étapes lues dans STAGES (même module que le jeu, servi par Vite).
       stages = await t.ev(async () =>
-        (await import('/src/core/stages.ts')).STAGES.map((s) => ({ id: s.id, title: s.title })),
+        (await import('/src/core/stages.ts')).STAGES.map((s) => ({ id: s.id, title: s.title, kind: s.kind })),
       );
       assert(stages.length > 0, 'STAGES lu depuis /src/core/stages.ts');
       result.ui.cards = await t.ev(() =>
@@ -235,11 +259,37 @@ export default async function (t) {
     result.ui[`intro-${id}`] = { cls: intro.cls, art: intro.art };
   }
 
+  // ------------------------------------------------------------ Vol 3D : preview/flight.html de chaque étape de vol
+  const flights = stages.filter((s) => s.kind === 'flight');
+  assert(flights.length > 0, 'étapes de vol dans STAGES');
+  for (const st of flights) {
+    for (const v of FLIGHT_VIEWS) {
+      const tag = `flight-${st.id}-${v.tag}`;
+      await t.goto(`preview/flight.html?stage=${st.id}${v.extra || ''}&xrFreeze=${v.freeze}&xrStep=${v.step}`);
+      await waitFor(t, () => window.__xrFreeze && window.__xrFreeze.frozen && !!window.__xr3d, {
+        timeout: 120000,
+        label: `vol ${tag} figé`,
+      });
+      const hud = await t.ev(() => document.getElementById('hud').textContent.split('\n')[0]);
+      assert(hud.startsWith(`${st.id} `), `${tag} : étape de l'aperçu (${hud})`);
+      // Toast masqué : son effacement suit l'horloge réelle (setTimeout), pas l'horloge virtuelle.
+      await t.page.addStyleTag({ content: '#toast { visibility: hidden !important; }' });
+      const info = await t.ev(() => window.__xr3d.info());
+      result.flight[tag] = { info };
+      await shoot(tag);
+      t.log(`${tag} : ${info.phase}, portails ${info.gates}/${info.gatesTotal}, ${info.drawCalls} appels de dessin`);
+    }
+  }
+
   // ------------------------------------------------------------ Empreintes et comparaison
   for (const [tag, file] of Object.entries(shots)) {
     const png = PNG.sync.read(fs.readFileSync(file));
-    (tag.startsWith('art-') ? result.art[tag] : (result.ui[tag] = result.ui[tag] || {})).pixels =
-      `${png.width}x${png.height} ${pixelHash(png)}`;
+    const entry = tag.startsWith('art-')
+      ? result.art[tag]
+      : tag.startsWith('flight-')
+        ? result.flight[tag]
+        : (result.ui[tag] = result.ui[tag] || {});
+    entry.pixels = `${png.width}x${png.height} ${pixelHash(png)}`;
   }
   fs.writeFileSync(path.join(t.out, 'hashes.json'), `${JSON.stringify(result, null, 1)}\n`);
 
@@ -248,7 +298,7 @@ export default async function (t) {
   const ref = JSON.parse(fs.readFileSync(path.join(refDir, 'hashes.json'), 'utf8'));
   const problems = [];
   // Dans les deux sens : une capture ou une entrée retirée, renommée ou ajoutée est une différence.
-  const tagsOf = (r) => new Set([...Object.keys(r.art), ...Object.keys(r.ui)]);
+  const tagsOf = (r) => new Set([...Object.keys(r.art), ...Object.keys(r.ui), ...Object.keys(r.flight || {})]);
   const refTags = tagsOf(ref);
   const curTags = tagsOf(result);
   for (const tag of refTags) if (!curTags.has(tag)) problems.push(`${tag} : absente de cette exécution`);
@@ -287,6 +337,15 @@ export default async function (t) {
     const cur = result.ui[tag];
     if (!cur) continue;
     if (JSON.stringify({ ...v, pixels: 0 }) !== JSON.stringify({ ...cur, pixels: 0 })) problems.push(`${tag} : classes ou icônes différentes`);
+  }
+  for (const [tag, v] of Object.entries(ref.flight || {})) {
+    const cur = result.flight[tag];
+    if (!cur) continue;
+    for (const k of new Set([...Object.keys(v.info), ...Object.keys(cur.info)])) {
+      const a = JSON.stringify(v.info[k]);
+      const b = JSON.stringify(cur.info[k]);
+      if (a !== b) problems.push(`${tag} : info().${k} ${b} au lieu de ${a}`);
+    }
   }
   t.log(`comparaison à ${refDir} : ${problems.length ? `${problems.length} différence(s)` : 'identique'}`);
   for (const p of problems) t.log(`  ${p}`);

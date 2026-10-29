@@ -7,7 +7,10 @@
 //  D. QUITTER → JOUER → pause Capacitor seule (page visible) pendant la carte d'intro : aucune étape lancée ;
 //     « resume » → l'étape démarre en pause ; pause Capacitor en jeu : REPRENDRE ne fait rien avant « resume ».
 //  E. Arrière-plan sur l'accueil, AVANT de lancer une étape : l'étape suivante démarre normalement (pas en pause).
+//  F. JOUER puis page cachée dans la même tâche (premier fondu, avant la carte d'intro ; cinématiques déjà vues,
+//     aucune à jouer), montrée de nouveau 150 ms plus tard : l'étape démarre quand même en pause, un seul menu.
 import { activeScreen, assert, assertEq, assertNear, clickText, fmt, player2d, waitFor, waitFor2dPlay, waitForScreen } from '../lib/helpers.mjs';
+import { SEEN_STORY, seedSave } from '../lib/core.mjs';
 import {
   cap,
   clickPauseButton,
@@ -58,6 +61,8 @@ async function resumeAndCheck(t, label) {
 
 export default async function (t) {
   await instrument(t);
+  // Cinématiques déjà vues (plan 04, choix 14) : JOUER, les cartes et la fin de j3 ne les jouent pas.
+  await seedSave(t, SEEN_STORY);
   await t.goto('?touch=1&unlock=1');
   await waitForScreen(t, 'title');
   await t.key('KeyZ', 40); // premier geste : déblocage du son
@@ -154,6 +159,20 @@ export default async function (t) {
   assert(!sE.paused && sE.open === 0, `E : un arrière-plan AVANT le lancement ne doit pas mettre l'étape en pause (${fmt(sE)})`);
   await waitFor2dPlay(t);
   await t.shot('E-started-normally');
+
+  // ---------------------------------------------------------------- F. Page cachée pendant le premier fondu de JOUER
+  await t.wait(200);
+  await t.key('Escape', 40);
+  await waitPaused(t, 'F : Échap → pause');
+  await clickPauseButton(t, 'Quitter');
+  await waitForScreen(t, 'title');
+  await clickThen(t, '.screens [data-screen="title"].is-active', 'Jouer', 'hide');
+  await t.wait(150);
+  await setHidden(t, false);
+  await waitIntroCard(t);
+  await assertStartedPaused(t, 'F');
+  await t.shot('F-play-fade-started-paused');
+  await resumeAndCheck(t, 'F');
   assertEq(await t.ev(() => window.__acs.length), 1, 'un seul AudioContext créé pendant tout le scénario');
   await waitFor(t, () => window.__acs[0].state === 'running', { timeout: 3000, label: 'son actif en fin de scénario' });
 }

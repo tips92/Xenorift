@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { BASE_SHIELDS, BOOST_MULS, MAX_SHIELDS_CAP, MAX_SHIP_GUN_LEVEL } from '../core/hangar';
 import { SHIP_AIM } from '../core/shipGuns';
-import type { CourseId, FlightHud, ModeHandle, ModeHooks, SfxId, StageDef, StageResult } from '../core/types';
+import { stageCourse } from '../core/stages';
+import type { BossHud, CourseId, FlightHud, ModeHandle, ModeHooks, SfxId, StageDef, StageResult, StartAt } from '../core/types';
 import { AsteroidField, chunkGeometry } from './asteroids';
+import { aimBoss, bossAutopilotSpot, createFlightBoss } from './bosses';
+import type { FlightBoss, FlightBossEvents } from './bosses/types';
 import {
   CORRIDOR_R,
   ENEMY_KINDS,
@@ -39,13 +42,15 @@ import {
   type ShotHitFn,
 } from './shots';
 import { bakeSky, type SkyBake } from './sky';
+import { readFlightSnapshot, type FlightSnapshot } from './snapshot';
 import { Bin, clamp, damp, smoothstep } from './util';
 
-// Partie de vol spatial : machine à états (compte à rebours → vol → distorsion / explosion),
-// pilotage, portails, collisions, combat (tir de la Comète, ennemis, cristaux), caméra de poursuite,
-// HUD et nettoyage complet.
+// Partie de vol spatial : machine à états (compte à rebours → vol → [combat de boss →] distorsion / explosion),
+// pilotage, portails, collisions, combat (tir de la Comète, ennemis, cristaux), boss du parcours (CourseDef.boss :
+// phase 'boss' après le dernier portail, chrono figé, portail de distorsion ouvert à la victoire, « Réessayer le
+// combat »), caméra de poursuite, HUD et nettoyage complet.
 
-type Phase = 'intro' | 'fly' | 'warp' | 'dead' | 'timeout' | 'done';
+type Phase = 'intro' | 'fly' | 'boss' | 'warp' | 'dead' | 'timeout' | 'done';
 
 const BOOST_MULT = 1.6;
 /**
@@ -81,6 +86,15 @@ const RESTORE_WAIT_MS = 2000;
 /** Restaurations sur place acceptées par partie (au-delà, GPU jugé instable). */
 const MAX_RESTORES = 2;
 export const CONTEXT_LOST_REASON = 'Liaison graphique perdue';
+
+/** Étape de vol au `levelId` hors de COURSE_IDS (refusée par check-levels) : son message sert de motif d'échec. */
+export class UnknownCourseError extends Error {
+  constructor(levelId: string) {
+    super(`Parcours inconnu : « ${levelId} »`);
+    this.name = 'UnknownCourseError';
+  }
+}
+
 /** Points d'un astéroïde détruit par les tirs, d'un cristal ramassé (ennemis : fiches de enemies.ts). */
 const ROCK_POINTS = 10;
 const CRYSTAL_POINTS = 50;
@@ -88,8 +102,18 @@ const CRYSTAL_POINTS = 50;
 const FIRE_QUEUE = 0.15;
 /** Visée : cône prioritaire = guidage max + cette marge (°), les gros rochers au bord restent atteignables. */
 const AIM_SURE_MARGIN = 1;
+/** Départ au combat (nouvel essai, ?at=boss, __xr3d.boss.start) : à cette distance après le dernier portail (u). */
+const ARENA_IN = 30;
+/** Victoire sur le boss : le portail de distorsion s'ouvre à cette distance devant la Comète (u, ≈ 4 s à 58 u/s). */
+const PORTAL_AHEAD = 230;
+/** Distorsion sans boss vaincu (aide DEV win pendant le combat) : portail ouvert juste devant (u). */
+const PORTAL_NOW = 40;
+/** Écart minimal entre deux sons de blindage (s) : la mitrailleuse en tirerait une douzaine par seconde. */
+const ARMOR_SFX_GAP = 0.15;
 
 const _look = new THREE.Vector3();
+/** Point du choc du corps d'un boss (FlightBoss.hitsShip). */
+const _bossHit = { x: 0, y: 0 };
 const _c = new THREE.Color();
 const _path = { x: 0, y: 0 };
 const _avoid = { x: 0, y: 0 };
@@ -128,6 +152,19 @@ interface DevApi {
    * avant).
    */
   settle(): void;
+  /** Boss du parcours (null sans boss : info() renvoie null, le reste ne fait rien). */
+  boss: {
+    info(): Record<string, unknown> | null;
+    /**
+     * Combat tout de suite (en phase 'fly') : portails restants comptés franchis (comme win), Comète posée au début
+     * de l'arène ; renvoie vrai s'il a commencé.
+     */
+    start(): boolean;
+    /** Boss vaincu comme par les tirs (prime, portail ouvert devant la Comète). */
+    win(): void;
+    /** `n` touches directes sur les cibles exposées (une par cible, comme un tir) ; renvoie les touches restantes. */
+    hit(n?: number): number;
+  };
 }
 
 export class FlightRun implements ModeHandle {
@@ -139,6 +176,7 @@ export class FlightRun implements ModeHandle {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly bin = new Bin();
   private readonly sky: SkyBake;
+  private readonly courseId: CourseId;
   private readonly course: Course;
   private readonly theme: CourseTheme;
   private readonly ship: ShipModel;
@@ -196,6 +234,49 @@ export class FlightRun implements ModeHandle {
     enemyKilled: (kind, x, y, z, points, crystals) => this.enemyKilled(kind, x, y, z, points, crystals),
     shipHit: (_cause, x, y) => this.damageShip(x, y),
   };
+
+  // --- Boss du parcours (CourseDef.boss ; null sans boss) : phase 'boss' après le dernier portail, chrono figé
+  private readonly boss: FlightBoss | null = null;
+  /** Rappels du boss (objet créé une fois). */
+  private readonly bossEvents: FlightBossEvents = {
+    orb: (x, y, z, dx, dy) => {
+      // Plus d'orbe une fois la Comète détruite (le boss continue de bouger jusqu'à la fin de l'étape)
+      if (!this.flying() || this.bossBeaten) return;
+      this.syncShipState();
+      this.enemies.launchOrb(x, y, z, this.shipState, dx, dy);
+    },
+    touched: (x, y, z) => this.bossTouched(x, y, z),
+    armor: (x, y, z) => this.bossArmor(x, y, z),
+    phase: () => {
+      this.hooks.audio.sfx('bossPhase');
+      this.hooks.audio.haptic(80);
+      this.shake = Math.min(1.5, this.shake + 0.5);
+    },
+    defeated: (x, y, z) => this.bossDefeated(x, y, z),
+  };
+  /** Barre de boss du HUD (objet réutilisé), envoyée seulement quand les touches ou la phase changent. */
+  private readonly bossHud: BossHud = { name: '', life: 1, phase: 1, phases: 1, steps: 0 };
+  private bossHudOn = false;
+  private bossHudLeft = -1;
+  private bossHudPhase = 0;
+  /** Départ au début du combat (nouvel essai, ?at=boss) : la phase 'boss' suit le compte à rebours. */
+  private atBoss = false;
+  /** Nouvel essai d'un combat perdu (instantané lu dans startAt) : pas de prime sans dégâts. */
+  private fightRetry = false;
+  /** État noté au début du combat (point de reprise rendu par onFail), ou lu dans startAt ; null avant. */
+  private fightSnap: FlightSnapshot | null = null;
+  /** Combat commencé ; profondeur de la Comète à son début (avancement figé ensuite). */
+  private fightStarted = false;
+  private fightZ = 0;
+  /** Boss vaincu (prime acquise, plus aucun choc) ; profondeur de la Comète à l'ouverture du portail. */
+  private bossBeaten = false;
+  private portalFrom = 0;
+  /** Ennemis abattus avant le combat d'un nouvel essai (EnemyField repart de 0). */
+  private killedBefore = 0;
+  /** Boss déjà simulé pendant ce sous-pas (par simFly). */
+  private bossStepped = false;
+  /** Heure du dernier son de blindage (ARMOR_SFX_GAP). */
+  private armorSfxT = -1;
 
   // --- État de la partie
   private phase: Phase = 'intro';
@@ -285,11 +366,25 @@ export class FlightRun implements ModeHandle {
     const ship = hooks.loadout ? hooks.loadout.ship : undefined;
     this.maxShield = Math.floor(shipValue(ship && ship.maxShields, BASE_SHIELDS, MAX_SHIELDS_CAP, BASE_SHIELDS));
     this.shield = this.maxShield;
-    const courseId: CourseId = stage.levelId === 'asteroids' ? 'asteroids' : 'nebula';
+    // Parcours inconnu (donnée de core/worlds.ts, refusée par check-levels) : construction impossible → onFail
+    // avec son propre motif (pas « Mode 3D indisponible »).
+    const courseId = stageCourse(stage);
+    if (!courseId) throw new UnknownCourseError(stage.levelId);
+    this.courseId = courseId;
     this.course = buildCourse(courseId);
     this.theme = this.course.def.theme;
     this.timeLeft = this.course.def.startTime;
     const theme = this.theme;
+    // Départ au combat (« Réessayer le combat » : instantané du début du combat ; ?at=boss : sans lui) ; ignoré par
+    // un parcours sans boss.
+    const at = hooks.startAt;
+    if (this.course.def.boss && at && at.at === 'boss') {
+      const snap = readFlightSnapshot(at.snapshot, courseId);
+      this.atBoss = true;
+      this.fightRetry = !!snap;
+      this.fightSnap = snap;
+      this.toArena(snap);
+    }
     // Canon : 0 canon léger, 1 mitrailleuse, 2-3 ses améliorations ; portée selon la vitesse du parcours.
     // Module Turbo : chauffe du turbo (×1, ×0,8, ×0,667) et refroidissement de l'énergie (×1, ×1,25, ×1,5).
     const gunLevel = Math.floor(shipValue(ship && ship.gunLevel, 0, MAX_SHIP_GUN_LEVEL, 0));
@@ -337,7 +432,8 @@ export class FlightRun implements ModeHandle {
 
       this.gates = new GateField(this.course, theme, this.bin);
       this.scene.add(this.gates.group);
-      this.portal = new WarpPortal(this.course.warpZ, theme, this.bin);
+      // Avec un boss, le portail de distorsion reste fermé jusqu'à la victoire (puis placé devant la Comète)
+      this.portal = new WarpPortal(this.course.warpZ, !this.course.def.boss, theme, this.bin);
       this.scene.add(this.portal.group);
       this.rocks = new AsteroidField(this.course, theme, sky.background, this.bin);
       this.scene.add(this.rocks.group);
@@ -359,6 +455,12 @@ export class FlightRun implements ModeHandle {
       this.scene.add(this.pickups.group);
       this.enemies = new EnemyField(this.course, theme, this.particles, this.enemyEvents, this.bin);
       this.scene.add(this.enemies.group);
+      // Boss du parcours : créé et attaché caché avant la compilation (rien à compiler en plein vol)
+      const bossId = this.course.def.boss;
+      if (bossId) {
+        this.boss = createFlightBoss(bossId, { theme, env: sky.env, events: this.bossEvents, bin: this.bin });
+        this.scene.add(this.boss.group);
+      }
       this.screen = new ScreenFx(container);
 
       this.gateNextColor = new THREE.Color(theme.gateNext);
@@ -384,6 +486,7 @@ export class FlightRun implements ModeHandle {
       window.removeEventListener('resize', this.onWinResize);
       (this as unknown as { screen?: ScreenFx }).screen?.dispose();
       (this as unknown as { enemies?: EnemyField }).enemies?.dispose();
+      this.boss?.dispose();
       this.scene.clear();
       this.bin.disposeAll();
       // Contexte perdu en route : renderer jeté, la prochaine tentative repartira d'un contexte neuf
@@ -394,8 +497,8 @@ export class FlightRun implements ModeHandle {
       throw lost ? new ContextLostError() : err;
     }
 
-    // --- Démarrage
-    hooks.audio.music(courseId);
+    // --- Démarrage (départ au combat : sa musique dès le compte à rebours)
+    hooks.audio.music(this.atBoss && this.boss ? this.boss.def.music : courseId);
     hooks.input.clearPresses();
     if (hooks.settings.tilt) hooks.input.calibrateTilt();
     this.pushHud();
@@ -451,6 +554,7 @@ export class FlightRun implements ModeHandle {
     const drop = this.ctxLost || this.restores > 0 || isContextLost(this.renderer);
     if (drop) this.dropRenderer();
     this.enemies.dispose();
+    this.boss?.dispose();
     this.shots.clear();
     this.pickups.clear();
     // Tampons d'instances (rochers, éclats, tirs, cristaux…) : hors du Bin, libérés par l'InstancedMesh
@@ -542,13 +646,15 @@ export class FlightRun implements ModeHandle {
     this.finished = true;
     this.stopLoop();
     this.dropRenderer();
-    // Issue déjà décidée (distorsion atteinte, vaisseau détruit, chrono) : on la garde
+    // Issue déjà décidée (distorsion atteinte, boss vaincu, vaisseau détruit, chrono) : on la garde. En plein combat
+    // de boss : point de reprise « Réessayer le combat ».
     const phase = this.phase;
     this.setPhase('done');
     if (phase === 'warp' && this.result) this.hooks.onComplete(this.result);
-    else if (phase === 'dead') this.hooks.onFail('Vaisseau détruit !');
+    else if (phase === 'boss' && this.bossBeaten) this.hooks.onComplete((this.result = this.makeResult()));
+    else if (phase === 'dead') this.hooks.onFail('Vaisseau détruit !', this.fightRetryPoint());
     else if (phase === 'timeout') this.hooks.onFail('Temps écoulé !');
-    else this.hooks.onFail(CONTEXT_LOST_REASON);
+    else this.hooks.onFail(CONTEXT_LOST_REASON, this.fightRetryPoint());
   }
 
   private dropRenderer(): void {
@@ -650,11 +756,13 @@ export class FlightRun implements ModeHandle {
     this.phaseT += h;
     const startPhase = this.phase;
     this.enemyStepped = false;
+    this.bossStepped = false;
     switch (this.phase) {
       case 'intro':
         this.simIntro();
         break;
       case 'fly':
+      case 'boss':
         this.simFly(h);
         break;
       case 'warp':
@@ -679,15 +787,21 @@ export class FlightRun implements ModeHandle {
     }
     if (this.invuln > 0) this.invuln = Math.max(0, this.invuln - h);
 
-    // Combat, toutes phases : hors vol, les ennemis finissent leur mouvement sans toucher la Comète ;
-    // les projectiles en vol vont au bout ; les cristaux ne se ramassent qu'en vol.
+    // Combat, toutes phases : hors vol, les ennemis (et le boss) finissent leur mouvement sans toucher la Comète ;
+    // les projectiles en vol vont au bout ; les cristaux ne se ramassent qu'en vol (combat de boss compris).
     if (!this.enemyStepped && startPhase !== 'intro' && this.phase !== 'intro') {
       this.syncShipState();
       this.enemies.update(h, this.time, this.shipState, false);
     }
-    this.shots.update(h, this.time, this.rocks, this.enemies, this.onShotHit);
-    const got = this.pickups.update(h, this.time, this.x, this.y, this.z, this.phase === 'fly');
+    if (!this.bossStepped && this.fightStarted) this.stepBoss(h, false);
+    this.shots.update(h, this.time, this.rocks, this.enemies, this.boss, this.onShotHit);
+    const got = this.pickups.update(h, this.time, this.x, this.y, this.z, this.flying());
     if (got > 0) this.collectCrystals(got);
+  }
+
+  /** Vol piloté : parcours ('fly') ou combat de boss ('boss'). */
+  private flying(): boolean {
+    return this.phase === 'fly' || this.phase === 'boss';
   }
 
   /** La Comète vue par les ennemis. */
@@ -718,7 +832,9 @@ export class FlightRun implements ModeHandle {
       hud.toast('Go !', 'good');
       audio.sfx('takeoff', { volume: 0.7 });
       this.hooks.input.clearPresses();
-      this.setPhase('fly');
+      // Départ au combat : le boss arrive dès la fin du compte à rebours
+      if (this.atBoss) this.startBoss();
+      else this.setPhase('fly');
     }
   }
 
@@ -743,20 +859,35 @@ export class FlightRun implements ModeHandle {
     this.travel += this.speed * h;
   }
 
+  /** Un sous-pas de vol piloté : parcours ('fly') ou combat de boss ('boss', chrono figé). */
   private simFly(h: number): void {
     const def = this.course.def;
     const input = this.hooks.input.state;
+    const fight = this.phase === 'boss';
     let sx: number;
     let sy: number;
     let wantBoost: boolean;
     if (this.autopilot) {
-      // Pilote automatique (outil de dev) : vise la trajectoire idéale un peu en avant
-      const look = Math.max(8, this.speed * 0.3);
-      pathAt(this.course.path, this.z - look, _path);
-      // Mine ou orbe sur la route : écart latéral conseillé par le champ d'ennemis
-      if (this.enemies.avoid(this.x, this.y, this.z, this.speed, _avoid)) {
-        _path.x += _avoid.x;
-        _path.y += _avoid.y;
+      if (fight) {
+        // Combat (pilote automatique) : s'aligne sur une cible exposée du boss ; sinon (arrivée, changement de
+        // phase, boss vaincu) au centre du couloir, où s'ouvre le portail ; orbes évitées autour de ce point
+        if (this.bossBeaten || !this.boss || !bossAutopilotSpot(this.boss, this.x, this.y, _path)) {
+          _path.x = 0;
+          _path.y = 0;
+        }
+        if (this.enemies.avoid(this.x, this.y, this.z, this.speed, _avoid, _path.x, _path.y)) {
+          _path.x += _avoid.x;
+          _path.y += _avoid.y;
+        }
+      } else {
+        // Pilote automatique (outil de dev) : vise la trajectoire idéale un peu en avant
+        const look = Math.max(8, this.speed * 0.3);
+        pathAt(this.course.path, this.z - look, _path);
+        // Mine ou orbe sur la route : écart latéral conseillé par le champ d'ennemis
+        if (this.enemies.avoid(this.x, this.y, this.z, this.speed, _avoid)) {
+          _path.x += _avoid.x;
+          _path.y += _avoid.y;
+        }
       }
       let tvx = (_path.x - this.x) * 3.2;
       let tvy = (_path.y - this.y) * 3.2;
@@ -768,11 +899,12 @@ export class FlightRun implements ModeHandle {
       sx = tvx / MAX_LAT;
       sy = tvy / MAX_LAT;
       // Turbo à bon escient : loin du prochain portail, lancé sur une énergie presque froide et relâché avant
-      // d'entamer la réserve du canon (le tir se décide dans updateGun)
+      // d'entamer la réserve du canon (le tir se décide dans updateGun) ; jamais pendant un combat (le boss garde
+      // ses distances, l'énergie sert au tir)
       const ng = this.course.gates[this.nextGate];
       const far = !ng || this.z - ng.z > 140;
       const heat = this.gun.heat;
-      this.apBoost = far && !this.gun.overheated && (heat < AP_BOOST_START || (this.apBoost && heat < AP_BOOST_STOP));
+      this.apBoost = !fight && far && !this.gun.overheated && (heat < AP_BOOST_START || (this.apBoost && heat < AP_BOOST_STOP));
       wantBoost = this.apBoost;
     } else {
       sx = input.stickX;
@@ -818,30 +950,42 @@ export class FlightRun implements ModeHandle {
     const pz = this.z;
     this.advance(h);
     this.flightTime += h;
-    this.timeLeft -= h;
+    // Chrono figé pendant le combat de boss (choix 15 : seule la perte de tous les boucliers fait échouer)
+    if (!fight) this.timeLeft -= h;
 
     this.checkGates(px, py, pz);
 
     const hit = this.rocks.hitTest(this.x, this.y, this.z, SHIP_HIT_R, this.time);
     if (hit >= 0) this.onRockHit(hit);
-    if (this.phase !== 'fly') return;
+    if (!this.flying()) return;
 
-    // Ennemis : vagues, IA, orbes, chocs avec la Comète
+    // Ennemis : vagues, IA, orbes, chocs avec la Comète (plus rien ne la touche une fois le boss vaincu)
     this.syncShipState();
-    this.enemies.update(h, this.time, this.shipState, true);
+    this.enemies.update(h, this.time, this.shipState, !this.bossBeaten);
     this.enemyStepped = true;
-    if (this.phase !== 'fly') return;
+    if (!this.flying()) return;
+
+    // Boss : déplacement, cibles, orbes, choc de son corps
+    if (fight) {
+      this.stepBoss(h, true);
+      if (!this.flying()) return;
+    }
 
     this.updateGun(h);
 
-    if (this.z <= this.course.warpZ) {
+    // Distorsion : portail ouvert (dès le départ sans boss, à la victoire sur le boss) atteint
+    if (this.portal.open && this.z <= this.portal.z) {
       this.startWarp();
       return;
     }
+    if (fight) return;
     if (this.timeLeft <= 0) {
       this.timeLeft = 0;
       this.startTimeout();
+      return;
     }
+    // Dernier portail passé (ou manqué) : combat du boss du parcours
+    if (this.boss && this.nextGate >= this.course.gates.length) this.startBoss();
   }
 
   private checkGates(px: number, py: number, pz: number): void {
@@ -920,7 +1064,7 @@ export class FlightRun implements ModeHandle {
    * ralentissement, rebond ; pendant l'invulnérabilité, juste un petit bruit.
    */
   private damageShip(fromX: number, fromY: number): void {
-    if (this.phase !== 'fly') return;
+    if (!this.flying()) return;
     if (this.invuln > 0) {
       this.hooks.audio.sfx('crash', { volume: 0.35, pitch: 1.3 });
       return;
@@ -955,10 +1099,16 @@ export class FlightRun implements ModeHandle {
     // Cible : les ennemis d'abord (un rocher du couloir, presque toujours là, cacherait le chasseur qui vire),
     // le plus proche à portée du guidage (homingDeg + 1°), sinon du cône de visée. Aucun, ou hors d'atteinte du
     // tir guidé : le rocher du couloir choisi de même (s'il peut être touché, ou faute d'ennemi). Une cible que
-    // les tirs déjà en route suffisent à détruire est ignorée (ShotPool.claim).
+    // les tirs déjà en route suffisent à détruire est ignorée (ShotPool.claim). Combat de boss : ses cibles
+    // exposées passent avec les ennemis (la plus proche des deux).
     clearAim(aim);
+    const boss = this.phase === 'boss' && !this.bossBeaten ? this.boss : null;
     this.enemies.aim(this.x, this.y, this.z, this.cosSure, st.range, aim);
-    if (aim.kind === 'none') this.enemies.aim(this.x, this.y, this.z, this.cosCone, st.range, aim);
+    if (boss) aimBoss(boss, this.x, this.y, this.z, this.cosSure, st.range, aim);
+    if (aim.kind === 'none') {
+      this.enemies.aim(this.x, this.y, this.z, this.cosCone, st.range, aim);
+      if (boss) aimBoss(boss, this.x, this.y, this.z, this.cosCone, st.range, aim);
+    }
     this.targetHit = aim.kind !== 'none' && this.canHit(aim);
     if (!this.targetHit) {
       const rock = this.rockAim;
@@ -991,7 +1141,7 @@ export class FlightRun implements ModeHandle {
       // Tir qui doit toucher : ses dégâts sont réservés sur la cible (la visée passe à la suivante quand ils
       // suffisent à la détruire ; sans cela, la mitrailleuse perdait la moitié de ses tirs)
       if (this.shots.fire(_mz.x, _mz.y, _mz.z, d.x, d.y, d.z, speed, st.life, st.damage, st.color, st.length, st.width) && this.targetHit) {
-        this.shots.claim(aim, this.rocks, this.enemies);
+        this.shots.claim(aim, this.rocks, this.enemies, this.boss);
       }
       this.ship.fireFlash(m);
       this.shotsFired++;
@@ -1011,15 +1161,27 @@ export class FlightRun implements ModeHandle {
   /** Le prochain tir, guidé d'au plus homingDeg, toucherait-il la cible `aim` (rayon de la cible + SHOT_R) ? */
   private canHit(aim: Readonly<AimTarget>): boolean {
     const st = this.gun.stats;
-    const r = aim.kind === 'rock' ? this.rocks.rocks[aim.index].r * 0.82 : ENEMY_DEFS[this.enemies.kindOf(aim.index)].radius;
+    const r =
+      aim.kind === 'rock'
+        ? this.rocks.rocks[aim.index].r * 0.82
+        : aim.kind === 'boss' && this.boss
+          ? this.boss.targets[aim.index].r
+          : ENEMY_DEFS[this.enemies.kindOf(aim.index)].radius;
     this.ship.muzzleWorld(this.gun.nextMuzzle, this.x, this.y, this.z, _mz);
     const speed = this.speed + st.speed;
     aimDirection(_mz.x, _mz.y, _mz.z, aim, speed, this.homingRad, _aimDir);
     return shotMiss(_mz.x, _mz.y, _mz.z, _aimDir, speed, aim, st.life) <= r + SHOT_R;
   }
 
-  /** Impact d'un projectile sur un rocher (PV, éclatement, cristal) ou un ennemi (enemies.ts décide de sa mort). */
-  private shotHit(kind: 'rock' | 'enemy', index: number, damage: number, x: number, y: number, z: number): void {
+  /**
+   * Impact d'un projectile sur un rocher (PV, éclatement, cristal), un ennemi (enemies.ts décide de sa mort) ou une
+   * cible du boss (une touche si elle est exposée : rappels touched / armor).
+   */
+  private shotHit(kind: 'rock' | 'enemy' | 'boss', index: number, damage: number, x: number, y: number, z: number): void {
+    if (kind === 'boss') {
+      if (this.boss) this.boss.hitTarget(index, damage);
+      return;
+    }
     if (kind === 'enemy') {
       if (!this.enemies.damage(index, damage)) this.sfx('enemyHit', 0.8, 0.95 + Math.random() * 0.1);
       return;
@@ -1068,6 +1230,156 @@ export class FlightRun implements ModeHandle {
     this.hooks.audio.sfx(id, o);
   }
 
+  // ================================================================ Boss du parcours (plan 04, point 22)
+
+  /**
+   * Comète posée au début de l'arène du boss (ARENA_IN u après le dernier portail, sur la trajectoire) : portails
+   * restants laissés derrière, comptés franchis (comme win) ; puis, pour un nouvel essai, l'état noté au début du
+   * combat (chrono, portails, points, cristaux, ennemis abattus) sans prime sans dégâts.
+   */
+  private toArena(snap: FlightSnapshot | null): void {
+    const gates = this.course.gates;
+    this.gatesPassed += gates.length - this.nextGate;
+    this.nextGate = gates.length;
+    this.z = gates[gates.length - 1].z - ARENA_IN;
+    pathAt(this.course.path, this.z, _path);
+    this.x = _path.x;
+    this.y = _path.y;
+    this.vx = this.vy = 0;
+    if (!snap) return;
+    this.timeLeft = snap.timeLeft;
+    this.flightTime = snap.flightTime;
+    this.gatesPassed = Math.min(gates.length, snap.gatesPassed);
+    this.points = snap.points;
+    this.crystals = snap.crystals;
+    this.rocksDestroyed = snap.rocksDestroyed;
+    this.killedBefore = snap.enemiesKilled;
+    this.noDamage = false;
+  }
+
+  /** Début du combat : dernier portail passé, ou fin du compte à rebours d'un départ au combat. */
+  private startBoss(): void {
+    const boss = this.boss;
+    if (!boss || this.fightStarted) return;
+    this.setPhase('boss');
+    this.fightStarted = true;
+    this.fightZ = this.z;
+    // Point de reprise : l'état d'ici (un nouvel essai garde celui qu'il a reçu)
+    if (!this.fightSnap) this.fightSnap = this.noteFight();
+    this.syncShipState();
+    boss.start(this.shipState);
+    this.hooks.audio.music(boss.def.music);
+    this.hooks.audio.sfx('bossAppear');
+    this.hooks.audio.haptic(60);
+    this.hooks.hud.toast('Chrono figé !');
+    this.syncBossHud();
+    this.pushHud();
+  }
+
+  /** État de la partie au début du combat (« Réessayer le combat »). */
+  private noteFight(): FlightSnapshot {
+    this.enemies.counts(this.enemyCounts);
+    return {
+      course: this.courseId,
+      timeLeft: this.timeLeft,
+      flightTime: this.flightTime,
+      gatesPassed: this.gatesPassed,
+      points: this.points,
+      crystals: this.crystals,
+      rocksDestroyed: this.rocksDestroyed,
+      enemiesKilled: this.killedBefore + this.enemyCounts.killed,
+    };
+  }
+
+  /**
+   * Point de reprise rendu par onFail (choix 7) : combat commencé, ou nouvel essai lancé, et boss pas encore vaincu ;
+   * sinon undefined (échec ordinaire).
+   */
+  private fightRetryPoint(): StartAt | undefined {
+    if (!this.fightSnap || this.bossBeaten) return undefined;
+    return { at: 'boss', snapshot: this.fightSnap };
+  }
+
+  /** Un sous-pas du boss, après les ennemis ; `live` : son corps peut heurter la Comète (phase 'boss'). */
+  private stepBoss(h: number, live: boolean): void {
+    this.bossStepped = true;
+    const b = this.boss;
+    if (!b) return;
+    this.syncShipState();
+    b.update(h, this.time, this.shipState);
+    if (live && !this.bossBeaten && b.hitsShip(this.shipState, _bossHit)) this.damageShip(_bossHit.x, _bossHit.y);
+    this.syncBossHud();
+  }
+
+  /** Touche comptée : éclats qui suivent le boss, son, petite secousse ; la barre suit (syncBossHud). */
+  private bossTouched(x: number, y: number, z: number): void {
+    this.particles.burst(x, y, z, 30, 4, 16, this.hotColor, 1, 0.7, -this.speed);
+    this.particles.burst(x, y, z, 12, 2, 8, this.sparkColor, 1.3, 0.35, -this.speed);
+    this.sfx('bossHit', 1, 1);
+    this.hooks.audio.haptic(40);
+    this.shake = Math.min(1.5, this.shake + 0.3);
+    this.syncBossHud();
+  }
+
+  /** Tir arrêté par un blindage : étincelles, son (espacé). */
+  private bossArmor(x: number, y: number, z: number): void {
+    this.particles.burst(x, y, z, 6, 3, 10, this.shotColor, 0.3, 0.25, -this.speed);
+    if (this.time - this.armorSfxT < ARMOR_SFX_GAP) return;
+    this.armorSfxT = this.time;
+    this.sfx('bossArmor', 0.6, 0.95 + Math.random() * 0.1);
+  }
+
+  /**
+   * Boss vaincu (dernière touche ou aide DEV) : prime acquise, explosion qui le suit, plus aucun choc ; le portail
+   * de distorsion s'ouvre devant la Comète (le chrono reste figé jusqu'à la distorsion).
+   */
+  private bossDefeated(x: number, y: number, z: number): void {
+    if (!this.boss || this.bossBeaten) return;
+    this.bossBeaten = true;
+    this.hooks.audio.sfx('bossDefeat');
+    this.hooks.audio.haptic([60, 40, 160]);
+    this.shake = Math.min(1.5, this.shake + 1);
+    this.particles.burst(x, y, z, 110, 6, 28, this.fireColor, 1.8, 1.4, -this.speed);
+    this.particles.burst(x, y, z, 40, 2, 12, this.hotColor, 2.2, 0.9, -this.speed);
+    // Ses orbes se dissipent (la Comète ne craint plus rien jusqu'à la distorsion)
+    this.enemies.dissolveOrbs();
+    this.openPortal(PORTAL_AHEAD);
+    this.hooks.hud.toast('Portail ouvert !', 'good');
+    this.syncBossHud();
+    this.pushHud();
+  }
+
+  /** Portail de distorsion placé `ahead` u devant la Comète, où il s'ouvre (WarpPortal.place). */
+  private openPortal(ahead: number): void {
+    this.portalFrom = this.z;
+    this.portal.place(this.z - ahead);
+  }
+
+  /** Barre de boss : affichée pendant le combat (arrivée, combat, changement de phase), jusqu'à sa défaite. */
+  private syncBossHud(): void {
+    const b = this.boss;
+    const st = b ? b.state : 'idle';
+    const on = !!b && (this.phase === 'boss' || this.phase === 'dead') && (st === 'appear' || st === 'fight' || st === 'shift');
+    if (!b || !on) {
+      if (this.bossHudOn) {
+        this.bossHudOn = false;
+        this.hooks.hud.updateBoss(null);
+      }
+      return;
+    }
+    if (this.bossHudOn && b.touchesLeft === this.bossHudLeft && b.phase === this.bossHudPhase) return;
+    this.bossHudOn = true;
+    this.bossHudLeft = b.touchesLeft;
+    this.bossHudPhase = b.phase;
+    const hb = this.bossHud;
+    hb.name = b.def.name;
+    hb.life = b.touches > 0 ? b.touchesLeft / b.touches : 0;
+    hb.phase = b.phase;
+    hb.phases = b.phases;
+    hb.steps = b.touches;
+    this.hooks.hud.updateBoss(hb);
+  }
+
   private explode(): void {
     this.shield = 0;
     this.setPhase('dead');
@@ -1097,24 +1409,36 @@ export class FlightRun implements ModeHandle {
     this.boosting = false;
     this.hooks.audio.sfx('warp');
     this.hooks.audio.haptic(60);
+    // Portail encore fermé (aide DEV win avant la victoire sur le boss) : ouvert juste devant, pour l'éclat
+    if (!this.portal.open) this.openPortal(PORTAL_NOW);
+    this.result = this.makeResult();
+    this.particles.ring(0, 0, this.portal.z, WARP_R, 80, this.gateNextColor, 2.4, 26);
+    this.syncBossHud();
+    this.pushHud();
+  }
+
+  /** Résultat de l'étape réussie (distorsion, ou boss vaincu puis liaison graphique perdue). */
+  private makeResult(): StageResult {
     const total = this.course.gates.length;
     const ratio = total > 0 ? this.gatesPassed / total : 1;
+    // Chrono figé pendant un combat de boss : temps restant à son début
     const timeLeft = Math.max(0, this.timeLeft);
+    const bonus = this.bossBeaten && this.boss ? this.boss.def.bonus : 0;
     this.enemies.counts(this.enemyCounts);
-    this.result = {
+    const result: StageResult = {
       stageId: this.stage.id,
-      // Points du combat (rochers, ennemis, cristaux) en plus ; étoiles : portails seulement, comme avant
-      score: Math.round(timeLeft * 100) + this.gatesPassed * 200 + (this.noDamage ? 1000 : 0) + this.points,
+      // Points du combat (rochers, ennemis, cristaux) et prime du boss en plus ; étoiles : portails seulement
+      score: Math.round(timeLeft * 100) + this.gatesPassed * 200 + (this.noDamage ? 1000 : 0) + this.points + bonus,
       stars: ratio >= 0.95 ? 3 : ratio >= 0.7 ? 2 : 1,
       timeMs: Math.round(this.flightTime * 1000),
       gates: this.gatesPassed,
       gatesTotal: total,
       crystals: this.crystals,
       crystalsTotal: this.crystalsTotal(),
-      enemies: this.enemyCounts.killed,
+      enemies: this.killedBefore + this.enemyCounts.killed,
     };
-    this.particles.ring(0, 0, this.course.warpZ, WARP_R, 80, this.gateNextColor, 2.4, 26);
-    this.pushHud();
+    if (bonus > 0) result.bossBonus = bonus;
+    return result;
   }
 
   private simWarp(h: number): void {
@@ -1142,7 +1466,8 @@ export class FlightRun implements ModeHandle {
     this.finished = true;
     this.setPhase('done');
     this.pushHud();
-    this.hooks.onFail(reason);
+    // Comète détruite en plein combat de boss : point de reprise « Réessayer le combat »
+    this.hooks.onFail(reason, this.fightRetryPoint());
   }
 
   // ================================================================ Rendu
@@ -1157,7 +1482,7 @@ export class FlightRun implements ModeHandle {
     this.boostVis = damp(this.boostVis, boostTarget, 6, dt);
     let thrust: number;
     if (phase === 'intro') thrust = 0.2 + 0.06 * Math.sin(t * 5);
-    else if (phase === 'fly') thrust = 0.55 + 0.25 * clamp(this.speed / cruise, 0, 1);
+    else if (phase === 'fly' || phase === 'boss') thrust = 0.55 + 0.25 * clamp(this.speed / cruise, 0, 1);
     else if (phase === 'warp') thrust = 1.5;
     else thrust = 0.08;
     this.roll = damp(this.roll, (-this.vx / MAX_LAT) * 0.7 + (phase === 'intro' ? Math.sin(t * 1.3) * 0.05 : 0), 7, dt);
@@ -1179,6 +1504,7 @@ export class FlightRun implements ModeHandle {
     this.portal.update(dt, t, this.z);
     this.rocks.update(t, cam.z);
     this.enemies.render(t, cam.z);
+    if (this.boss) this.boss.render(t, cam.z);
     this.shots.render(cam.z);
     this.pickups.render(t, cam.z);
     this.env.update(dt, t, cam, phase !== 'intro');
@@ -1212,7 +1538,7 @@ export class FlightRun implements ModeHandle {
     this.hudT += dt;
     if (this.hudT >= 0.1) {
       this.hudT = 0;
-      if (phase === 'fly' || phase === 'intro') this.pushHudLight();
+      if (phase === 'fly' || phase === 'boss' || phase === 'intro') this.pushHudLight();
     }
   }
 
@@ -1263,8 +1589,16 @@ export class FlightRun implements ModeHandle {
 
   // ================================================================ HUD
 
+  /**
+   * Avancement 0..1 (barre du HUD) : jusqu'à la distorsion d'origine (Course.warpZ). Combat de boss : figé à son
+   * début, puis, portail ouvert, il va jusqu'au bout à mesure que la Comète l'approche.
+   */
   private progress(): number {
-    return clamp(-this.z / this.course.length, 0, 1);
+    if (!this.fightStarted) return clamp(-this.z / this.course.length, 0, 1);
+    const p0 = clamp(-this.fightZ / this.course.length, 0, 1);
+    if (!this.portal.open) return p0;
+    const span = this.portalFrom - this.portal.z;
+    return p0 + (1 - p0) * (span > 0 ? clamp((this.portalFrom - this.z) / span, 0, 1) : 1);
   }
 
   /** Cristaux possibles du parcours : rochers qui en lâchent et vagues d'ennemis. */
@@ -1349,7 +1683,7 @@ export class FlightRun implements ModeHandle {
           shotsFired: this.shotsFired,
           lastMuzzle: this.lastMuzzle,
           target: this.targetInfo(),
-          enemies: { fighter: ec.fighter, mine: ec.mine, swarm: ec.swarm, killed: ec.killed },
+          enemies: { fighter: ec.fighter, mine: ec.mine, swarm: ec.swarm, killed: this.killedBefore + ec.killed },
           orbsActive: ec.orbs,
           waves: this.course.waves.length,
           crystals: this.crystals,
@@ -1405,6 +1739,14 @@ export class FlightRun implements ModeHandle {
         this.boosting = this.apBoost = false;
         this.enemies.clearOrbs();
       },
+      boss: {
+        info: () => this.bossInfo(),
+        start: () => this.devBossStart(),
+        win: () => {
+          if (this.boss && this.phase === 'boss' && !this.bossBeaten) this.boss.defeat();
+        },
+        hit: (n = 1) => this.devBossHit(n),
+      },
     };
     this.devApi = api;
     (window as unknown as { __xr3d?: DevApi }).__xr3d = api;
@@ -1413,14 +1755,65 @@ export class FlightRun implements ModeHandle {
   /** Cible actuelle de la visée (aide DEV) : type et distance, ou null hors vol et sans cible. */
   private targetInfo(): { type: string; dist: number; hit: boolean } | null {
     const a = this.aim;
-    if (this.phase !== 'fly' || a.kind === 'none') return null;
+    if (!this.flying() || a.kind === 'none') return null;
     return {
-      type: a.kind === 'rock' ? 'rock' : this.enemies.kindOf(a.index),
+      type: a.kind === 'rock' || a.kind === 'boss' ? a.kind : this.enemies.kindOf(a.index),
       dist: Math.round(a.dist * 10) / 10,
       hit: this.targetHit,
     };
   }
 
+  /** État du boss et du combat (aide DEV), null sans boss. */
+  private bossInfo(): Record<string, unknown> | null {
+    const b = this.boss;
+    if (!b) return null;
+    const r1 = (v: number): number => Math.round(v * 10) / 10;
+    return {
+      id: this.course.def.boss,
+      name: b.def.name,
+      bonus: b.def.bonus,
+      music: b.def.music,
+      state: b.state,
+      phase: b.phase,
+      phases: b.phases,
+      touches: b.touches,
+      touchesLeft: b.touchesLeft,
+      beaten: this.bossBeaten,
+      fight: this.fightStarted,
+      atBoss: this.atBoss,
+      retry: this.fightRetry,
+      noDamage: this.noDamage,
+      snapshot: this.fightSnap,
+      hud: this.bossHudOn,
+      portal: { open: this.portal.open, z: r1(this.portal.z), dist: r1(this.z - this.portal.z) },
+      ship: { x: r1(this.x), y: r1(this.y), z: r1(this.z) },
+      targets: b.targets.map((t) => ({ x: r1(t.x), y: r1(t.y), z: r1(t.z), r: t.r, open: t.open, alive: t.alive })),
+      visible: b.group.visible,
+    };
+  }
+
+  /** Aide DEV : combat tout de suite (en vol), comme après le dernier portail ; vrai s'il a commencé. */
+  private devBossStart(): boolean {
+    if (!this.boss || this.phase !== 'fly' || this.fightStarted) return false;
+    this.toArena(null);
+    this.startBoss();
+    return true;
+  }
+
+  /** Aide DEV : `n` touches sur les cibles exposées, une par cible ; touches restantes (−1 sans boss). */
+  private devBossHit(n: unknown): number {
+    const b = this.boss;
+    if (!b) return -1;
+    const count = Math.max(0, Math.min(24, Math.floor(Number(n) || 0)));
+    for (let k = 0; k < count && this.phase === 'boss'; k++) {
+      const i = b.targets.findIndex((t) => t.alive && t.open);
+      if (i < 0) break;
+      b.hitTarget(i, 1);
+    }
+    return b.touchesLeft;
+  }
+
+  /** Étape gagnée tout de suite : portails restants franchis, combat de boss passé (sans prime), distorsion. */
   private devWin(): void {
     if (this.finished || this.phase === 'warp' || this.phase === 'dead' || this.phase === 'timeout') return;
     const remaining = this.course.gates.length - this.nextGate;

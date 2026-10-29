@@ -1,4 +1,5 @@
-import type { StageDef } from './types';
+import type { CourseId, StageDef } from './types';
+import { COURSE_IDS } from './ids.ts';
 import { stageSubtitle, stageText } from './story.ts';
 import { WORLDS, type WorldDef } from './worlds.ts';
 
@@ -45,4 +46,11 @@ export function nextStage(stage: StageDef): StageDef | undefined {
 /** Monde d'une étape. */
 export function stageWorld(stage: StageDef): WorldDef {
   return WORLDS[stage.world - 1];
+}
+
+/** Parcours d'une étape de vol ; null pour une plateforme ou un levelId absent de COURSE_IDS (refusé par check-levels). */
+export function stageCourse(stage: StageDef): CourseId | null {
+  if (stage.kind !== 'flight') return null;
+  const id = COURSE_IDS.find((c) => c === stage.levelId);
+  return id ?? null;
 }

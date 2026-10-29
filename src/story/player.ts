@@ -4,7 +4,7 @@ import { type CutsceneEvent, type CutsceneScript, type View, VH } from './scenes
 import { createLiberation } from './scenes/liberation';
 import { createPrologue } from './scenes/prologue';
 import { ensureStoryStyles } from './styles';
-import type { CutsceneAudio, CutsceneHandle, CutsceneId, LiberationParams } from './types';
+import type { CutsceneAudio, CutsceneHandle, CutsceneId, LiberationParams, Mood, Speaker } from './types';
 
 // Lecteur de cinématiques : un <canvas> 2D plein cadre dans `root` (pas de WebGL : aucun second contexte), la
 // bulle de dialogue, un bouton Passer (<button class="cs-skip">) et un nœud aria-live. Horloge à pas borné
@@ -95,7 +95,18 @@ export function playCutscene(root: HTMLElement, id: CutsceneId, opts: CutsceneOp
       console.warn('[story] repère sonore', c, err);
     }
   };
-  const bubble = createBubble(box, { className: 'cs-bubble', clock: 'manual', onBip: () => audioCue('bip') });
+  const onBip = (who: Speaker, mood: Mood, letter: number): void => {
+    if (!audio.bip) {
+      audioCue('bip');
+      return;
+    }
+    try {
+      audio.bip(who, mood, letter);
+    } catch (err) {
+      console.warn('[story] bip', err);
+    }
+  };
+  const bubble = createBubble(box, { className: 'cs-bubble', clock: 'manual', onBip });
 
   // ------------------------------------------------------------ Script et vue
   let script: CutsceneScript | null = null;
@@ -111,7 +122,9 @@ export function playCutscene(root: HTMLElement, id: CutsceneId, opts: CutsceneOp
   let nextEvent = 0;
 
   const reduced = reducedMotion();
-  const view = { w: 0, h: 0, k: 1, vw: 0, reduced } as { -readonly [K in keyof View]: View[K] };
+  const view = { w: 0, h: 0, k: 1, vw: 0, reduced, skipLeft: 0 } as { -readonly [K in keyof View]: View[K] };
+  /** Largeur de la boîte (px CSS) au dernier calcul de la vue. */
+  let boxW = 0;
   /** Calques à revoir : 0 non, 1 si la taille a changé (ResizeObserver), 2 toujours (police chargée). */
   let dirty = 0;
 
@@ -121,6 +134,7 @@ export function playCutscene(root: HTMLElement, id: CutsceneId, opts: CutsceneOp
     const dpr = Math.min(DPR_MAX, Math.max(1, window.devicePixelRatio || 1));
     const cw = box.clientWidth;
     const ch = box.clientHeight;
+    boxW = cw;
     const w = Math.max(1, Math.round(cw * dpr));
     const h = Math.max(1, Math.round(ch * dpr));
     if (!force && w === view.w && h === view.h) return;
@@ -141,6 +155,10 @@ export function playCutscene(root: HTMLElement, id: CutsceneId, opts: CutsceneOp
 
   function render(): void {
     if (!ctx || !script || destroyed || view.w < 2 || view.h < 2) return;
+    // Bord gauche de Passer relu à chaque image (deux entiers, sans allocation) : l'encoche (--sar) ou la police
+    // du bouton le déplacent sans changer la taille de la boîte.
+    const sw = skipBtn.offsetWidth;
+    view.skipLeft = sw > 0 && boxW > 0 ? (view.vw * skipBtn.offsetLeft) / boxW : view.vw;
     try {
       script.draw(ctx, t, view);
     } catch (err) {

@@ -1,4 +1,4 @@
-import type { CrewId, SkillId, StagePart } from './types';
+import type { CrewId, CutsceneId, SkillId, StagePart } from './types';
 
 // Textes de la campagne (docs/HISTOIRE.md) : titres, sous-titres et conseils des étapes, radio de LUMA, répliques
 // des cinématiques. Lisible par Node : données seules, TypeScript effaçable. Radio et répliques : espace insécable
@@ -320,7 +320,26 @@ export function radioHoldS(text: string): number {
   return Math.min(t.holdMaxS, Math.max(t.holdMinS, text.length * t.holdPerCharS));
 }
 
-// ---------------------------------------------------------------- Cinématiques (story/scenes)
+// ---------------------------------------------------------------- Cinématiques : titres et marques « vues »
+
+export interface CutsceneInfo {
+  /** Titre (Options › Revoir les cinématiques). */
+  readonly title: string;
+  /** Paramétrée par le monde (libération d'un gardien) : une marque « vue » par monde. */
+  readonly perWorld: boolean;
+}
+
+export const CUTSCENES: Readonly<Record<CutsceneId, CutsceneInfo>> = {
+  prologue: { title: 'Prologue', perWorld: false },
+  liberation: { title: 'Libération du gardien', perWorld: true },
+};
+
+/** Marque de story.seen d'une cinématique jouée pour une étape du monde `world` : 'prologue', 'liberation-1'… */
+export function cutsceneMark(id: CutsceneId, world: number): string {
+  return CUTSCENES[id].perWorld ? `${id}-${world}` : id;
+}
+
+// ---------------------------------------------------------------- Répliques des cinématiques (story/scenes)
 
 function luma(mood: Mood, text: string): StoryLine {
   return { speaker: 'luma', mood, text };
@@ -335,7 +354,9 @@ export const PROLOGUE_LINES = {
   alive: luma('amused', `Bonne nouvelle${NB}: on est vivants. Mauvaise nouvelle${NB}: il me faut de l’énergie pour ouvrir un portail.`),
   guardian: luma('neutral', `Tu vois la méduse-baleine${NB}? C’est la gardienne de ce monde. Le Vide l’a rendue folle.`),
   goal: luma('neutral', `Libère-la et rapporte son noyau${NB}: il ouvrira le portail.`),
-  onFoot: luma('scrambled', `Près d’elle, le Vide me brouille… Impossible de me poser plus près${NB}: tu continues à pied${NB}!`),
+  // Le jeu suit : la Comète repart en orbite au début de j1, LUMA guide Kaï jusqu'à sa balise (carte d'intro de j1).
+  // Amorce distincte de la radio 'j1-start' (« Le Vide me brouille… »), lue quelques secondes plus tard.
+  onFoot: luma('scrambled', `Trop de brouillage ici… Impossible de me poser plus près${NB}: rejoins ma balise à pied${NB}!`),
 } as const satisfies Record<string, StoryLine>;
 
 export const LIBERATION_LINES = {

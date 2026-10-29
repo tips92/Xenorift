@@ -889,22 +889,27 @@ export class EnemyField {
     this.pos[i3 + 2] = ship.z - this.fD[i];
   }
 
-  /**
-   * Orbe lancée vers la position anticipée de la Comète. Vitesse en z réglée sur la croisière (et non sur la
-   * vitesse du moment) : presque immobile dans le décor, elle est croisée près de son point de départ (zone que
-   * genWaves garde hors des portails), en ORB_T s à la croisière, plus tôt en turbo, plus tard au ralenti.
-   */
+  /** Orbe du chasseur `i`, partie de son œil (launchOrb) ; l'œil s'allume au tir. */
   private fireOrb(i: number, ship: Readonly<ShipState>): void {
-    if (this.orbCount >= ORB_CAP) return;
     const i3 = i * 3;
-    const ox = this.pos[i3];
-    const oy = this.pos[i3 + 1];
-    const oz = this.pos[i3 + 2] + 1.4 * FIGHTER_SCALE;
+    if (this.launchOrb(this.pos[i3], this.pos[i3 + 1], this.pos[i3 + 2] + 1.4 * FIGHTER_SCALE, ship, 0, 0)) this.glow[i] = 2.2;
+  }
+
+  /**
+   * Orbe lancée de (ox, oy, oz) vers la position anticipée de la Comète, décalée de (dx, dy) (u ; 0, 0 pour un
+   * chasseur ; un boss écarte ainsi la seconde orbe d'une paire). Vitesse en z réglée sur la croisière (et non sur
+   * la vitesse du moment) : presque immobile dans le décor, elle est croisée près de son point de départ (zone que
+   * genWaves garde hors des portails), en ORB_T s à la croisière, plus tôt en turbo, plus tard au ralenti. Mêmes
+   * chocs et même lueur pour toutes (stepOrbs, avoid). Faux (rien lancé) si la réserve est pleine ou la Comète à
+   * moins de 12 u.
+   */
+  launchOrb(ox: number, oy: number, oz: number, ship: Readonly<ShipState>, dx: number, dy: number): boolean {
+    if (this.disposed || this.orbCount >= ORB_CAP) return false;
     const dist = ship.z - oz;
-    if (dist < 12) return;
+    if (dist < 12) return false;
     const t = ORB_T;
-    let tx = ship.x + ship.vx * t * ORB_LEAD;
-    let ty = ship.y + ship.vy * t * ORB_LEAD;
+    let tx = ship.x + ship.vx * t * ORB_LEAD + dx;
+    let ty = ship.y + ship.vy * t * ORB_LEAD + dy;
     const tr = Math.hypot(tx, ty);
     if (tr > CORRIDOR_R - 0.5) {
       tx *= (CORRIDOR_R - 0.5) / tr;
@@ -921,8 +926,8 @@ export class EnemyField {
     ob[o + 6] = 0;
     ob[o + 7] = Math.random();
     this.particles.burst(ox, oy, oz, 14, 3, 10, C_ORB, 0.7, 0.35, ob[o + 5]);
-    this.glow[i] = 2.2;
     this.events.orbFired(ox, oy, oz);
+    return true;
   }
 
   /** Mine : flotte sur place ; clignote d'autant plus vite que la Comète est proche. */
@@ -1348,9 +1353,12 @@ export class EnemyField {
    * trajectoire) écrit dans `out`, et true ; sinon false (out inchangé). Chaque menace est jugée là où passera
    * la trajectoire idéale (que suit le pilote), essaim et orbes à leur position au moment du croisement ; l'écart
    * retenu est le meilleur de quelques candidats pour toutes les menaces à la fois (deux orbes d'une paire,
-   * mines, trou dans un essaim), proche du précédent. `_x`, `_y` : position actuelle (inutilisée).
+   * mines, trou dans un essaim), proche du précédent. `_x`, `_y` : position actuelle (inutilisée). `lineX`,
+   * `lineY` (facultatifs) : point visé fixe à la place de la trajectoire idéale (combat de boss : la cible à
+   * aligner).
    */
-  avoid(_x: number, _y: number, z: number, speed: number, out: { x: number; y: number }): boolean {
+  avoid(_x: number, _y: number, z: number, speed: number, out: { x: number; y: number }, lineX?: number, lineY?: number): boolean {
+    const fixed = lineX !== undefined && lineY !== undefined;
     const sp = Math.max(speed, 5);
     const horizon = sp * AVOID_T;
     const th = this.threats;
@@ -1368,7 +1376,10 @@ export class EnemyField {
       const ez = this.pos[i3 + 2];
       const dz = z - ez;
       if (dz < -2 || dz > horizon) continue;
-      pathAt(this.path, ez, _pp);
+      if (fixed) {
+        _pp.x = lineX;
+        _pp.y = lineY;
+      } else pathAt(this.path, ez, _pp);
       let ex: number;
       let ey: number;
       if (k === K_MINE) {
@@ -1405,7 +1416,10 @@ export class EnemyField {
       if (closing <= 1) continue;
       const t = (z - ob[o + 2]) / closing;
       if (t < 0 || t > AVOID_T) continue;
-      pathAt(this.path, z - sp * t, _pp);
+      if (fixed) {
+        _pp.x = lineX;
+        _pp.y = lineY;
+      } else pathAt(this.path, z - sp * t, _pp);
       const rx = _pp.x - (ob[o] + ob[o + 3] * t);
       const ry = _pp.y - (ob[o + 1] + ob[o + 4] * t);
       const need = ORB_R + 1.05 + 1.0;
@@ -1490,6 +1504,19 @@ export class EnemyField {
 
   /** Retire les orbes en vol (aide DEV : essais reproductibles). */
   clearOrbs(): void {
+    this.orbCount = 0;
+  }
+
+  /**
+   * Orbes en vol éteintes, chacune dans un petit éclat qui garde sa vitesse en z (boss vaincu : ses orbes se
+   * dissipent au lieu de traverser la Comète, devenue intouchable, juste devant la caméra).
+   */
+  dissolveOrbs(): void {
+    const ob = this.orbs;
+    for (let j = 0; j < this.orbCount; j++) {
+      const o = j * ORB_STRIDE;
+      this.particles.burst(ob[o], ob[o + 1], ob[o + 2], 10, 2, 7, C_ORB, 0.6, 0.35, ob[o + 5]);
+    }
     this.orbCount = 0;
   }
 

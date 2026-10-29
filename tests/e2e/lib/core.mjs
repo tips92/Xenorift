@@ -45,6 +45,73 @@ export function shipPos(t) {
   });
 }
 
+// ---------------------------------------------------------------- Sauvegarde posée avant le chargement
+
+/** Clé de la sauvegarde (src/core/save.ts). */
+export const SAVE_KEY = 'xeno-rift-save-v1';
+
+/**
+ * Marques des cinématiques du monde 1 (`cutsceneMark` de src/core/story.ts) : le prologue et la libération de la
+ * méduse-baleine. Posées par `seedSave(t, SEEN_STORY)` : JOUER, une carte des Niveaux ou une victoire sur j3 ne les
+ * jouent plus.
+ */
+export const STORY_MARKS = ['prologue', 'liberation-1'];
+export const SEEN_STORY = { story: { seen: STORY_MARKS } };
+
+/**
+ * À appeler AVANT t.goto : à chaque chargement d'une page de l'onglet, écrit `{ version: 2, ...patch }` comme
+ * sauvegarde si elle MANQUE (script d'init, sans aide DEV : marche aussi en --prod) ; une sauvegarde présente
+ * (écrite par le jeu ou par le test) n'est pas touchée. Effacée par le test, elle est réécrite au chargement
+ * suivant. Ex. `seedSave(t, SEEN_STORY)` : cinématiques déjà vues (sauvegarde sinon neuve, hors « Nouvelle aventure »).
+ */
+export async function seedSave(t, patch) {
+  await t.page.addInitScript(
+    ([key, save]) => {
+      try {
+        if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(save));
+      } catch {
+        // Stockage indisponible : le jeu part d'une sauvegarde neuve.
+      }
+    },
+    [SAVE_KEY, { version: 2, ...patch }],
+  );
+}
+
+// ---------------------------------------------------------------- Cinématiques (aide DEV : __xrShell)
+
+/**
+ * Passe la cinématique en cours par `act()` (touche, clic sur Passer, bouton retour…) et vérifie qu'elle a bien été
+ * COUPÉE : suivie image par image jusqu'à ce qu'elle quitte la main (`__xrShell.info().cutscene` à null), son horloge
+ * doit s'être arrêtée à plus de 2 s de la fin (finie seule, elle ne prouverait rien). Renvoie le dernier état vu.
+ */
+export async function skipCutscene(t, act, label, { timeout = 30000 } = {}) {
+  const on = await t.ev(() => {
+    const st = { last: null, done: false };
+    window.__xrCutFollow = st;
+    const tick = () => {
+      const c = window.__xrShell.info().cutscene;
+      if (c) st.last = c;
+      else if (st.last) {
+        st.done = true;
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    tick();
+    return st.last;
+  });
+  if (!on) throw new AssertionError(`${label} : aucune cinématique en cours à passer`);
+  await act();
+  const last = await waitFor(t, () => (window.__xrCutFollow.done ? window.__xrCutFollow.last : false), {
+    timeout,
+    label: `${label} : la cinématique quitte la main`,
+  });
+  if (!(last.time < last.duration - 2)) {
+    throw new AssertionError(`${label} : cinématique coupée avant sa fin attendue (${fmt(last)})`);
+  }
+  return last;
+}
+
 // ---------------------------------------------------------------- HUD et messages
 
 /** À appeler AVANT t.goto : journal des messages du HUD (window.__xrToasts : { text, at }). */

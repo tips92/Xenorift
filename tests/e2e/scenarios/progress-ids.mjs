@@ -2,8 +2,10 @@
 // Étapes lues sur la page (cartes des Niveaux, dans l'ordre) : verrous, étoiles du monde et total en découlent (ouverte
 // = la première, une réussie ou la suivante d'une réussie), quel que soit le nombre d'étapes.
 //  A. Sauvegarde neuve : « Nouvelle aventure » ; Niveaux ouverts sur le monde 1 (◀ désactivé), seule j1 ouverte ;
-//     toucher une carte verrouillée du monde 2 : message, rien ne démarre ; JOUER → carte d'intro de « Lisière de
-//     Xéna » (Échap : retour à l'accueil).
+//     toucher une carte verrouillée du monde 2 : message, rien ne démarre ; JOUER → prologue (cinématique de la
+//     première étape lancée, choix 14 : Passer) → carte d'intro de « Lisière de Xéna » (Échap : retour à l'accueil).
+//     Les anciennes sauvegardes (B, C, D, sans marque « prologue ») voient aussi le prologue au premier lancement,
+//     par JOUER comme par une carte des Niveaux ; les lancements suivants mènent droit à la carte d'intro.
 //  B. Version 1 « unlocked: 3 », j1 f1 m1 réussis : j2 (suivante de j1) et f2 (suivante de m1) ouvertes aussi,
 //     records et étoiles (cartes, monde, en-tête) ; JOUER → Canopée des spores ; Niveaux ouverts sur le monde 1 ;
 //     plan du mitrailleur rendu au chargement (hangar : arme achetable) ; retour du hangar sur la même page ; pages :
@@ -49,8 +51,24 @@ function playSub(t) {
   return t.ev(() => document.querySelector('.screens [data-screen="title"].is-active .btn-primary .btn-sub').textContent.trim());
 }
 
-/** Carte d'intro affichée (titre renvoyé), puis Échap : retour à l'accueil avant le lancement de l'étape. */
-async function introThenBack(t) {
+/**
+ * Carte d'intro affichée (titre renvoyé), puis Échap : retour à l'accueil avant le lancement de l'étape. `prologue` :
+ * le prologue doit passer avant (touché « Passer »), sinon la carte d'intro doit venir directement.
+ */
+async function introThenBack(t, prologue = false) {
+  const first = await waitFor(
+    t,
+    () => {
+      const f = document.querySelector('.fader');
+      if (f && f.classList.contains('is-on')) return false;
+      const cs = document.querySelector('.screens [data-screen="cutscene"].is-active .cs');
+      if (cs) return `cutscene:${cs.dataset.cutscene}`;
+      return document.querySelector('.screens [data-screen="intro"].is-active:not(.is-leaving)') ? 'intro' : false;
+    },
+    { timeout: 10000, interval: 40, label: "prologue ou carte d'intro" },
+  );
+  assertEq(first, prologue ? 'cutscene:prologue' : 'intro', prologue ? "prologue avant la carte d'intro" : "carte d'intro sans prologue");
+  if (prologue) await t.page.locator('.screens [data-screen="cutscene"].is-active .cs-skip').click({ timeout: 5000 });
   await waitFor(
     t,
     () => {
@@ -68,10 +86,10 @@ async function introThenBack(t) {
   return title;
 }
 
-/** JOUER → titre de la carte d'intro, puis retour à l'accueil. */
-async function playTarget(t) {
+/** JOUER → titre de la carte d'intro (après le prologue si `prologue`), puis retour à l'accueil. */
+async function playTarget(t, prologue = false) {
   await press(t, 'title', 'Jouer');
-  return introThenBack(t);
+  return introThenBack(t, prologue);
 }
 
 async function openSelect(t) {
@@ -159,7 +177,8 @@ export default async function (t) {
   await stillSelect(t, 'carte verrouillée', 200);
   await t.key('Escape', 40);
   await waitForScreen(t, 'title');
-  assertEq(await playTarget(t), 'Lisière de Xéna', 'sauvegarde neuve : JOUER → j1');
+  assertEq(await playTarget(t, true), 'Lisière de Xéna', 'sauvegarde neuve : JOUER → prologue → j1');
+  assertEq((await readSave(t)).story.seen, ['prologue'], 'sauvegarde neuve : prologue noté vu');
 
   // ---------------------------------------------------------------- B. v1 « unlocked: 3 », j1 f1 m1 réussis
   const bestB = { j1: { score: 4321, stars: 3 }, f1: { score: 2500, stars: 2 }, m1: { score: 1800, stars: 1 } };
@@ -245,7 +264,7 @@ export default async function (t) {
   await waitSelectPage(t, 1);
   await t.page.locator(`${S} .card[data-stage="j1"]`).focus();
   await t.key('Enter', 40);
-  assertEq(await introThenBack(t), 'Lisière de Xéna', 'Entrée sur la carte de j1 après un glissement : son intro');
+  assertEq(await introThenBack(t, true), 'Lisière de Xéna', 'Entrée sur la carte de j1 après un glissement : prologue (ancien joueur), son intro');
   await press(t, 'title', 'Niveaux');
   await waitForScreen(t, 'select');
   await waitSelectPage(t, 1);
@@ -271,7 +290,7 @@ export default async function (t) {
   await waitForScreen(t, 'select');
   await t.key('Escape', 40);
   await waitForScreen(t, 'title');
-  assertEq(await playTarget(t), 'Canopée des spores', 'v1 unlocked 2 : JOUER → j2');
+  assertEq(await playTarget(t, true), 'Canopée des spores', 'v1 unlocked 2 : JOUER → prologue (ancien joueur) → j2');
 
   // ---------------------------------------------------------------- D. Version 2
   await loadSave(t, { version: 2, unlocked: 0, best: { f1: { score: 900, stars: 1 } }, settings: {}, crystals: 5 });
@@ -285,7 +304,7 @@ export default async function (t) {
   await waitForScreen(t, 'select');
   await t.key('Escape', 40);
   await waitForScreen(t, 'title');
-  assertEq(await playTarget(t), 'Lisière de Xéna', 'v2, f1 seul réussi : JOUER → j1');
+  assertEq(await playTarget(t, true), 'Lisière de Xéna', 'v2, f1 seul réussi : JOUER → prologue → j1');
 
   // j1 et j2 réussis, équipage vide : Tess rendue au chargement (récompense de j2), à l'Établi.
   await loadSave(t, { version: 2, unlocked: 2, best: { j1: { score: 900, stars: 1 }, j2: { score: 800, stars: 1 } }, settings: {}, crew: [] });

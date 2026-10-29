@@ -16,10 +16,10 @@
 // plein (couché, ses cases sont pleines pour le graphe : l'état où Kaï le trouve), pluie au-dessus d'un sol.
 // Naufragé 'N' : capsule à sa gauche, récompense d'équipage de l'étape, sauvetage garanti (sans la porte voisine,
 // la sortie est hors d'atteinte, même en double saut). Repères (taille, cristaux, ennemis, points de contrôle, durée)
-// selon la partie du monde de l'étape (core/worlds.ts).
+// selon la partie du monde de l'étape (core/worlds.ts). Sans niveau demandé : parcours des étapes de vol (COURSE_IDS).
 
 import type { BossId, StagePart } from '../src/core/types.ts';
-import { BOSS_IDS, MUSIC_IDS, THEME_IDS } from '../src/core/ids.ts';
+import { BOSS_IDS, COURSE_IDS, MUSIC_IDS, THEME_IDS } from '../src/core/ids.ts';
 import { RADIO, RADIO_TIMING, radioHoldS, typingDuration } from '../src/core/story.ts';
 import type { RadioMessage } from '../src/core/story.ts';
 import { WORLDS } from '../src/core/worlds.ts';
@@ -40,6 +40,7 @@ const VALID_MUSIC: readonly string[] = MUSIC_IDS;
 const STARS3_RATIO = STARS_RATIO.three;
 const START_SAFE_COLS = 8;
 const VALID_BOSSES: readonly string[] = BOSS_IDS;
+const VALID_COURSES: readonly string[] = COURSE_IDS;
 /** Arène : largeur bornes comprises, et place du point de contrôle (colonnes avant la première borne). */
 const ARENA_MIN_COLS = 16;
 const ARENA_MAX_COLS = 22;
@@ -1049,6 +1050,19 @@ for (const id of ids) {
   for (const w of rep.warnings) console.log('  ! ' + w);
   for (const e of rep.errors) console.log('  ✗ ' + e);
   console.log(rep.errors.length === 0 ? '  ✓ aucune erreur' : `  ✗ ${rep.errors.length} erreur(s)`);
+}
+// Étapes de vol (partie 4) : un parcours de COURSE_IDS, sinon le vol refuse de démarrer (game3d/flight.ts).
+if (only.length === 0) {
+  const flights = WORLDS.flatMap((w) => w.stages).filter((s) => s.part === 4);
+  console.log(`\n== Étapes de vol ==\n  ${flights.map((s) => `${s.id} : ${s.levelId}`).join(', ')}`);
+  let errors = 0;
+  for (const s of flights) {
+    if (VALID_COURSES.includes(s.levelId)) continue;
+    console.log(`  ✗ étape ${s.id} : parcours inconnu « ${s.levelId} » (${VALID_COURSES.join(', ')})`);
+    errors++;
+  }
+  console.log(errors === 0 ? '  ✓ aucune erreur' : `  ✗ ${errors} erreur(s)`);
+  totalErrors += errors;
 }
 console.log(`\nBilan : ${ids.length} niveau(x), ${totalErrors} erreur(s), ${totalWarnings} avertissement(s).`);
 if (totalErrors > 0) process.exitCode = 1;

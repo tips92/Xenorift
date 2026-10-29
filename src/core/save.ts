@@ -309,6 +309,20 @@ export function recordResult(stage: StageDef, result: StageResult): RecordInfo {
   return { crystalsGained: gained, crystals: data.crystals, rewards };
 }
 
+// ---------------------------------------------------------------- Histoire
+
+/** Marque de l'histoire déjà posée : cinématique vue (cutsceneMark de core/story.ts), tutoriel terminé. */
+export function isSeen(mark: string): boolean {
+  return data.story.seen.includes(mark);
+}
+
+/** Pose une marque (cinématique vue jusqu'au bout ou passée) et l'enregistre ; sans effet si elle y est déjà. */
+export function markSeen(mark: string): void {
+  if (!mark || data.story.seen.includes(mark)) return;
+  data.story = { seen: [...data.story.seen, mark] };
+  persist();
+}
+
 // ---------------------------------------------------------------- Réserve et hangar
 
 /** Réserve de cristaux. */
@@ -407,7 +421,8 @@ export function playLoadout(settings: Readonly<Settings>, override?: WeaponId | 
 
 /**
  * Efface la progression : déblocages, records, équipement (armes, compétences), réserve, améliorations,
- * modules de la Comète, cœurs, équipage, plans et histoire. Les réglages (et l'arme de la session) restent.
+ * modules de la Comète, cœurs, équipage, plans et histoire (cinématiques de nouveau « non vues », tutoriel de
+ * LUMA rouvert). Les réglages (et l'arme de la session) restent.
  */
 export function resetProgress(): void {
   data = { ...defaults(), settings: data.settings };
