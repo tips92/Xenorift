@@ -98,7 +98,12 @@ const ASTEROID_PLANETS: PlanetSpec[] = [
   },
 ];
 
-function leviathanSpec(light: THREE.Vector3): CreatureSpec {
+/** 0 : orbite lointaine d'origine ; 1 : plongeon vers le portail (dernier quart du parcours). */
+interface Approach {
+  near: number;
+}
+
+function leviathanSpec(light: THREE.Vector3, approach: Approach): CreatureSpec {
   const W = (2 * Math.PI) / 84;
   return {
     kind: 'leviathan',
@@ -112,7 +117,24 @@ function leviathanSpec(light: THREE.Vector3): CreatureSpec {
     },
     path: (t, i, out) => {
       const a = W * t + 4.2;
-      out.set(1550 * Math.sin(a), 430 + 150 * Math.sin(2 * a + 0.4), -2500 + 650 * Math.cos(a));
+      const k = approach.near;
+      // k = 0 : la même orbite qu'avant l'approche (captures du décor inchangées au départ)
+      if (k <= 0) {
+        out.set(1550 * Math.sin(a), 430 + 150 * Math.sin(2 * a + 0.4), -2500 + 650 * Math.cos(a));
+      } else {
+        const rad = 1550 + (340 - 1550) * k;
+        const y0 = 430 + (70 - 430) * k;
+        const yAmp = 150 + (36 - 150) * k;
+        const z0 = -2500 + (-520 - -2500) * k;
+        const zAmp = 650 + (160 - 650) * k;
+        const swallow = k > 0.8 ? (k - 0.8) / 0.2 : 0;
+        const s = swallow * swallow;
+        out.set(
+          rad * Math.sin(a) * (1 - s),
+          (y0 + yAmp * Math.sin(2 * a + 0.4)) * (1 - 0.8 * s),
+          (z0 + zAmp * Math.cos(a)) * (1 - s) - 180 * s,
+        );
+      }
       out.y += 16 * Math.sin(i * 0.2 - t * 1.4) * Math.min(1, i / 8);
     },
     light,
@@ -164,8 +186,8 @@ function wormSpec(light: THREE.Vector3): CreatureSpec {
 /** Décor d'un parcours, hors étoiles (thème du parcours). */
 interface Scenery {
   planets: readonly PlanetSpec[];
-  /** Créature géante, selon la direction de sa lumière. */
-  creature(light: THREE.Vector3): CreatureSpec;
+  /** Créature géante, selon la direction de sa lumière. `approach` : le léviathan de la nébuleuse (ignoré ailleurs). */
+  creature(light: THREE.Vector3, approach: Approach): CreatureSpec;
   /** Direction de la lumière de la créature (normalisée à la construction). */
   creatureLight: Vec3Tuple;
   /** Rang dans planets de la planète autour de laquelle tourne la créature ; null : la caméra. */
@@ -175,8 +197,13 @@ interface Scenery {
 /** Par parcours : un parcours sans décor fait échouer tsc. */
 const SCENERY: Record<CourseId, Scenery> = {
   nebula: { planets: NEBULA_PLANETS, creature: leviathanSpec, creatureLight: [-0.4, 0.8, 0.45], anchor: null },
-  // Le ver tourne autour de la géante à anneaux.
-  asteroids: { planets: ASTEROID_PLANETS, creature: wormSpec, creatureLight: [-0.82, 0.38, 0.46], anchor: 1 },
+  // Le ver tourne autour de la géante à anneaux. L'approche ne le concerne pas.
+  asteroids: {
+    planets: ASTEROID_PLANETS,
+    creature: (light) => wormSpec(light),
+    creatureLight: [-0.82, 0.38, 0.46],
+    anchor: 1,
+  },
 };
 
 export class Environment {
@@ -186,6 +213,8 @@ export class Environment {
   private readonly creature: Creature;
   /** Planète autour de laquelle tourne la créature (sinon : la caméra). */
   private readonly creatureAnchor: Planet | null;
+  /** Approche du léviathan de la nébuleuse (lue par son tracé). */
+  private readonly approach: Approach = { near: 0 };
 
   constructor(course: CourseId, theme: CourseTheme, rng: Rng, bin: Bin, pr: number, glowMat: THREE.ShaderMaterial) {
     this.stars = new StarField(theme, rng, bin, pr);
@@ -197,9 +226,22 @@ export class Environment {
       this.group.add(p.group);
     }
     const l = sc.creatureLight;
-    this.creature = new Creature(sc.creature(new THREE.Vector3(l[0], l[1], l[2]).normalize()), glowMat, bin);
+    this.creature = new Creature(sc.creature(new THREE.Vector3(l[0], l[1], l[2]).normalize(), this.approach), glowMat, bin);
     this.creatureAnchor = sc.anchor === null ? null : this.planets[sc.anchor];
     this.group.add(this.creature.group);
+  }
+
+  /** 0 loin, 1 plongeon vers le portail. Sans effet visible sur le ver (il ignore `approach`). */
+  setApproach(near: number): void {
+    this.approach.near = near < 0 ? 0 : near > 1 ? 1 : near;
+  }
+
+  /**
+   * Le boss de vol dessine son propre tube : on cache celui du décor (un seul tube reconstruit par image).
+   * Reste caché après le combat (le léviathan est dans le couloir, plus à l'horizon).
+   */
+  setCreatureShown(on: boolean): void {
+    this.creature.group.visible = on;
   }
 
   setPixelRatio(pr: number): void {
@@ -209,6 +251,6 @@ export class Environment {
   update(dt: number, time: number, camPos: THREE.Vector3, moving: boolean): void {
     this.stars.update(time, camPos);
     for (const p of this.planets) p.update(dt, time, camPos, moving);
-    this.creature.update(time, this.creatureAnchor ? this.creatureAnchor.group.position : camPos);
+    if (this.creature.group.visible) this.creature.update(time, this.creatureAnchor ? this.creatureAnchor.group.position : camPos);
   }
 }

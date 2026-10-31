@@ -12,8 +12,9 @@ mondes (`core/worlds.ts`), 6 étapes (18 étoiles) : monde 1, Jungle de Xéna : 
 Lune Krator `m1` (2D) → Ceinture d'Orak `f2` (vol, 22 portails) → « Fin de la démo ». Le monde 1 passe au nouveau
 format (plan 04) : 4a faite (j1 : arrivée en Comète, tutoriel de LUMA, ruine, Blob-roi, balise ; Niveaux en pages
 par monde), 4b faite (j2 : champignons, la méduse-baleine qui agit, Tess, Scarabée-titan ; j3 : la gardienne
-méduse-baleine, double saut ; boss en touches ; « Réessayer le combat »), 4c ajoutera les cinématiques et le boss
-du vol. La Lune reste à l'ancien format (étape 5).
+méduse-baleine, double saut ; boss en touches ; « Réessayer le combat »), 4c codée (prologue, libération,
+léviathan du vol 1 : 4 plaques dorsales puis 3 sur la queue ; essai sur téléphone de 4b et de 4c à faire).
+La Lune reste à l'ancien format (étape 5).
 Paysage uniquement, tout se joue au tactile (le clavier sert aux tests sur PC). Aucun fichier image ni son :
 graphismes dessinés par code (Canvas 2D, géométries et shaders three), sons et musiques synthétisés (Web Audio).
 Docs : `docs/GDD.md` (conception et contraintes techniques), `docs/SOUHAITS.md` (liste vivante + ordre de
@@ -290,12 +291,13 @@ diffère en plus via `endSession`). `destroy()` libère tout : le conteneur doit
 contraire, est l'équipement EFFECTIF (`PlayLoadout`), figé pour la partie : `launch()` le calcule avec
 `playLoadout(live)` (arme de la session de `core/save.ts` — `?weapon=` ou le hangar en mode test — sinon celle
 de la sauvegarde ; multiplicateurs `mods` de chaque arme, `maxHearts`, `ship` ; mode test : 4 armes et double
-saut, mais seulement les améliorations achetées) ; les modes ne le modifient pas. `hooks.startAt` fait partir du K
-d'avant l'arène : `?at=boss` (serveur de dev, niveaux 2D seulement), ou point de reprise d'un échec en plein combat
-(prioritaire). Un mode 2D qui perd en plein combat (plus de vies, ou « Liaison graphique perdue » arène fermée) passe
-`retry` = `{ at: 'boss', snapshot }` à `onFail` ; l'écran d'échec (`retryPoint` d'`App.ts`) propose alors
-« Réessayer le combat » (`startStage(stage, false, false, retry)`, gardé par l'écran d'erreur de lancement) avant
-« Réessayer » (tout le niveau) et « Menu ». Le vol (4c) ne rend pas encore de point de reprise.
+saut, mais seulement les améliorations achetées) ; les modes ne le modifient pas. `hooks.startAt` fait partir du
+combat : `?at=boss` (serveur de dev : en 2D, le K d'avant l'arène ; en vol, le début du combat), ou point de reprise
+d'un échec en plein combat (prioritaire). Un mode qui perd en plein combat (plus de vies, boucliers à zéro, ou
+« Liaison graphique perdue » arène fermée ou phase `boss`) passe `retry` = `{ at: 'boss', snapshot }` à `onFail` ;
+l'écran d'échec (`retryPoint` d'`App.ts`) propose alors « Réessayer le combat »
+(`startStage(stage, false, false, retry)`, gardé par l'écran d'erreur de lancement) avant « Réessayer » (toute
+l'étape) et « Menu ». Le vol rend le même point (vérifié par `f1-boss`).
 Après une réussite, `endRun` appelle `recordResult(stage, result)` (une fois) : record, cristaux ajoutés à la
 réserve, récompenses de l'étape (`stage.rewards`), marque `tutorial-j1` à la réussite de j1 ; les résultats
 affichent « +N cristaux », la réserve, les récompenses NOUVELLES et la prime du boss. « Suivant » ouvre le hangar
@@ -476,8 +478,10 @@ n)` de `engine/session.ts`). Écoute et mesures : `preview/audio.html` (scénari
 `boss` (mini-boss), `guardian` (méduse-baleine : intensité 0, 1, 2 posée au début de chaque phase ; la scène
 remet `musicLevel(0)` à chaque entrée dans l'arène), `story` (cinématiques, 4c) ; effets du boss (`bossAppear`,
 `bossHit`, `bossArmor`, `bossPhase`, `bossDefeat`), `barrier`, `quake`, `beacon`, `radioOpen`, `lumaBip`,
-`mushroomBounce`, `sporeDrop`, `rescue`, `whaleCry`, et ceux de 4c déjà prêts (`skill`, `liberation`,
-`blueprint`…) ; le Scarabée-titan reprend des sons existants (`stomp`, `boost`, `crash`, `bump` graves). Chaque arme a son son
+`mushroomBounce`, `sporeDrop`, `rescue`, `whaleCry`, `skill`, `liberation`, `blueprint` (aux résultats, avec le
+plan), `leviathanRoar` et `portalSwallow` (approche du léviathan) ; les repères des cinématiques réutilisent des
+effets déjà là (`cutscene.ts`, `CUE_SFX`) pour rester dans les 18 effets mesurés par `audio-world1`. Le
+Scarabée-titan reprend des sons existants (`stomp`, `boost`, `crash`, `bump` graves). Chaque arme a son son
 de tir (`WeaponDef.sfx` : `'laser'`, `'machinegun'`, `'shotgun'`, `'rifle'`), joué une fois par salve (un coup de
 pompe = 1 son, une rafale de fusil = 3) : sa durée doit tenir dans la cadence (mitrailleur ≤ 70 ms, fusil
 ≤ 100 ms, pompe ≈ 370 ms réarmement compris). Les impacts de toutes les armes jouent `'laserHit'` (au plus un

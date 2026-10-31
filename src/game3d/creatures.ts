@@ -22,6 +22,10 @@ export interface CreatureSpec {
   path(t: number, i: number, out: THREE.Vector3): void;
   /** Nombre de motifs (taches / segments) le long du corps. */
   pattern: number;
+  /** Taille des points lumineux (1 : celle du genre). Le boss du couloir les réduit. */
+  lightScale?: number;
+  /** Taille des nageoires (1 : celle du genre). Le boss du couloir les réduit : le rayon y est petit. */
+  finScale?: number;
   light: THREE.Vector3;
   body: string;
   belly: string;
@@ -361,7 +365,7 @@ export class Creature {
       col[i * 3] = c.r;
       col[i * 3 + 1] = c.g;
       col[i * 3 + 2] = c.b;
-      size[i] = look.lightSize(i);
+      size[i] = look.lightSize(i) * (spec.lightScale ?? 1);
     }
     const lg = bin.add(new THREE.BufferGeometry());
     this.lightAttr = new THREE.BufferAttribute(this.lightPos, 3).setUsage(THREE.DynamicDrawUsage);
@@ -430,20 +434,21 @@ export class Creature {
       const flap = Math.sin(time * 1.15) * 0.45;
       const pi = 5;
       const pr = radii[pi];
+      const finK = this.spec.finScale ?? 1;
       for (let k = 0; k < 2; k++) {
         const side = k === 0 ? 1 : -1;
         _v.set(side * pr * 0.7, -pr * 0.2, 0).applyQuaternion(quats[pi]).add(pts[pi]);
         _qa.setFromAxisAngle(Z_AXIS, side * flap);
         _qb.setFromAxisAngle(Y_AXIS, side * 0.3);
         _q.copy(quats[pi]).multiply(_qa).multiply(_qb);
-        _s.set(side * pr * 3.4, 1, pr * 2.3);
+        _s.set(side * pr * 3.4 * finK, 1, pr * 2.3 * finK);
         _m.compose(_v, _q, _s);
         this.fins.setMatrixAt(k, _m);
       }
       const ti = n - 2;
       const tr = Math.max(radii[ti], radii[4] * 0.12);
       const tflap = Math.sin(time * 1.6 + 1.0) * 0.4;
-      const tailScale = radii[4] * 1.5;
+      const tailScale = radii[4] * 1.5 * finK;
       for (let k = 0; k < 2; k++) {
         const side = k === 0 ? 1 : -1;
         _v.set(0, 0, -tr).applyQuaternion(quats[ti]).add(pts[ti]);
@@ -458,5 +463,20 @@ export class Creature {
     }
     this.look.placeLights(this.rings, time, this.lightPos);
     this.lightAttr.needsUpdate = true;
+  }
+
+  /** Nombre d'anneaux du tube. */
+  get ringCount(): number {
+    return this.n;
+  }
+
+  /**
+   * Après `update` : centre local de l'anneau `i` et son dos (réécrits au prochain update). Renvoie le rayon.
+   * Le groupe est sur l'ancre, sans rotation : position monde = ancre + local.
+   */
+  copyRing(i: number, pos: THREE.Vector3, up: THREE.Vector3): number {
+    pos.copy(this.rings.pts[i]);
+    up.copy(this.rings.up[i]);
+    return this.rings.radii[i];
   }
 }

@@ -1,9 +1,9 @@
 # Étape 4 — monde 1 complet au nouveau format : plan technique
 
-> **État au 29/10/2026 : 4a et 4b faites** (étapes 1 à 12 de l'ordre de réalisation), vérifiées par typecheck,
-> check-levels, build, la suite e2e complète (39/39) et le diag (7/7) ; 4a essayée sur téléphone le 29/10
-> (décisions 20 et 21) ; essai sur téléphone de 4b à faire. **Prochaine action : 4c, étape 13.** 3b est fusionnée
-> dans la branche, puis le tir au bouton du vol (décision 21, fait à part sur `claude/vol-tir-bouton`).
+> **État au 31/10/2026 : 4a, 4b et 4c codées.** 4a et 4b vérifiées par la suite e2e complète (39/39) et le diag
+> (7/7) ; 4a essayée sur téléphone le 29/10. **4c (étapes 13 à 19) codée** : cinématiques, phase `boss`, léviathan
+> (`bosses/leviathan.ts`, 4 plaques puis 3), portail avalé puis recraché, plan aux résultats. `f1-boss` vert le
+> 31/10. Essai sur téléphone de 4b et de 4c à faire. La suite e2e complète n'a pas été rejouée après le léviathan.
 >
 > Écarts de 4a au plan, tous dans le sens des décisions :
 > - Blob-roi complet dès l'étape 5, puis réglé à l'étape 6 (52 PV) ; converti en 4b en **4 touches** (décision 20) ;
@@ -339,13 +339,16 @@ séances. Chaque étape apporte ses tests ; chaque partie finit par la documenta
 11. j3 complet (point 10) — **M**.
 12. « Réessayer le combat » : instantané et bouton (points 5, 13) — **M**.
 
-**4c — histoire et vol** (après 3b)
+**4c — histoire et vol** (après 3b) — **codée** (31/10/2026), essai sur téléphone à faire
 
 13. Tables par monde côté 3D (point 26) — **P**.
 14. Lecteur, phase `story`, `story.seen`, `seedSave` dans les tests (points 6, 20) — **M**.
 15. Prologue (point 21) — **M**.
 16. Libération et bandeau de compétence (point 21) — **M**.
 17. Phase `boss` avec un boss provisoire, nouvel essai en vol, aides DEV (points 22, 24) — **M**.
-18. Léviathan, approche et plan (points 23, 24) — **G**.
-19. Musiques et sons définitifs (point 25) — **M**.
-20. Essai sur téléphone, réglages, documentation — **M**.
+18. Léviathan, approche et plan (points 23, 24) — **G**. Corps dans `bosses/leviathan.ts` (le provisoire est retiré) ;
+    le décor se rapproche puis se cache (un seul tube) ; le plan est donné aux résultats.
+19. Musiques et sons définitifs (point 25) — **M**. Recettes de `world1Sfx.ts` déjà en place ; `leviathanRoar`,
+    `portalSwallow` et `blueprint` sont joués. Les repères des cinématiques restent sur des effets existants
+    (`CUE_SFX`) pour ne pas sortir des 18 effets mesurés par `audio-world1`.
+20. Essai sur téléphone, réglages — **M**. Documentation d'état mise à jour le 31/10 ; l'essai lui-même reste à faire.

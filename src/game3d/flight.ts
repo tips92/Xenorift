@@ -270,6 +270,8 @@ export class FlightRun implements ModeHandle {
   private fightZ = 0;
   /** Boss vaincu (prime acquise, plus aucun choc) ; profondeur de la Comète à l'ouverture du portail. */
   private bossBeaten = false;
+  /** Son du portail avalé déjà joué (une fois, à l'approche du dernier quart). */
+  private swallowed = false;
   private portalFrom = 0;
   /** Ennemis abattus avant le combat d'un nouvel essai (EnemyField repart de 0). */
   private killedBefore = 0;
@@ -458,7 +460,7 @@ export class FlightRun implements ModeHandle {
       // Boss du parcours : créé et attaché caché avant la compilation (rien à compiler en plein vol)
       const bossId = this.course.def.boss;
       if (bossId) {
-        this.boss = createFlightBoss(bossId, { theme, env: sky.env, events: this.bossEvents, bin: this.bin });
+        this.boss = createFlightBoss(bossId, { theme, env: sky.env, glow: this.glowMat, events: this.bossEvents, bin: this.bin });
         this.scene.add(this.boss.group);
       }
       this.screen = new ScreenFx(container);
@@ -1270,6 +1272,10 @@ export class FlightRun implements ModeHandle {
     boss.start(this.shipState);
     this.hooks.audio.music(boss.def.music);
     this.hooks.audio.sfx('bossAppear');
+    if (this.course.def.boss === 'leviathan') {
+      this.hooks.audio.sfx('leviathanRoar');
+      this.noteSwallow();
+    }
     this.hooks.audio.haptic(60);
     this.hooks.hud.toast('Chrono figé !');
     this.syncBossHud();
@@ -1470,6 +1476,27 @@ export class FlightRun implements ModeHandle {
     this.hooks.onFail(reason, this.fightRetryPoint());
   }
 
+  /** Portail avalé : une fois, à l'approche ou au pire au début du combat (pas à un nouvel essai). */
+  private noteSwallow(): void {
+    if (this.swallowed || this.atBoss || this.courseId !== 'nebula') return;
+    this.swallowed = true;
+    this.hooks.audio.sfx('portalSwallow');
+  }
+
+  /**
+   * Léviathan du décor : il se rapproche avec les portails, plonge au dernier quart, et disparaît dès que le boss
+   * du couloir est là (un seul tube par image). Les autres parcours ne cachent pas leur créature.
+   */
+  private syncScenery(): void {
+    const hideFar = this.fightStarted && !!this.boss;
+    this.env.setCreatureShown(!hideFar);
+    if (this.courseId !== 'nebula') return;
+    const n = this.course.gates.length;
+    const near = this.fightStarted || n <= 0 ? (this.fightStarted ? 1 : 0) : Math.min(1, this.gatesPassed / n);
+    this.env.setApproach(near);
+    if (!this.fightStarted && near >= 0.85) this.noteSwallow();
+  }
+
   // ================================================================ Rendu
 
   private updateVisuals(dt: number): void {
@@ -1505,6 +1532,7 @@ export class FlightRun implements ModeHandle {
     this.rocks.update(t, cam.z);
     this.enemies.render(t, cam.z);
     if (this.boss) this.boss.render(t, cam.z);
+    this.syncScenery();
     this.shots.render(cam.z);
     this.pickups.render(t, cam.z);
     this.env.update(dt, t, cam, phase !== 'intro');

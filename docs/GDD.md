@@ -227,10 +227,13 @@ haut / bas / gauche / droite dans un couloir (rayon ~12 unités) pour traverser 
 - Cristaux du vol : cyan et bleus comme l'icône et le cristal 2D (dans tous les parcours), halo qui pulse et
   éclat bref ; aimantés quand la Comète passe près ; +1 réserve et 50 points chacun. Le HUD du vol
   montre la jauge « Énergie » et les cristaux ramassés.
-- Fin : un grand portail de distorsion (warp) → effet de vitesse → résultats.
+- Fin : un grand portail de distorsion (warp) → effet de vitesse → résultats. Vol 1 : après le dernier portail,
+  le léviathan (déjà vu au loin, qui se rapproche) avale ce portail. On tire sur 4 plaques du dos puis 3 de la
+  queue (une touche chacune, chrono figé) ; vaincu, il recrache le portail devant la Comète. Le plan du
+  mitrailleur est donné aux résultats, sans objet à ramasser. Boucliers à zéro : « Réessayer le combat ».
 - Décor : skybox nébuleuse colorée, champ d'étoiles, planètes, traînées de vitesse, et **une créature
-  spatiale géante** qui nage au loin (vol 1 : léviathan de la nébuleuse ; vol 2 : planète à anneaux
-  et ver cosmique).
+  spatiale géante** qui nage au loin (vol 1 : léviathan de la nébuleuse, qui entre dans le couloir au dernier
+  portail ; vol 2 : planète à anneaux et ver cosmique). Un seul de ces tubes est dessiné à la fois.
 - Parcours « nebula » (vol 1, facile, ~75 s) et « asteroids » (vol 2, ceinture d'astéroïdes dense, ~90 s).
 - Score : temps restant x100 + portails x200 + bonus sans dégât (1 000) + rochers détruits x10 + ennemis
   abattus (150, 50 ou 30) + cristaux ramassés x50. Étoiles selon le ratio de portails (1 = terminé, 2 = ≥ 70 %,

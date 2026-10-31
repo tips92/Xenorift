@@ -1,9 +1,9 @@
-// Vol 1 (f1) : combat du boss après le dernier portail (plan 04, étape 17 ; boss PROVISOIRE de
-// src/game3d/bosses/provisional.ts en attendant le léviathan de l'étape 18 ; choix 7 et 15, décisions 20 et 21).
+// Vol 1 (f1) : combat du léviathan après le dernier portail (plan 04, étapes 17 et 18 ;
+// src/game3d/bosses/leviathan.ts : 4 plaques dorsales puis 3 sur la queue ; choix 7 et 15, décisions 20 et 21).
 //  A. Partie normale (?stage=f1, tactile) : pilote automatique en avance rapide (__xr3d.advance) jusqu'au dernier
 //     portail → phase 'boss' aussitôt (16/16, jamais de distorsion avant), boss qui arrive ('appear' puis 'fight'),
 //     musique `boss`, son `bossAppear`, message « Chrono figé ! », portail de distorsion fermé ; chrono et avancement
-//     figés (jeu et HUD) ; barre « Léviathan » en 6 crans, « Phase 1/2 » ; aucun programme compilé depuis le départ
+//     figés (jeu et HUD) ; barre « Léviathan » en 7 touches, « Phase 1/2 » ; aucun programme compilé depuis le départ
 //     (boss préparé avec la scène) ; appels de dessin < 150 ; Comète pilotée au clavier (flèches simulées) vers une
 //     cible : visée sur le boss et atteignable, aucun tir sans TIR ; TIR tenu (aide fire) : une touche, barre d'un cran
 //     plus courte ; TIR tactile ; touches jusqu'à la phase 2 (sons `bossHit` et `bossPhase`, barre « Phase 2/2 » à
@@ -49,9 +49,13 @@ export const meta = {
 
 // ---------------------------------------------------------------- Valeurs recopiées (src/game3d/bosses, flight.ts)
 
-/** Boss de f1 (FLIGHT_BOSSES de src/game3d/bosses/index.ts, PHASE_TARGETS de provisional.ts). */
-const BOSS = { name: 'Léviathan', touches: 6, phases: 2, bonus: 3000 };
-const BOSS_HALF = BOSS.touches / BOSS.phases;
+/** Boss de f1 (FLIGHT_BOSSES de bosses/index.ts ; DORSAL et TAIL_PLATES de bosses/leviathan.ts). */
+const PHASE_TOUCHES = [4, 3];
+const BOSS = { name: 'Léviathan', touches: PHASE_TOUCHES[0] + PHASE_TOUCHES[1], phases: 2, bonus: 3000 };
+/** Remplissage de barre quantifié comme le HUD (BOSS_STEPS = 200). */
+function barFill(left) {
+  return Math.round((left / BOSS.touches) * 200) / 200;
+}
 /** Portail ouvert à la victoire, devant la Comète (PORTAL_AHEAD de src/game3d/flight.ts). */
 const PORTAL_AHEAD = 230;
 /** Score (startWarp de flight.ts) ; chrono du départ de f1 (COURSES.nebula.startTime). */
@@ -167,13 +171,18 @@ async function flyToBoss(t, label) {
   return r;
 }
 
-/** Touches directes (aide DEV) : les cibles de la phase 1, puis celles de la phase 2 une fois exposées. */
+/** Touches directes (aide DEV) : la phase en cours, puis la suivante si elle reste. Déjà en phase 2 : on finit celle-là. */
 async function beatBoss(t, label) {
-  await waitBossState(t, 'fight', label);
-  let left = await t.ev((n) => window.__xr3d.boss.hit(n), BOSS_HALF);
-  if (left > 0) {
-    await waitBossState(t, 'fight', `${label} (phase 2)`);
-    left = await t.ev((n) => window.__xr3d.boss.hit(n), BOSS_HALF);
+  let left = BOSS.touches;
+  for (let guard = 0; left > 0 && guard < 4; guard++) {
+    await waitBossState(t, 'fight', guard === 0 ? label : `${label} (suite ${guard + 1})`);
+    const info = await bossInfo(t);
+    if (!info || info.touchesLeft <= 0) {
+      left = info ? info.touchesLeft : 0;
+      break;
+    }
+    const n = PHASE_TOUCHES[Math.max(0, info.phase - 1)] ?? info.touchesLeft;
+    left = await t.ev((k) => window.__xr3d.boss.hit(k), n);
   }
   assertEq(left, 0, `${label} : boss vaincu par ses touches`);
 }
@@ -308,12 +317,12 @@ async function partA(t) {
   assertEq(heard.music, ['boss'], 'A : musique du combat (boss) au dernier portail');
   assert(heard.sfx.includes('bossAppear'), `A : son d'apparition du boss (${fmt(heard.sfx)})`);
 
-  // Barre de boss : nom, 6 crans (1 repère de phase + 4 crans de touche), phase 1/2, pleine
+  // Barre de boss : nom, 7 touches (1 repère de phase + 6 crans), phase 1/2, pleine
   await waitFor(t, () => !!document.querySelector('.hud-boss.is-on'), { timeout: 3000, label: 'A : barre de boss affichée' });
   const bar1 = await bossBar(t);
   assertEq(
     { on: bar1.on, name: bar1.name, phase: bar1.phase, marks: bar1.marks, steps: bar1.steps, fill: bar1.fill },
-    { on: true, name: BOSS.name, phase: 'Phase 1/2', marks: 5, steps: 4, fill: 1 },
+    { on: true, name: BOSS.name, phase: 'Phase 1/2', marks: 7, steps: 6, fill: 1 },
     'A : barre de boss au début du combat',
   );
 
@@ -422,22 +431,21 @@ async function partA(t) {
   await f.end();
   assert(s1 >= s0 + 2, `A : TIR tactile en combat : la Comète tire (${s0} -> ${s1})`);
 
-  // Touches directes sur ce qui reste de la phase 1 : phase 2 (barre à moitié, Phase 2/2, sons des touches et de la
-  // phase)
+  // Touches directes sur ce qui reste de la phase 1 : phase 2 (3/7, Phase 2/2, sons des touches et de la phase)
   if ((await bossInfo(t)).phase === 1) {
     await waitBossState(t, 'fight', 'A (touches)');
-    await t.ev((n) => window.__xr3d.boss.hit(n), BOSS.touches);
+    await t.ev((n) => window.__xr3d.boss.hit(n), PHASE_TOUCHES[0]);
   }
   const ph2 = await bossInfo(t);
   assert(
-    ph2.touchesLeft === BOSS_HALF && ph2.phase === 2 && ['shift', 'fight'].includes(ph2.state),
-    `A : phase 2 après ${BOSS_HALF} touches (${fmt({ left: ph2.touchesLeft, phase: ph2.phase, state: ph2.state })})`,
+    ph2.touchesLeft === PHASE_TOUCHES[1] && ph2.phase === 2 && ['shift', 'fight'].includes(ph2.state),
+    `A : phase 2 après les plaques du dos (${fmt({ left: ph2.touchesLeft, phase: ph2.phase, state: ph2.state })})`,
   );
   const sfx2 = await t.ev(() => window.__fbSfx);
   assert(sfx2.includes('bossHit') && sfx2.includes('bossPhase'), `A : sons des touches et de la phase 2 (${fmt(sfx2)})`);
   await waitFor(t, () => document.querySelector('.boss-phase').textContent === 'Phase 2/2', { timeout: 2000, label: 'A : barre « Phase 2/2 »' });
   const bar3 = await bossBar(t);
-  assertEq([bar3.dataPhase, bar3.fill], ['2', 0.5], 'A : barre de la phase 2, à moitié');
+  assertEq([bar3.dataPhase, bar3.fill], ['2', barFill(PHASE_TOUCHES[1])], 'A : barre de la phase 2 (3 plaques sur 7)');
   await waitBossState(t, 'fight', 'A (phase 2)');
   await t.shot('a-phase2');
 

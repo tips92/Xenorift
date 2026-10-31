@@ -7,7 +7,7 @@ de « à discuter » vers « retenu » quand elle est validée.
 Rappel des contraintes du projet : tout est dessiné par code et les sons sont synthétisés, donc chaque
 nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur un mobile milieu de gamme.
 
-## Où on en est (29/10/2026)
+## Où on en est (31/10/2026)
 
 - Toutes les décisions prises avec l'utilisateur sont dans ce fichier, dans [HISTOIRE.md](HISTOIRE.md)
   (validée) et dans la section « Décisions » de chaque plan technique.
@@ -35,7 +35,9 @@ nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur 
   complète 39/39, nouveaux scénarios `j2-play`, `boss-titan`, `boss-whale`, `j3-ctx-boss`) : campagne à 6 étapes,
   j2 « Canopée des spores » (champignons, la méduse-baleine qui agit, Tess, Scarabée-titan), j3 « Sanctuaire du
   gardien » (radio brouillée, combat contre la méduse-baleine, double saut), boss en touches, « Réessayer le
-  combat ». Reste l'essai sur téléphone de 4b, puis 4c (cinématiques, léviathan).
+  combat ». **Partie 4c codée** (prologue, libération, phase `boss` du vol, léviathan en 7 touches, plan du
+  mitrailleur aux résultats ; `f1-boss` vert le 31/10). Reste l'essai sur téléphone de 4b et de 4c. La suite e2e
+  complète n'a pas été rejouée après le léviathan.
 - Plans 5 à 7 écrits le 29/10, choix encore à valider :
   [05-monde-2.md](plans/05-monde-2.md), [06-carte-et-mondes.md](plans/06-carte-et-mondes.md),
   [07-secrets-bonus.md](plans/07-secrets-bonus.md). Les styles de bonus proposés sont la course jetpack et la
@@ -84,7 +86,7 @@ un bloc `loadout` (arme équipée, armes possédées, double saut appris), relu 
 l'étape 3a, l'arme équipée se change au hangar (enregistrée). En mode test, une arme non possédée s'y équipe
 pour la session seulement, comme avec `?weapon=`. Les plans d'armes sur les boss et l'apprentissage du double
 saut auprès du premier gardien viennent avec l'étape 4 (4a : le plan du mitrailleur est donné en réussissant le
-vol 1, en attendant le léviathan de 4c ; les récompenses sont rendues aux anciens joueurs ; 4b : le double saut
+vol 1, donné en battant le léviathan (4c) ; les récompenses sont rendues aux anciens joueurs ; 4b : le double saut
 est appris en battant la méduse-baleine de j3).
 
 - [x] Arme équipée conservée d'un niveau à l'autre (enregistrée dans la sauvegarde : `loadout.equipped`)
@@ -167,13 +169,14 @@ vies) ; vérifiés par `boss-mini`, `boss-titan`, `boss-whale`, `j3-ctx-boss`. D
       Blob-roi et le Scarabée-titan)
 - [ ] Gardien au niveau 3 : la créature vue au loin (méduse-baleine, ver des sables, colosse de givre,
       salamandre de magma, puis Éon) (1 sur 5 : la méduse-baleine)
-- [ ] Après la victoire : cinématique de libération, nouvelle compétence, embarquement et décollage (compétence
-      donnée aux résultats en 4b ; cinématique en 4c)
+- [ ] Après la victoire : cinématique de libération, nouvelle compétence, embarquement et décollage (monde 1 :
+      compétence aux résultats en 4b, prologue et libération en 4c, `story-flow`)
 - [ ] Boss dans chaque vol 3D (léviathan, ver cosmique, raie solaire, Sentinelle, puis la fuite finale)
+      (1 sur 5 : le léviathan, 7 touches, plan du mitrailleur)
 - [ ] Barre de vie, 2 ou 3 phases, point faible lisible (barre en crans, 2 et 3 phases faites ; lisibilité des
       points faibles à juger sur téléphone)
 - [ ] « Réessayer le combat » si les vies tombent à zéro contre un boss (2D faite en 4b, vérifiée par `boss-mini`,
-      `boss-titan`, `boss-whale` et `j3-ctx-boss` ; en vol avec le léviathan, 4c)
+      `boss-titan`, `boss-whale` et `j3-ctx-boss` ; vol fait en 4c, vérifié par `f1-boss`)
 - [x] Musique de boss et effets d'apparition / de défaite (musique `boss`, effets d'apparition, de coup, de
       phase et de défaite, joués par le Blob-roi ; musique du gardien à 3 intensités prête pour 4b)
 
@@ -305,9 +308,8 @@ le jeu en 4c.
    **3a et 3b codées et vérifiées** (suite e2e) ; essai sur téléphone à faire ; balise faite avec l'étape 4 (4a).
 4. **Monde 1 complet au nouveau format** : 3 niveaux, mini-boss, méduse-baleine, double saut, vol avec le
    léviathan, LUMA, prologue et cinématique de libération. Il sert de modèle : on valide tout sur un seul
-   monde avant de multiplier les niveaux. **En cours** (plan validé, branche `claude/world-1-completion-866505`) :
-   4a (fondations, j1) et 4b (la Jungle : j2, j3, Tess, mini-boss et gardienne) faites et vérifiées ; prochaine :
-   4c (histoire et vol).
+   monde avant de multiplier les niveaux. **Codé** (plan validé, branche `claude/world-1-completion-866505`) :
+   4a, 4b et 4c en place ; essai sur téléphone de 4b et de 4c à faire.
 5. **Monde 2** au même format. Plan écrit, à valider : [plans/05-monde-2.md](plans/05-monde-2.md).
 6. **Carte galactique**, puis Boréa, Vulkar et le Cœur de la Faille, avec les cinématiques de fin. Plan écrit,
    à valider : [plans/06-carte-et-mondes.md](plans/06-carte-et-mondes.md).

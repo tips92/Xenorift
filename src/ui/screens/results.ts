@@ -160,9 +160,15 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
   function revealRecord(withSound: boolean): void {
     if (record.classList.contains('is-shown')) return;
     record.classList.add('is-shown');
-    if (d.newRecord && withSound) {
+    if (!withSound) return;
+    if (d.newRecord) {
       ctx.audio.sfx('powerup');
       ctx.audio.haptic([20, 30, 40]);
+    }
+    // Le plan du vol est donné à la réussite : rien à ramasser dans le couloir.
+    if (d.rewards.some((r) => r.kind === 'blueprint')) {
+      ctx.audio.sfx('blueprint');
+      ctx.audio.haptic(24);
     }
   }
 

@@ -694,15 +694,15 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   gone`, `phase`, `phases`, `touches`, `touchesLeft`, `beaten` (prime acquise), `fight` (combat commencé), `atBoss`
   (départ au combat), `retry` (nouvel essai : instantané lu), `noDamage`, `snapshot`, `hud` (barre affichée), `portal`
   (`open`, `z`, `dist` : distance de la Comète), `ship` (`x`, `y`, `z`), `targets` (`x`, `y`, `z`, `r`, `open`, `alive` ;
-  le noyau en dernier), `visible`), `start()` (en phase `fly` : portails restants comptés franchis, Comète posée au
+  plaques du léviathan, 4 puis 3), `visible`), `start()` (en phase `fly` : portails restants comptés franchis, Comète posée au
   début de l'arène, combat lancé ; renvoie vrai), `win()` (vaincu comme par les tirs : prime, portail ouvert ;
   `__xr3d.win()`, lui, passe le combat sans prime et part en distorsion tout de suite), `hit(n = 1)` (une touche par
   cible exposée, comme un tir ; s'arrête au changement de phase, cibles fermées 1,3 s ; renvoie les touches
   restantes). `f1-boss` (full, dev, ≈ 2 min) : A. f1 au pilote automatique en avance rapide jusqu'au dernier portail,
-  chrono figé (jeu et HUD), barre « Léviathan » en 6 crans (`.boss-mark` : 1 repère de phase, 4 crans), aucun programme
+  chrono figé (jeu et HUD), barre « Léviathan » en 7 touches (`.boss-mark` : 1 repère de phase, 6 crans), aucun programme
   compilé depuis le départ (`info().programs`), appels de dessin < 150, Comète pilotée par des flèches simulées vers
-  une cible (cible visée et atteignable, aucun tir), TIR tenu (`fire`) : une touche, TIR tactile, phase 2 (barre à
-  moitié), perte puis restauration du contexte en plein combat (combat intact), victoire → portail → distorsion →
+  une cible (cible visée et atteignable, aucun tir), TIR tenu (`fire`) : une touche, TIR tactile, phase 2 (3/7),
+  perte puis restauration du contexte en plein combat (combat intact), victoire → portail → distorsion →
   résultats et score exact ; B. boucliers vidés par les orbes (pilote coupé) → « Réessayer le combat » (état rendu,
   jamais de phase `fly`) → perdu de nouveau → « Réessayer » simple → `boss.start()` → perdu → « Réessayer le combat »
   → victoire sans prime sans dégâts ; C. `?at=boss`, perte définitive du contexte en plein combat → « Réessayer le

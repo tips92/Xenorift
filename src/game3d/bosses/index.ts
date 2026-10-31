@@ -1,6 +1,6 @@
 import type { FlightBossId } from '../courses';
 import { inAimCone, offerAim, type AimTarget } from '../shots';
-import { ProvisionalBoss } from './provisional';
+import { LeviathanBoss } from './leviathan';
 import type { FlightBoss, FlightBossContext, FlightBossDef } from './types';
 
 // Registre des boss de vol (CourseDef.boss) : fiche (nom de la barre, prime, musique) et construction. Un identifiant
@@ -13,11 +13,11 @@ interface FlightBossEntry {
 }
 
 const FLIGHT_BOSSES: Record<FlightBossId, FlightBossEntry> = {
-  // Boss provisoire (étape 17 du plan 04) en attendant le léviathan (bosses/leviathan.ts, étape 18). Prime entre
-  // celle d'un mini-boss (2 000) et celle d'un gardien (5 000) : à régler.
+  // 4 plaques dorsales puis 3 sur la queue (bosses/leviathan.ts). Prime entre un mini-boss (2 000) et un gardien
+  // (5 000) : à régler sur téléphone.
   leviathan: {
     def: { name: 'Léviathan', bonus: 3000, music: 'boss' },
-    create: (def, ctx) => new ProvisionalBoss(def, ctx),
+    create: (def, ctx) => new LeviathanBoss(def, ctx),
   },
 };
 

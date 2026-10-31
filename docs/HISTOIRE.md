@@ -95,7 +95,9 @@ d'assaut). Une fois le plan récupéré, l'arme s'achète et s'améliore à l'é
   c'est le moment de tirer. Le saut mural sert à rester au-dessus de la lave.
 - **Éon** : 3 phases. À chaque phase, un gardien libéré vient aider Kaï (la méduse-baleine le porte, le ver
   creuse un passage, le colosse gèle la lave). La dernière phase demande toutes les compétences.
-- **Boss des vols** : le léviathan avale des portails (on tire sur ses plaques lumineuses), le ver cosmique
+- **Boss des vols** : le léviathan de la nébuleuse suit les portails, avale celui de la distorsion, et on libère
+  le portail en tirant sur ses plaques (4 sur le dos, puis 3 sur la queue) ; il le recrache avec le plan du
+  mitrailleur. Le ver cosmique
   s'enroule autour des astéroïdes, la raie solaire lance des éruptions, la Sentinelle protège ses anneaux
   par des boucliers. Le dernier vol est une fuite : le Vide engloutit la Faille derrière la Comète.
 

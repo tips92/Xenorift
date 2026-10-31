@@ -4,17 +4,17 @@ Un plan par étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). On 
 en lisant le code concerné ; l'utilisateur valide les choix proposés, qui passent dans la section
 « Décisions ». Organisation générale : [ARCHITECTURE.md](../ARCHITECTURE.md).
 
-## État au 29/10/2026
+## État au 31/10/2026
 
 | Étape | Plan | État |
 |---|---|---|
 | 1. Contrôles 2D (stick à 8 directions, visée, accroupi, descente, portes, réglage des boutons) | [01-controles.md](01-controles.md) | codé et vérifié par la suite e2e complète (branche `plans-etapes-1-3`) ; essai sur téléphone à faire (secteurs d'angle du stick, taille) |
 | 2. Armes et nouveaux bonus | [02-armes.md](02-armes.md) | codé et vérifié par la suite e2e complète (nouveaux scénarios `weapons` / `powerups`) ; essai sur téléphone à faire (réglage des armes, sons, vitesse) |
 | 3. Hangar (3a : hangar et armes de Kaï ; 3b : combat en vol) | [03-hangar.md](03-hangar.md) | 3a et 3b codées et vérifiées par la suite e2e complète (branche `plans-etapes-1-3` ; 3a et 3b commitées ; nouveaux scénarios `hangar` et `flight-combat`, captures et tests relus) ; premier essai sur téléphone le 29/10/2026 : décision 3 amendée (bouton TIR dédié, TURBO au-dessus, énergie partagée ; décision 21 du plan 04 ; branche `claude/vol-tir-bouton`, commitée en `8274dd0` et fusionnée dans `claude/world-1-completion-866505`) ; à réessayer sur téléphone (lisibilité des tirs et des ennemis, TIR et TURBO, énergie, réglages) ; la balise (point 16) est faite à l'étape 4 |
-| 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | décisions validées le 28/10 (les 19 choix tels quels), plus 20 (boss en touches) et 21 (tir au bouton en vol) le 29/10 ; branche `claude/world-1-completion-866505` (3b et le tir au bouton y sont fusionnés) ; **4a faite** (étapes 1 à 6 : tables par thème, table des mondes et progression, Niveaux en pages, balise de LUMA, radio et tutoriel, arène et Blob-roi, j1 au nouveau format), essayée sur téléphone le 29/10 ; **4b faite** (étapes 7 à 12 : champignons, créature et événements, j2 et Tess, Scarabée-titan, j3 et méduse-baleine, campagne à 6 étapes, boss en touches, « Réessayer le combat »), vérifiée par la suite e2e complète (39/39) et le diag (7/7) ; essai sur téléphone de 4b à faire ; prochaine : 4c |
-| 5. Monde 2 (Lune) au nouveau format : gravité faible, Ozzo, glissade, ver des sables, ver cosmique | [05-monde-2.md](05-monde-2.md) | choix proposés le 29/10, deux relectures (portée des sauts inchangée, glissade sans délai, Crabe copié du Scarabée) ; à valider |
-| 6. Carte galactique, puis Boréa, Vulkar, Cœur de la Faille | [06-carte-et-mondes.md](06-carte-et-mondes.md) | choix proposés le 29/10, deux relectures (mini-boss copiés, fuite = chrono déjà là, cran de bouclier) ; à valider |
-| 7. Objets secrets et niveaux bonus | [07-secrets-bonus.md](07-secrets-bonus.md) | choix proposés le 29/10, deux relectures (jetpack = saut et tir, secrets dans les cachettes déjà là) ; à valider |
+| 4. Monde 1 complet au nouveau format (4a fondations, 4b la Jungle, 4c histoire et vol) | [04-monde-1.md](04-monde-1.md) | décisions validées le 28/10 (les 19 choix tels quels), plus 20 (boss en touches) et 21 (tir au bouton en vol) le 29/10 ; branche `claude/world-1-completion-866505` (3b et le tir au bouton y sont fusionnés) ; **4a faite** (étapes 1 à 6 : tables par thème, table des mondes et progression, Niveaux en pages, balise de LUMA, radio et tutoriel, arène et Blob-roi, j1 au nouveau format), essayée sur téléphone le 29/10 ; **4b faite** (étapes 7 à 12 : champignons, créature et événements, j2 et Tess, Scarabée-titan, j3 et méduse-baleine, campagne à 6 étapes, boss en touches, « Réessayer le combat »), vérifiée par la suite e2e complète (39/39) et le diag (7/7) ; **4c codée** (étapes 13 à 19 : tables 3D, prologue, libération, phase `boss`, léviathan en 7 touches, portail avalé puis recraché, plan du mitrailleur aux résultats) ; `f1-boss` vert le 31/10 ; essai sur téléphone de 4b et de 4c à faire ; la suite e2e complète n'a pas été rejouée après le léviathan |
+| 5. Monde 2 (Lune) au nouveau format : gravité faible, Ozzo, glissade, ver des sables, ver cosmique | [05-monde-2.md](05-monde-2.md) | choix proposés, relus le 31/10 (ascenseurs ralentis avec le saut, Crabe en fichier court) ; à valider |
+| 6. Carte galactique, puis Boréa, Vulkar, Cœur de la Faille | [06-carte-et-mondes.md](06-carte-et-mondes.md) | choix proposés, relus le 31/10 (boss de vol sur le contrat de 4c, salle inversée sans ennemis) ; à valider |
+| 7. Objets secrets et niveaux bonus | [07-secrets-bonus.md](07-secrets-bonus.md) | choix proposés, relus le 31/10 (essai d'une mine avant le vol stationnaire) ; à valider |
 
 Les étapes 1 à 3 se codent dans l'ordre : l'étape 2 utilise la visée de l'étape 1, l'étape 3 les fiches
 d'armes de l'étape 2.
@@ -69,11 +69,13 @@ d'armes de l'étape 2.
    - arènes : bords sous le stick et sous TIR (j1 à 20 colonnes surtout), sortie de l'arène de j2 en sautant sur le
      champignon 220 ;
    - écran d'échec à trois boutons (« Réessayer le combat »).
-5. **Étape 4, partie 4c** (histoire et vol), dans l'« Ordre de réalisation » du plan 04 : étape 13, tables par
-   monde côté 3D ; puis lecteur et phase `story`, prologue, libération, phase `boss` du vol et nouvel essai en vol
-   (`onFail(reason, retry)` et `startAt` dans `startFlight`, même contrat qu'en 2D), léviathan, sons définitifs.
-6. **Valider les plans 5 à 7** (questions en tête de chaque fichier) avant de les coder. L'étape 5 attend la fin
-   de 4c. Rien de ces trois plans n'est commencé.
+5. **Essai sur téléphone de 4b et de 4c** (même APK). 4c est codée : prologue, libération, léviathan
+   (`src/game3d/bosses/leviathan.ts`, 4 plaques puis 3, prime 3 000). À juger : taille du corps dans le couloir,
+   lisibilité des plaques, difficulté des orbes et du balayage de queue, gêne des bulles et fluidité des
+   cinématiques. Après un réglage : constantes en tête de `leviathan.ts`, puis `PHASE_TOUCHES` / `BOSS` de
+   `tests/e2e/scenarios/f1-boss.mjs`.
+6. **Valider les plans 5 à 7** (questions en tête de chaque fichier) avant de les coder. Rien de ces trois plans
+   n'est commencé.
 
 ## Questions encore ouvertes
 

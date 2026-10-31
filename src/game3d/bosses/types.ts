@@ -63,6 +63,8 @@ export interface FlightBossDef {
 export interface FlightBossContext {
   readonly theme: CourseTheme;
   readonly env: THREE.Texture;
+  /** Points lumineux partagés avec le décor (setGlowScale). */
+  readonly glow: THREE.ShaderMaterial;
   readonly events: FlightBossEvents;
   readonly bin: Bin;
 }

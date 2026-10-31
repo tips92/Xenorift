@@ -238,7 +238,7 @@ Emplacements prévus par les plans de la [feuille de route](SOUHAITS.md#ordre-de
 | Sons et musiques du monde 1 | `audio/world1Sfx.ts`, `audio/world1Tracks.ts` (intensités : `musicLevel`) | 4a |
 | Graphe d'accessibilité des niveaux | `scripts/lib/reach.ts` (lu par `scripts/check-levels.ts`) | 4a |
 | Cinématiques | `src/story/` : lecteur `player.ts` + une scène par cinématique (`scenes/`) ; écran `ui/screens/cutscene.ts` | 4c |
-| Boss des vols | `game3d/bosses/` | 4c |
+| Boss des vols | `game3d/bosses/` (léviathan : `leviathan.ts`) | 4c, en place |
 | Carte galactique | `ui/screens/galaxy.ts` | 6 |
 
 ### Points de vigilance avant de grandir
