@@ -29,7 +29,9 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
 
 - **C: est plein : tout s'installe et se met en cache sur D:.** Dans `D:\DevTools` : `jdk-21` (JAVA_HOME),
   `android-sdk` (ANDROID_HOME), `android-user` (ANDROID_USER_HOME, contient le `debug.keystore` qui signe
-  l'APK de test), `gradle-home` (GRADLE_USER_HOME), `npm-cache` (imposé par `.npmrc`), `tmp`.
+  l'APK de test), `gradle-home` (GRADLE_USER_HOME), `npm-cache` (imposé par `.npmrc` ; aussi cache global du
+  compte via `~/.npmrc`), `ms-playwright` (navigateurs Playwright, jonction depuis `%LOCALAPPDATA%`), `tmp`
+  (aussi TEMP/TMP du compte Windows).
 - `tools\env.cmd` (cmd) ou `. .\tools\env.ps1` (PowerShell) posent toutes ces variables, TEMP=TMP=`D:\DevTools\tmp`
   et le PATH (java, adb). Sinon, définir au moins TEMP/TMP sur `D:/DevTools/tmp` avant npm/npx/node. Depuis
   PowerShell : `npm.cmd` / `npx.cmd`. Node 24 (déjà installé) exécute les `.ts` directement (`check-levels`).
