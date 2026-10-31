@@ -1,15 +1,8 @@
 # Étape 7 — objets secrets et niveaux bonus : plan technique
 
-> **État au 29/10/2026 : choix proposés, rien n'est codé.** Dernière étape de
+> **État au 31/10/2026 : choix proposés, rien n'est codé.** Dernière étape de
 > l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). On code après validation. L'étape suppose la **carte**
-> (6a) et, pour les secrets qui demandent un geste, les compétences déjà apprises (double saut, glissade,
-> saut mural, grappin). On peut **poser les secrets des mondes 1 et 2 dès la fin de l'étape 5** si la carte
-> existe ; les mondes 3 à 5 suivent l'étape 6.
->
-> **Ajusté le 29/10 au soir, puis une seconde fois.** Secrets par case, sans monter la version, sans compteur
-> dans le HUD. La bourse vaut le prix du premier cœur. Le jetpack ne garde que le saut et le tir. Les `S` se
-> posent d'abord dans les cachettes déjà dessinées. On essaie le jetpack sur téléphone avant d'écrire la
-> défense. Un échec de niveau n'efface pas un secret déjà pris.
+> (6a). Les choix ci-dessous incluent les relectures du 29 et du 31.
 
 ## À valider
 
@@ -121,11 +114,11 @@
 
 ### Défense de la Comète (monde pair)
 
-- Même `FlightRun`, drapeau de parcours `defend: true` : vitesse de translation nulle, la Comète se déplace
-  dans le plan de l'écran (joystick), TIR et énergie comme en vol. Vagues déjà décrites par `WavePlan`,
-  trois vagues fixes (pas de graine qui changerait `COURSE_FP` des vrais parcours : **autre** générateur,
-  autre graine, fichiers à part). Pas de portails, pas de distorsion. Réussite : les trois vagues vidées.
-  Échec : plus de boucliers. Chrono indicatif, pas une défaite. ~45 s.
+- Même `FlightRun`. Avant d'écrire le niveau : **un essai d'une séance**. Geler `z`, poser une mine devant
+  la Comète, vérifier qu'on peut la tirer et qu'elle peut toucher. Si ça tient, `defend: true` (translation
+  nulle, joystick dans le plan, trois vagues en temps, autre graine que `COURSE_FP`). Si le gel de `z` casse
+  le vol, le bonus Lune est un parcours court **normal** (vitesse, portails larges, trois vagues) et le vol
+  stationnaire attend. On ne construit pas le contenu des cinq bonus défense avant cet essai.
 
 ## Modifications prévues
 
@@ -136,10 +129,9 @@
 3. **Récompense `crystals`** dans `StageReward` et `recordResult` (une fois, montant `PRICES.heart[0]`).
 4. **Étapes bonus** dans `WORLDS` : champ `bonus?: WorldStage` **à côté** de `stages`, ignoré par
    `nextToPlay` et par le déblocage de la suivante. `stages.ts` les expose à la carte et à `?stage=bonus-j`.
-5. **`autoRun`** dans la scène 2D. **`defend`** dans `flight.ts` (pas de `z` qui avance, vagues en temps).
-   Deux fichiers de contenu par style, réutilisés : le monde change la palette et les ennemis, pas la
-   structure. `bonus-j`, `bonus-b`, `bonus-r` partagent le même gabarit de carte (obstacles différents).
-   `bonus-m`, `bonus-v` partagent le gabarit de vagues (kinds du thème du vol de ce monde).
+5. **`autoRun`** dans la scène 2D. **`defend`** dans `flight.ts` seulement si l'essai de la mine gelée tient ;
+   sinon un parcours court normal, et les mondes pairs le réutilisent. `bonus-j`, `bonus-b`, `bonus-r`
+   partagent le gabarit jetpack. `bonus-m` et `bonus-v` partagent le gabarit qui aura tenu.
 6. **Carte** : carte bonus sous les quatre étapes du monde, cadenas, « n/9 » avec Ozzo, lance l'étape.
 7. **Check-levels** : le graphe de la première visite, plus un passage par `S` qui ajoute seulement sa
    compétence. Exactement 3 `S` sur chaque niveau de plateforme de l'histoire, 0 sur un bonus et sur un vol.
@@ -188,8 +180,9 @@ répètent les deux gabarits quand ces mondes existent.
 **7b — la Lune, second style**
 
 - [ ] **6. M — 9 `S` sur m1–m3.** Au moins un qui demande la glissade, un qui se prend sans elle.
-- [ ] **7. M — Défense** (`defend`, vagues à part), `bonus-m`, scénario `bonus-defend`. `COURSE_FP` intact.
-- [ ] **8. P — Suite e2e, essai téléphone de la défense.** Le troisième style attend ces deux essais.
+- [ ] **7. P — Essai : geler `z`, une mine.** Si ça tient, trois vagues et `bonus-m`. Sinon, parcours court
+      normal et on le note dans ce plan. `COURSE_FP` des vraies courses intact.
+- [ ] **8. P — Suite e2e, essai téléphone de la défense** (ou du parcours court). Le troisième style attend.
 
 **7c — quand les mondes 3 à 5 existent**
 

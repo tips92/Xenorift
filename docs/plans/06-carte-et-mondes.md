@@ -1,15 +1,7 @@
 # Étape 6 — carte galactique, Boréa, Vulkar, Cœur de la Faille : plan technique
 
-> **État au 29/10/2026 : choix proposés, rien n'est codé.** On code après validation. L'étape suppose les
-> étapes **4 et 5 terminées** (deux mondes au nouveau format, libération, boss de vol, glissade). Elle ajoute
-> la carte, puis **trois mondes** sur le même cadre. Le Cœur de la Faille s'en écarte exprès (Éon, fuite, plus
-> de radio).
->
-> **Ajusté le 29/10 au soir, puis une seconde fois.** La carte ne dessine pas les mondes absents. Pas de
-> journal. Fresques en fin de v2. Le vent est un nombre sur le niveau, pas un événement. Les mini-boss sont
-> des copies, pas des machines nouvelles. Rook ajoute un cran au bouclier déjà vendu. La salle inversée reste
-> dans la même carte. La fuite réutilise le chrono du vol. Les aides d'Éon déclenchent des événements déjà
-> écrits.
+> **État au 31/10/2026 : choix proposés, rien n'est codé.** On code après validation. L'étape suppose les
+> étapes **4 et 5 terminées**. Les choix ci-dessous incluent les relectures du 29 et du 31.
 
 Sixième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). Trame :
 [HISTOIRE.md](../HISTOIRE.md) (mondes 3 à 5, fresques, piège, finale).
@@ -165,8 +157,10 @@ Sixième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). Trame 
    autre dessin, autres chiffres, le fichier d'origine sans diff. Le gardien est la seule machine nouvelle
    (colosse : cristaux du dos ouverts pendant qu'il frappe, 6 touches). Créature dans la parallaxe, loin puis
    proche ; l'avalanche qui barre le chemin est un `quake`, comme la dalle de la Lune.
-6. **Mira** et les cœurs. Vol `helia`, boss `solarRay` (éruptions = projectiles à éviter, point faible entre
-   deux éruptions), plan `rifle`. Libération paramétrée (colosse, saut mural).
+6. **Mira** et les cœurs. Vol `helia`, boss `solarRay`. La raie et, plus tard, la Sentinelle passent par le
+   contrat de boss de vol déjà écrit en 4c (cibles, touches, phases, nouvel essai). On ne réécrit pas
+   `flight.ts` pour chaque créature : seul le dessin et l'emplacement des cibles changent. Éruptions = les
+   orbes déjà là. Plan `rifle`. Libération paramétrée (colosse, saut mural).
 
 ### 6c — Vulkar
 
@@ -187,9 +181,10 @@ Sixième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). Trame 
 
 10. **Thème** `rift` : des bandes de colonnes réutilisent les palettes déjà faites, plus le calque Vide au
     dessin. **Gravité inversée** : un rectangle de r2, derrière une porte `D`, dans la **même** carte. Le
-    graphe et les collisions retournent Y dans ce rectangle seulement. Pas une seconde `LevelData`, pas
-    `flipCols` le long du niveau. r1 et r3 restent à gravité normale. Pendant le combat d'Éon, la lave de
-    l'arène descend par phase ; le reste de r3 ne mélange pas les deux.
+    graphe et les collisions de **Kaï** retournent Y dans ce rectangle. Pas d'ennemi, pas de plateforme
+    mobile, pas de lave dans ce rectangle : un seul corps change de sens, le reste de la scène garde la
+    gravité normale. Pas une seconde `LevelData`. r1 et r3 restent à gravité normale. Pendant le combat
+    d'Éon, la lave de l'arène descend par phase ; cette arène n'est pas le rectangle inversé.
 11. **Cinématiques** `trap`, `finale`, `epilogue` dans `src/story/scenes/`, durées visées 30 s, 40 s, 20 s,
     bouton Passer, marques dans `story.seen`.
 12. **Éon** (`bosses/eon.ts`) et **fuite** : `collapse` est un `COURSES` court sans `boss`, l'échec est
@@ -206,10 +201,9 @@ Sixième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). Trame 
   (glyphes, Rook, coulée, fresque en `after`) ; `boss-salamander` ; `f4-boss` ; le cran 3 du bouclier est
   refusé sans Rook, les crans 1 et 2 restent achetables sans lui.
 - 6d : salle inversée dans reach (un cristal du plafond de la salle est atteint, un cristal hors salle ne
-  l'est pas) ; `trap` / `finale` / `epilogue` dans `story-flow` ; `boss-eon` (une compétence par phase, aide
-  de chaque gardien, un événement déjà écrit par phase) ; `f5-chase` (temps à zéro = échec, portail = succès,
-  pas de barre de boss, les boucliers comptent encore contre les ennemis) ; radio absente sur r1 ; plus
-  aucune chaîne « Fin de la démo » dans `campaign-flow`.
+  l'est pas) ; `trap` / `finale` / `epilogue` dans `story-flow` ; `boss-eon` (plateforme, passage bas,
+  lave qui descend) ; `f5-chase` (temps à zéro = échec, portail = succès, pas de barre de boss) ; radio
+  absente sur r1 ; plus aucune chaîne « Fin de la démo » dans `campaign-flow`.
 - Suite e2e complète à la fin de **chaque** partie. Essai téléphone à chaque partie : lisibilité de la carte
   au pouce, glisse, saut mural, lave, grappin, Éon, fuite (le Vide doit se voir arriver).
 
@@ -245,8 +239,8 @@ plus « fin de la démo » à partir de 6d.
 
 **6d — Cœur de la Faille**
 
-- [ ] **11. M — Thème mosaïque, calque Vide au dessin, rectangle inversé dans r2.** Même carte, Y retourné
-      dans le rectangle seulement. Un essai avant r2 définitif.
+- [ ] **11. M — Rectangle inversé dans r2.** Même carte. Dedans : Kaï, des sols, des cristaux. Pas d'ennemi,
+      pas d'ascenseur. Y retourné pour Kaï seulement. Un essai avant r2 définitif.
 - [ ] **12. M — Cinématique du piège, r1 sans radio, r2.**
 - [ ] **13. G — r3 et Éon** (3 phases : plateforme, passage bas, lave qui descend).
 - [ ] **14. M — Finale, vol f5 sur le chrono déjà là, épilogue.** Pas de phase `chase`. Retirer « Fin de la

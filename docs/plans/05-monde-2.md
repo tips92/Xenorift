@@ -1,13 +1,8 @@
 # Étape 5 — monde 2 (Lune Krator) au nouveau format : plan technique
 
-> **État au 29/10/2026 : choix proposés, rien n'est codé.** On code après validation (les questions sont en
-> tête). L'étape suppose la **4c terminée** : libération réutilisable, phase `boss` du vol, « Réessayer le
-> combat » en vol, plan d'arme à la réussite. Elle recopie le monde 1, elle n'invente pas un second cadre.
->
-> **Ajusté le 29/10 au soir, puis une seconde fois.** La gravité faible garde la portée des sauts. La dalle
-> reprend la géométrie du tronc, sans nouvelle pluie. La glissade part à l'appui, sans délai de 120 ms, et
-> elle est jouable avant la récompense de m3. Le Crabe est une copie du Scarabée : on ne factorise pas le
-> boss de la Jungle. Le ver cosmique a son propre corps.
+> **État au 31/10/2026 : choix proposés, rien n'est codé.** On code après validation (les questions sont en
+> tête). L'étape suppose la **4c terminée**. Elle recopie le cadre du monde 1. Les choix ci-dessous incluent
+> les relectures du 29 et du 31.
 
 Cinquième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). Trame :
 [HISTOIRE.md](../HISTOIRE.md) (Lune, ver des sables, glissade, Ozzo, ver cosmique).
@@ -25,18 +20,20 @@ La première réponse est celle proposée. Une objection remplace le choix, pas 
    « Ceinture d'Orak ». *Ces noms ?*
 4. **Le niveau Lune actuel devient m1** (même carte, la Comète `X` laisse place à l'arène et à la balise).
    Si la carte dépasse les bornes de check-levels, on coupe un segment avant d'ajouter l'arène. *D'accord ?*
-5. **Gravité faible, même portée.** Gravité ×0,5 sur le thème `moon` seulement, impulsion de saut ×√0,5 :
-   le sommet reste **4,2 tuiles**, le temps en l'air passe à ×√2 (~1,4). `MAX_FALL` ne change pas (une chute
-   longue rattrape la même vitesse). La Jungle ne change pas. *Ce coefficient ?*
-6. **Mini-boss** : Crabe-roi (m1, grand crabe blindé), Tourelle-mère (m2, grande tourelle). 4 touches, 2
-   phases, ils s'enfuient. *D'accord ?*
+5. **Gravité faible, même portée, même danse d'ascenseur.** Gravité ×0,5 sur `moon` seulement, impulsion
+   ×√0,5 : sommet 4,2 tuiles, temps en l'air ×√2. `MOVER_PERIOD_S` (3,2 s) est multiplié par le même √2 sur
+   la Lune : les ascenseurs du niveau actuel sont calés sur le temps de saut d'aujourd'hui, un saut plus long
+   les rate. La Jungle ne change pas. *D'accord ?*
+6. **Mini-boss** : Crabe-roi (charge, ventre ouvert, 4 touches, fuite) et Tourelle-mère (fixe, salve, 4
+   touches, fuite). Le Crabe reprend l'idée du Scarabée, **pas son fichier** (~800 lignes, champignons,
+   cailloux de la Jungle). *D'accord ?*
 7. **Ver des sables en 3 phases, 6 touches**, gueule ouverte = point faible, saut par-dessus grâce à la
    gravité faible. Le combat se gagne **sans** la glissade (elle s'apprend à la victoire). *D'accord ?*
 8. **Ozzo sur le chemin de m2**, sauvetage garanti comme Tess. Au hangar il est visible, **sans achat** :
    ses marques de secrets attendent les étapes 6 et 7. *D'accord ?*
-9. **Glissade** : ↓ pendant une course (≥ 70 % de `RUN_SPEED`) lance tout de suite ~3 tuiles, hitbox basse,
-   pas de tir. ↓ à l'arrêt, ou encore maintenu à la fin de la glisse, reste l'accroupi. Pas de délai à
-   deviner. Les passages qui l'exigent sont des secrets (3 étoiles sans elle). *Ce geste ?*
+9. **Glissade** : ↓ en course (≥ 70 % de `RUN_SPEED`) lance ~3 tuiles. ↓ à l'arrêt = accroupi. Saut pendant
+   la glissade l'interrompt : ↓+Saut reste la descente d'une plateforme. Secrets seulement (3 étoiles sans
+   elle). *Ce geste ?*
 10. **Ver cosmique sur le parcours `asteroids` actuel** (graine, portails et rochers intacts). Phase `boss`
     après le dernier portail, chrono figé, plan de la **pompe** à la réussite, y compris pour qui avait déjà
     fini f2. *D'accord ?*
@@ -104,12 +101,14 @@ Détail des dix questions de « À valider ».
    donc **`reach.ts` ne change pas de hauteur** et les trous de la Lune actuelle restent les mêmes trous. Seul
    le temps de vol change (×√2). Le double saut garde ses 3 tuiles de la même façon (impulsion ×√0,5).
    `MAX_FALL_SPEED` reste 1 400 : sous gravité moitié, on met plus longtemps à l'atteindre, les petits sauts
-   flottent, une chute de puits finit quand même vite. Champignons, spores et rochers du titan restent sur
-   `GRAVITY` (ils ne sont pas sur la Lune). `reach.ts` ne change pas : mêmes hauteurs, mêmes trous.
-6. **Rejetons.** Crabe-roi : **copie** de `beetleTitan.ts` (charge, carapace, 4 touches, fuite), autre
-   dessin, autres chiffres. On ne factorise pas le Scarabée : `boss-titan` et j2 ne doivent pas changer de
-   diff. Tourelle-mère : fichier court, fixe, ouverte le temps d'une salve (4 touches, fuite). Pas de
-   cinquième espèce d'ennemi.
+   flottent, une chute de puits finit quand même vite. Les plateformes mobiles ignorent la gravité
+   (`setAllowGravity(false)`) et suivent `MOVER_PERIOD_S`. Sur la Lune cette période est ×√2, le trajet en
+   pixels ne change pas : un saut tenu quitte et retrouve l'ascenseur au même endroit du cycle qu'aujourd'hui.
+   On ne ralentit pas les tirs ennemis. Champignons, spores et rochers du titan restent sur `GRAVITY`.
+   `reach.ts` ne change pas de hauteur.
+6. **Rejetons.** Crabe-roi : fichier court. Charge, carapace, ventre ouvert, 4 touches, fuite. Aucun
+   champignon, aucun caillou qui tombe : ça appartient à `beetleTitan.ts`, qu'on ne copie pas et qu'on ne
+   modifie pas (`boss-titan` sans diff). Tourelle-mère : fichier court, fixe, ouverte le temps d'une salve.
 7. **Gardien.** Arène fermée, `boss: 'sandWorm'`, `ending: 'guardian'`. Il jaillit du sol ; le corps émergé
    tient dans **2 tuiles**, donc le saut actuel (4,2) passe au-dessus, et le temps en l'air plus long sert à
    viser la gueule. Phase 2 après 2 touches, phase 3 après 4. Vie perdue : ver remis à neuf (décision 6 du
@@ -121,8 +120,8 @@ Détail des dix questions de « À valider ».
    pas de `soon`. Les marques sur la carte arrivent avec l'étape 7, sur l'emplacement vide de l'étape 6.
 9. **Glissade.** ↓ pendant que la vitesse horizontale est ≥ 70 % de `RUN_SPEED` : la glisse part à l'appui,
    ~3 tuiles, hitbox basse, pas de saut, pas de tir, les tirs ennemis hauts passent au-dessus. Si ↓ est encore
-   là à la fin, Kaï est accroupi. ↓ à l'arrêt = accroupi tout de suite (déjà codé). Pas de fenêtre de 120 ms :
-   au stick, un délai invisible se trompe une fois sur deux. Clavier : S ou ↓, même règle. Compétence `slide`
+   là à la fin, Kaï est accroupi. ↓ à l'arrêt = accroupi tout de suite. **Saut pendant la glissade l'interrompt**
+   et ↓+Saut garde la descente d'une plateforme traversable. Clavier : S ou ↓, même règle. Compétence `slide`
    dans `Loadout.skills`, récompense de m3, réappliquée au chargement. Mode test : disponible, comme le double
    saut. Elle est **codée avant** le combat qui la donne, sinon la libération offre un geste mort. check-levels :
    un passage bas qui n'est franchissable qu'en glissade est un secret (avertissement, 3 étoiles sans elle).
@@ -141,9 +140,9 @@ Détail des dix questions de « À valider ».
 
 ### Physique et compétence (`game2d/`, `core/`)
 
-1. **`THEME_GRAVITY`** (`constants.ts`) et `gravityOf(theme)`. `engine/game.ts` pose cette gravité sur le
-   monde Phaser. `Player` recalcule son impulsion pour garder 4,2 et 3 tuiles. `reach.ts` garde ses hauteurs.
-   Champignons, spores et rochers du titan restent sur `GRAVITY`.
+1. **`THEME_GRAVITY`** et `gravityOf(theme)`. `engine/game.ts` pose cette gravité sur le monde Phaser.
+   `Player` recalcule son impulsion pour garder 4,2 et 3 tuiles. `Movers` lit `MOVER_PERIOD_S * √(1/gravité)`
+   (×1 sur la Jungle, ×√2 sur la Lune). `reach.ts` garde ses hauteurs.
 2. **`slide`** : champ de `Loadout.skills`, défaut `false`, migration des sauvegardes (clé absente = faux).
    `Player.ts` : état `slide` à côté d'accroupi. `PlatformScene` le lit comme le double saut. Son `slide` dans
    `sfx.ts`. `SKILL_NAMES`, icône de résultats, `buildPlayLoadout` (mode test).
@@ -186,10 +185,11 @@ Détail des dix questions de « À valider ».
   glissade ; Ozzo sur l'unique passage.
 - Scénarios : `m1-play` (arrivée ; un saut mesuré : même sommet en tuiles, temps de vol plus long),
   `boss-crab`, `m2-play` (dalle, Ozzo à la réussite seulement), `boss-turret`, `slide` (course = glisse,
-  arrêt = accroupi). `boss-titan` reste vert sans diff sur le Scarabée. `boss-worm` (gueule, 6 touches,
-  résultats + glissade). `f2-boss` (ver cosmique, nouvel essai, plan de la pompe). `progress-ids` : ancien
-  `best` avec `m1` et `f2` → JOUER propose `m2`, `f2` n'est pas jouable tant que `m3` n'est pas réussi, le
-  plan est rendu à qui a `f2`.
+  arrêt = accroupi, Saut interrompt). `boss-titan` sans diff. `boss-worm` (gueule, 6 touches, résultats +
+  glissade). L'ascenseur de l'ancienne Lune se prend encore après le changement de gravité (scénario `m1-play`
+  ou un essai dédié avant de couper la carte). `f2-boss` (ver cosmique, nouvel essai, plan de la pompe).
+  `progress-ids` : ancien `best` avec `m1` et `f2` → JOUER propose `m2`, `f2` n'est pas jouable tant que `m3`
+  n'est pas réussi, le plan est rendu à qui a `f2`.
 - `flight-combat` : `COURSE_FP` de la Ceinture identique.
 - Suite e2e complète en fin de 5b et de 5c. Essai téléphone en fin de chaque partie : hauteur des sauts,
   mal de mer de la gravité faible, lisibilité du ver et de la gueule, glissade au stick, ver cosmique parmi
@@ -209,13 +209,12 @@ Détail des dix questions de « À valider ».
 
 **5a — gravité et m1** (après 4b ; la libération n'est pas dans cette partie)
 
-- [ ] **1. P — Gravité par thème.** `THEME_GRAVITY`, monde Phaser, impulsion du joueur. `reach.ts` inchangé.
-      Rien d'autre : la Lune actuelle se joue avec les mêmes trous, plus lentement en l'air, et reste
-      finissable.
+- [ ] **1. P — Gravité par thème.** Monde Phaser, impulsion du joueur, `MOVER_PERIOD_S` ×√2 sur la Lune.
+      `reach.ts` inchangé en hauteur. L'ascenseur du niveau actuel se prend encore.
 - [ ] **2. M — m1 au nouveau format.** Déplacer `moon.ts`, remplacer l'arrivée `X` par arène + balise, couper
       un segment si > 260 colonnes. `start: 'ship'`, `creature: 'far'`. Radio courte (gravité, crabes).
-- [ ] **3. M — Crabe-roi.** Copie de `beetleTitan.ts`, autre dessin, 4 touches, fuite, `boss-crab`. Le
-      fichier du Scarabée ne change pas.
+- [ ] **3. M — Crabe-roi.** Fichier court (charge, ventre, 4 touches). Pas une copie de `beetleTitan.ts`.
+      `boss-crab`. Le Scarabée ne change pas.
 - [ ] **4. P — Documentation de 5a et essai téléphone** (hauteur de saut, taille de l'arène sous le stick).
 
 **5b — les dunes** (libération de m3 : après le lecteur de 4c)
