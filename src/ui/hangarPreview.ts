@@ -1,5 +1,6 @@
 import type { WeaponId } from '../core/types';
-import { drawArmFrame, drawPlayerFrame, PLAYER_SHOULDER } from '../game2d/art/draw/player';
+import { drawArmFrame, drawPlayerFrame, frameShoulderX, frameShoulderY } from '../game2d/art/draw/player';
+import { ensureKaiSprites } from '../game2d/art/kaiPng';
 import { drawShip, drawShipFlame, SHIP_NOZZLE } from '../game2d/art/draw/ship';
 import { drawTess } from '../game2d/art/draw/world1';
 import { ARM_RIG, FRAMES, FRAME_SIZE } from '../game2d/art/keys';
@@ -210,6 +211,13 @@ export function createHangarPreview(host: HTMLElement): HangarPreview {
   let drawnKey = -1;
   let pulseUntil = 0;
   let warned = false;
+  /** PNG de Kaï chargés (ou repli décidé) : on ne dessine pas le corps avant, pour ne pas figer le dessin. */
+  let spritesSettled = false;
+  void ensureKaiSprites().then(() => {
+    spritesSettled = true;
+    drawnKey = -1;
+    if (!disposed) render(performance.now());
+  });
   // Mise à l'échelle courante (pixels du canvas par unité de la scène) et origine.
   let fk = 1;
   let fox = 0;
@@ -246,8 +254,8 @@ export function createHangarPreview(host: HTMLElement): HangarPreview {
     c.translate(-P.w / 2, -P.h);
     drawPlayerFrame(c, idle);
     c.restore();
-    const sx = PLAYER_SHOULDER[idle * 2] ?? ARM_RIG.shoulderX;
-    const sy = PLAYER_SHOULDER[idle * 2 + 1] ?? ARM_RIG.shoulderY;
+    const sx = frameShoulderX(idle);
+    const sy = frameShoulderY(idle);
     c.save();
     c.translate(sx - ARM_RIG.pivotX, sy - ARM_RIG.pivotY);
     drawArmFrame(c, v.weapon, shoot ? FRAMES.arm.recoil : FRAMES.arm.rest);
@@ -289,7 +297,7 @@ export function createHangarPreview(host: HTMLElement): HangarPreview {
   }
 
   function render(now: number): void {
-    if (disposed || !ctx || !view || W < 2 || H < 2) return;
+    if (disposed || !ctx || !view || W < 2 || H < 2 || !spritesSettled) return;
     drawnKey = frameKey();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, W, H);

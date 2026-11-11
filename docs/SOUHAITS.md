@@ -4,7 +4,8 @@
 [HISTOIRE.md](HISTOIRE.md). Liste vivante : on coche `[x]` quand c'est fait et vérifié, on déplace une idée
 de « à discuter » vers « retenu » quand elle est validée.
 
-Rappel des contraintes du projet : tout est dessiné par code et les sons sont synthétisés, donc chaque
+Rappel des contraintes du projet : tout est dessiné par code (sauf les poses de Kaï, PNG
+`art/sprites/kai/`) et les sons sont synthétisés, donc chaque
 nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur un mobile milieu de gamme.
 
 ## Où on en est (31/10/2026)

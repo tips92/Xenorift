@@ -256,7 +256,8 @@ async function jungle(t) {
   const crouchShot = await fireOnce(t, 'tir accroupi');
   t.log(`tir debout y ${r1(standShot.y)}, tir accroupi y ${r1(crouchShot.y)} (angle ${angleOf(crouchShot)}°)`);
   assertNear(angleOf(crouchShot), 0, 1, `tir accroupi à l'horizontale (${fmt(crouchShot)})`);
-  assert(crouchShot.y > standShot.y + 10, `tir accroupi plus bas que debout (${r1(crouchShot.y)} / ${r1(standShot.y)})`);
+  // Épaules PNG plus proches (repos ≈ -40, accroupi ≈ -31) que le dessin (−45 / −26) : l'écart reste net.
+  assert(crouchShot.y > standShot.y + 8, `tir accroupi plus bas que debout (${r1(crouchShot.y)} / ${r1(standShot.y)})`);
   // Tir maintenu : pose accroupie de tir (rafraîchie à chaque tir) pendant la capture.
   await kb(t).down('KeyJ');
   await t.wait(120);

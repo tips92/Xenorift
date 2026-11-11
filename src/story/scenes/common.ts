@@ -1,4 +1,4 @@
-import { drawArmFrame, drawPlayerFrame, PLAYER_SHOULDER } from '../../game2d/art/draw/player';
+import { drawArmFrame, drawPlayerFrame, frameShoulderX, frameShoulderY } from '../../game2d/art/draw/player';
 import { drawShip, drawShipFlame, SHIP_NOZZLE } from '../../game2d/art/draw/ship';
 import { ARM_RIG, FRAMES, FRAME_SIZE } from '../../game2d/art/keys';
 import { type Ctx, rgba, rng } from '../../game2d/art/util';
@@ -301,8 +301,8 @@ export function buildKai(res: number): Sprite {
       ctx.translate(KAI_AX - P.w / 2, KAI_AY - P.h);
       drawPlayerFrame(ctx, i);
       ctx.translate(P.w / 2, P.h);
-      const sx = PLAYER_SHOULDER[i * 2] ?? ARM_RIG.shoulderX;
-      const sy = PLAYER_SHOULDER[i * 2 + 1] ?? ARM_RIG.shoulderY;
+      const sx = frameShoulderX(i);
+      const sy = frameShoulderY(i);
       ctx.translate(sx - ARM_RIG.pivotX, sy - ARM_RIG.pivotY);
       drawArmFrame(ctx, 'laser', FRAMES.arm.rest);
     },

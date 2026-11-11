@@ -1,6 +1,9 @@
 import type * as Phaser from 'phaser';
 import type { InputApi, WeaponId } from '../../core/types';
 import { PLAYER_SHOULDER } from '../art';
+import { frameShoulderX, frameShoulderY } from '../art/draw/player';
+import { kaiPngActive } from '../art/kaiPng';
+import { kaiModelActive } from '../art/kaiSheet';
 import { ANIM, ARM_MUZZLE, ARM_RIG, ARM_TEX, FRAMES, FRAME_SIZE, TEX } from '../art/keys';
 import {
   AIM_ANGLE,
@@ -162,31 +165,44 @@ export class Player {
     return this.aim === 'diag' ? ARM_RIG.diagShoulderY : 0;
   }
 
+  /**
+   * Épaule du tir : la frame PNG affichée (le projectile part de la bouche dessinée), sinon ARM_RIG
+   * (debout ou accroupi). Le .glb garde l'épaule debout fixe.
+   */
+  private shotShoulderX(): number {
+    if (!kaiModelActive() && kaiPngActive()) return frameShoulderX(+this.sprite.frame.name | 0) + this.aimShoulderDX;
+    return (this.crouching ? ARM_RIG.crouchShoulderX : ARM_RIG.shoulderX) + this.aimShoulderDX;
+  }
+
+  private shotShoulderY(): number {
+    if (!kaiModelActive() && kaiPngActive()) return frameShoulderY(+this.sprite.frame.name | 0) + this.aimShoulderDY;
+    return (this.crouching ? ARM_RIG.crouchShoulderY : ARM_RIG.shoulderY) + this.aimShoulderDY;
+  }
+
   /** Épaule (pivot du bras, dans le corps) : départ du balayage du canon au tir (ShotPool.fire). */
   get shoulderX(): number {
-    const sx = (this.crouching ? ARM_RIG.crouchShoulderX : ARM_RIG.shoulderX) + this.aimShoulderDX;
-    return this.x + this.facing * sx;
+    return this.x + this.facing * this.shotShoulderX();
   }
 
   get shoulderY(): number {
-    return this.feetY + (this.crouching ? ARM_RIG.crouchShoulderY : ARM_RIG.shoulderY) + this.aimShoulderDY;
+    return this.feetY + this.shotShoulderY();
   }
 
   /**
-   * Bouche du canon (voir ARM_RIG / ARM_MUZZLE) : épaule debout ou accroupie (décalée selon la visée), puis le
+   * Bouche du canon (voir ARM_RIG / ARM_MUZZLE) : épaule de la frame (décalée selon la visée), puis le
    * canon tourné selon la visée.
    */
   get gunX(): number {
     const a = AIM_ANGLE[this.aim];
     const m = ARM_MUZZLE[this.weaponId];
-    const sx = (this.crouching ? ARM_RIG.crouchShoulderX : ARM_RIG.shoulderX) + this.aimShoulderDX;
+    const sx = this.shotShoulderX();
     return this.x + this.facing * (sx + (m.x - ARM_RIG.pivotX) * Math.cos(a) + (m.y - ARM_RIG.pivotY) * Math.sin(a));
   }
 
   get gunY(): number {
     const a = AIM_ANGLE[this.aim];
     const m = ARM_MUZZLE[this.weaponId];
-    const sy = (this.crouching ? ARM_RIG.crouchShoulderY : ARM_RIG.shoulderY) + this.aimShoulderDY;
+    const sy = this.shotShoulderY();
     return this.feetY + sy - (m.x - ARM_RIG.pivotX) * Math.sin(a) + (m.y - ARM_RIG.pivotY) * Math.cos(a);
   }
 
@@ -553,9 +569,10 @@ export class Player {
   }
 
   /**
-   * Bras armé accroché à l'épaule de la frame affichée (PLAYER_SHOULDER), avec le sens, l'écrasement et la
-   * rotation du corps (mort avec rebond), tourné selon la visée. Une échelle négative retourne l'image autour
-   * de l'épaule (pas flipX).
+   * Bras armé accroché à l'épaule de la frame affichée (PNG, sinon PLAYER_SHOULDER), avec le sens,
+   * l'écrasement et la rotation du corps (mort avec rebond), tourné selon la visée. Visée haute ou
+   * diagonale : épaule décalée (ARM_RIG), la visière reste visible. Une échelle négative retourne l'image
+   * autour de l'épaule (pas flipX).
    */
   private placeArm(scale: number): void {
     const spr = this.sprite;
@@ -565,16 +582,10 @@ export class Player {
       return;
     }
     const f = spr.flipX ? -1 : 1;
-    const i = (+spr.frame.name | 0) * 2;
-    let sx: number = ARM_RIG.shoulderX;
-    let sy: number = ARM_RIG.shoulderY;
-    if (i >= 0 && i + 1 < PLAYER_SHOULDER.length) {
-      sx = PLAYER_SHOULDER[i];
-      sy = PLAYER_SHOULDER[i + 1];
-    }
-    // Visée haute ou diagonale : épaule décalée, le canon longe le bord avant du casque (la visière reste visible).
-    sx += this.aimShoulderDX;
-    sy += this.aimShoulderDY;
+    const frame = +spr.frame.name | 0;
+    // Modèle .glb : une seule pose debout, l'épaule ne suit pas encore la marche ni l'accroupi.
+    const sx = (kaiModelActive() ? (PLAYER_SHOULDER[0] ?? ARM_RIG.shoulderX) : frameShoulderX(frame)) + this.aimShoulderDX;
+    const sy = (kaiModelActive() ? (PLAYER_SHOULDER[1] ?? ARM_RIG.shoulderY) : frameShoulderY(frame)) + this.aimShoulderDY;
     const c = Math.cos(spr.rotation);
     const s = Math.sin(spr.rotation);
     const ox = f * sx * spr.scaleX;

@@ -37,6 +37,7 @@ import type {
   StartMode,
   WeaponId,
 } from '../core/types';
+import { ensureKaiSprites } from '../game2d/art/kaiPng';
 import { isWeaponId } from '../core/weapons';
 import { createInput } from '../input';
 import type { CutscenePlayer } from '../story';
@@ -221,6 +222,8 @@ export function startApp(): void {
    * (f1) du début du combat.
    */
   let urlStartAt: StartAt | null = null;
+  /** ?kai=glb (serveur de dev) : rendu du modèle avant le premier contexte WebGL du jeu. */
+  let kaiReady: Promise<void> | null = null;
   let portrait = false;
   let backgrounded = false;
   let flowId = 0;
@@ -432,7 +435,7 @@ export function startApp(): void {
   async function playStory(flow: number, play: StoryPlay, record: boolean): Promise<boolean> {
     let mod: StoryModule;
     try {
-      mod = await loadStory();
+      [mod] = await Promise.all([loadStory(), ensureKaiSprites()]);
     } catch (err) {
       console.error('[ui] cinématiques indisponibles', err);
       return flow === flowId;
@@ -553,6 +556,9 @@ export function startApp(): void {
       }
       if (flow !== flowId) return;
       await waitPlayable(flow);
+      if (flow !== flowId) return;
+      if (kaiReady) await kaiReady;
+      if (stage.kind === 'platform') await ensureKaiSprites();
       if (flow !== flowId) return;
 
       setScreen(null, true);
@@ -940,6 +946,14 @@ export function startApp(): void {
   if (weaponParam && !urlWeapon) weaponWarning = `Arme inconnue : ${weaponParam}`;
   if (params.get('unlock') === '1' && !live.unlockAll) setSettings({ unlockAll: true });
   if (import.meta.env.DEV && params.get('at') === 'boss') urlStartAt = { at: 'boss' };
+  if (import.meta.env.DEV && params.get('kai') === 'glb') {
+    kaiReady = import('../game2d/art/kaiBake')
+      .then((m) => m.prepareKaiSheet())
+      .catch((err) => {
+        console.error('[kai] modèle .glb inutilisable, Kaï garde son sprite', err);
+      });
+  }
+  void ensureKaiSprites();
 
   audio.setMusicEnabled(live.music);
   audio.setSfxEnabled(live.sfx);

@@ -3,8 +3,9 @@ import '@fontsource/exo-2/600.css';
 import { THEME_IDS } from '../src/core/ids';
 import type { ThemeId, WeaponId } from '../src/core/types';
 import { PELLET_SPEED_JITTER, WEAPON_IDS, WEAPONS } from '../src/core/weapons';
-import { createParallax, generatePlatformArt, PLAYER_SHOULDER, type ParallaxHandle } from '../src/game2d/art';
-import { PLAYER_FRAME_COUNT } from '../src/game2d/art/draw/player';
+import { createParallax, generatePlatformArt, type ParallaxHandle } from '../src/game2d/art';
+import { PLAYER_FRAME_COUNT, frameShoulderX, frameShoulderY } from '../src/game2d/art/draw/player';
+import { ensureKaiSprites } from '../src/game2d/art/kaiPng';
 import {
   ANIM,
   ARM_MUZZLE,
@@ -162,11 +163,10 @@ class ArtScene extends Phaser.Scene {
   private placeArm(k: Kai): void {
     const spr = k.body;
     const f = spr.flipX ? -1 : 1;
-    const i = (+spr.frame.name | 0) * 2;
+    const frame = +spr.frame.name | 0;
     const sx =
-      (i + 1 < PLAYER_SHOULDER.length ? PLAYER_SHOULDER[i] : ARM_RIG.shoulderX) +
-      (k.aim === 'up' ? ARM_RIG.upShoulderX : k.aim === 'diag' ? ARM_RIG.diagShoulderX : 0);
-    const sy = (i + 1 < PLAYER_SHOULDER.length ? PLAYER_SHOULDER[i + 1] : ARM_RIG.shoulderY) + (k.aim === 'diag' ? ARM_RIG.diagShoulderY : 0);
+      frameShoulderX(frame) + (k.aim === 'up' ? ARM_RIG.upShoulderX : k.aim === 'diag' ? ARM_RIG.diagShoulderX : 0);
+    const sy = frameShoulderY(frame) + (k.aim === 'diag' ? ARM_RIG.diagShoulderY : 0);
     k.arm.setPosition(spr.x + f * sx, spr.y + sy);
     k.arm.setScale(f, 1);
     k.arm.rotation = -f * AIM_ANGLE[k.aim];
@@ -347,8 +347,8 @@ class ArtScene extends Phaser.Scene {
       // Stand de tir : Kaï debout qui vise devant
       const sx = 830;
       const shooter = this.kai(sx, feet, ANIM.playerIdle, 'front', false, false, id);
-      const mx = sx + ARM_RIG.shoulderX + (m.x - ARM_RIG.pivotX);
-      const my = feet + ARM_RIG.shoulderY + (m.y - ARM_RIG.pivotY);
+      const mx = sx + frameShoulderX(FRAMES.player.idle[0]) + (m.x - ARM_RIG.pivotX);
+      const my = feet + frameShoulderY(FRAMES.player.idle[0]) + (m.y - ARM_RIG.pivotY);
       const rangePx = w.rangeTiles * TILE;
       const maxD = Math.min(rangePx, viewW - 10 - mx);
       if (rangePx <= maxD) {
@@ -630,6 +630,7 @@ class ArtScene extends Phaser.Scene {
   }
 }
 
+await ensureKaiSprites();
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'root',

@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import '@fontsource/exo-2/600.css';
-import { createParallax, generatePlatformArt, PLAYER_SHOULDER, type ParallaxHandle } from '../src/game2d/art';
+import { createParallax, generatePlatformArt, type ParallaxHandle } from '../src/game2d/art';
+import { frameShoulderX, frameShoulderY } from '../src/game2d/art/draw/player';
+import { ensureKaiSprites } from '../src/game2d/art/kaiPng';
 import {
   GLYPH_VARIANTS,
   TRUNK,
@@ -125,7 +127,7 @@ class PropsScene extends Phaser.Scene {
 
   private placeArm(body: Phaser.GameObjects.Sprite, arm: Phaser.GameObjects.Image, frame: number): void {
     const f = body.flipX ? -1 : 1;
-    arm.setPosition(body.x + f * PLAYER_SHOULDER[frame * 2], body.y + PLAYER_SHOULDER[frame * 2 + 1]);
+    arm.setPosition(body.x + f * frameShoulderX(frame), body.y + frameShoulderY(frame));
     arm.setScale(f, 1);
   }
 
@@ -459,6 +461,7 @@ class PropsScene extends Phaser.Scene {
   }
 }
 
+await ensureKaiSprites();
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'root',

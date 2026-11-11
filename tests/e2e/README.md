@@ -236,7 +236,8 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   `?unlock=1` (mode test, enregistré dans la sauvegarde : 4 armes et double saut, conditions du hangar levées mais
   pas les prix), `?weapon=laser|machinegun|shotgun|rifle` (arme de la session ; inconnue : message et laser),
   `?touch=1` / `?touch=0`. Serveur de dev seulement : `?at=boss` (`ModeHooks.startAt`) : chaque niveau 2D lancé part
-  du point de contrôle d'avant son arène, un vol avec boss (f1) du début de son combat (ignoré sans arène ni boss).
+  du point de contrôle d'avant son arène, un vol avec boss (f1) du début de son combat (ignoré sans arène ni boss) ;
+  `?kai=glb` remplace le corps dessiné par le rendu de `art/kai.glb` (les scénarios ne le passent pas).
 - Sauvegarde (`localStorage` `xeno-rift-save-v1`) en version 2 depuis le plan 03 : `crystals`, `upgrades` (par arme),
   `ship` (`gun`, `shield`, `boost`), `extraHearts`, `crew`, `blueprints`, `story` (`seen` : marques de l'histoire,
   `prologue`, `liberation-1`, `tutorial-j1` ; absent des anciennes sauvegardes) en plus de `unlocked`, `best`, `settings`, `loadout`. Une sauvegarde version 1

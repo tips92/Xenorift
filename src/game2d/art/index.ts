@@ -21,11 +21,12 @@ import { ARM_FRAME_COUNT, type ArmWeapon, PLAYER_FRAME_COUNT, drawArmFrame, draw
 import { drawShip, drawShipFlame } from './draw/ship';
 import { drawTileset, tileRect } from './draw/tiles';
 import { WORLD1_SHEETS } from './draw/world1';
+import { mountKaiSheet } from './kaiSheet';
 import { ANIM, ARM_TEX, BULLET_SIZE, BULLET_TEX, FRAMES, FRAME_SIZE, TEX, TILESET } from './keys';
 import { createParallaxImpl } from './parallax';
 import { buildSheet, registerCanvas, removeTexture } from './util';
 
-// Module graphique du mode 2D : tout est dessiné par code (Canvas 2D), aucun fichier image.
+// Module graphique du mode 2D : dessiné par code (Canvas 2D), sauf les poses de Kaï (PNG, kaiPng.ts).
 // Les signatures exportées ne doivent pas changer.
 
 export { SHIP_NOZZLE } from './draw/ship';
@@ -52,9 +53,11 @@ export function generatePlatformArt(scene: Phaser.Scene, theme: ThemeId): void {
     }
   });
 
-  // --- Personnage (identique dans tous les thèmes)
+  // --- Personnage (identique dans tous les thèmes). ?kai=glb : planche du .glb. Sinon PNG, sinon dessin.
   const P = FRAME_SIZE.player;
-  buildSheet(scene, TEX.player, P.w, P.h, PLAYER_FRAME_COUNT, (ctx, i) => drawPlayerFrame(ctx, i));
+  if (!mountKaiSheet(scene)) {
+    buildSheet(scene, TEX.player, P.w, P.h, PLAYER_FRAME_COUNT, (ctx, i) => drawPlayerFrame(ctx, i));
+  }
   // Bras armé : une planche (repos, recul) par arme
   const Am = FRAME_SIZE.arm;
   for (const weapon of Object.keys(ARM_TEX) as ArmWeapon[]) {

@@ -15,8 +15,9 @@ par monde), 4b faite (j2 : champignons, la méduse-baleine qui agit, Tess, Scara
 méduse-baleine, double saut ; boss en touches ; « Réessayer le combat »), 4c codée (prologue, libération,
 léviathan du vol 1 : 4 plaques dorsales puis 3 sur la queue ; essai sur téléphone de 4b et de 4c à faire).
 La Lune reste à l'ancien format (étape 5).
-Paysage uniquement, tout se joue au tactile (le clavier sert aux tests sur PC). Aucun fichier image ni son :
-graphismes dessinés par code (Canvas 2D, géométries et shaders three), sons et musiques synthétisés (Web Audio).
+Paysage uniquement, tout se joue au tactile (le clavier sert aux tests sur PC). Aucun fichier son :
+graphismes dessinés par code (Canvas 2D, géométries et shaders three), sauf les poses de Kaï (PNG
+`art/sprites/kai/`, dans l'APK) ; sons et musiques synthétisés (Web Audio).
 Docs : `docs/GDD.md` (conception et contraintes techniques), `docs/SOUHAITS.md` (liste vivante + ordre de
 travail), `docs/HISTOIRE.md` (trame en 5 mondes), `docs/plans/` (plans techniques des prochaines étapes ;
 **`docs/plans/README.md` donne l'état de chaque étape et la prochaine action**), `docs/ARCHITECTURE.md`
@@ -190,7 +191,8 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   pour le décor) ; planches et boîtes `hurt` / `weak` : `BOSS_SHEETS`, `buildBossSheet`), `world1.ts`
   (champignon, barrière d'arène, tronc, Tess et sa capsule, glyphes, branches / lianes / passerelles des `=` ;
   `WORLD1_SHEETS` ; dessins de la Jungle),
-  `player.ts` : corps 64x80 sans arme, poses accroupie et de reptation, bras armé 64x32 par arme (`GUNS`,
+  `player.ts` : corps 64x80 sans arme (PNG `art/sprites/kai/planche.png`, repli dessiné), poses accroupie et
+  de reptation, bras armé 64x32 (`planche-bras.png` ; canon dessiné par arme, `GUNS`,
   éclair de recul `FLASH`) ; `items.ts` : `drawBullet` (projectile par arme), icônes de bonus ; `doors.ts` :
   portes, flèche ▲, mur de salle ; `keys.ts` : `ARM_TEX`, `ARM_RIG` (épaule décalée en visée haute et
   diagonale : la visière reste visible), `ARM_MUZZLE` pour le bras armé, `BULLET_TEX` / `BULLET_SIZE` (`tip` =
@@ -228,7 +230,8 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   `/preview/audio.html` (sons et musiques du monde 1, intensités ; `?analyse=1` : mesures hors temps réel),
   `/preview/story.html?cut=prologue|liberation&t=<s>&hold=1&ui=0&sound=1` (cinématiques, curseur, Passer),
   `/preview/bosses.html?view=blob|beetle|whale|whale-sheet&grey=0..1&boxes=1` (boss à l'échelle du jeu, boîtes),
-  `/preview/props.html?view=objects|trunk|walkways|scene` (dessins de `world1.ts`).
+  `/preview/props.html?view=objects|trunk|walkways|scene` (dessins de `world1.ts`),
+  `/preview/kai.html` (modèle `art/kai.glb` dans le cadre 64×80 du sprite, à côté du Kaï PNG du jeu).
   Ailleurs : `scripts/check-levels.ts` (validateur) et `scripts/lib/reach.ts` (grille `LevelGrid` et graphe
   d'accessibilité `ReachGraph` : sauts selon `DESIGN_RULES`, portes, faisceau de balise infranchissable `inBeam` /
   `crossesBeam`, bornes d'arène vides, rebonds de champignon (`LevelGrid.bounce`, `MUSHROOM_RULES` écourtées sous
@@ -637,7 +640,10 @@ géante au loin, 4 ennemis par monde).
   `?unlock=1` (enregistré), `?touch=1|0`, `?weapon=laser|machinegun|shotgun|rifle` (arme de la session, même
   hors mode test et non possédée ; jamais enregistrée ; valeur inconnue ignorée, toast « Arme inconnue » sur
   l'accueil, ou en début de partie avec `?stage=`). Serveur de dev seulement : `?at=boss` (chaque niveau 2D lancé
-  part du point de contrôle d'avant son arène, sans arrivée ; ignoré sans arène).
+  part du point de contrôle d'avant son arène, sans arrivée ; ignoré sans arène). `?kai=glb` : le corps de Kaï
+  est le rendu de profil de `art/kai.glb` (export de `art/kai.blend`, `art/outils/export-kai.py`) à la place du
+  PNG ; une seule pose tant que le fichier n'a pas de squelette, le bras armé reste le sprite du jeu. Le
+  `.glb` n'est pas dans l'APK (les PNG de Kaï, eux, y sont).
 - Clavier : flèches / WASD (ZQSD en AZERTY) ; Espace = saut en 2D et turbo en vol ; K = saut ; Haut/W = haut
   (visée, portes, monter en vol), ne fait PAS sauter ; Bas/S = accroupi (puis ← → : reptation ; + saut :
   descente d'étage) ; J/X/F = tir (en vol : tant que la touche est tenue) ; Maj = turbo ; Échap/P =
@@ -773,5 +779,6 @@ géante au loin, 4 ennemis par monde).
 ## Façon de travailler
 
 - Git est utilisé : ne committer (ni pousser) que sur demande de l'utilisateur ; `npm run build` doit passer avant.
-- Français partout ; paysage uniquement ; graphismes et sons procéduraux (aucun fichier image ou son sauf fourni).
+- Français partout ; paysage uniquement ; graphismes et sons procéduraux (aucun fichier image ou son sauf
+  les PNG de Kaï, `art/sprites/kai/`, et un fichier fourni explicitement).
 - Tenir à jour `docs/SOUHAITS.md` (cases cochées) et ce fichier quand une règle ou l'architecture change.

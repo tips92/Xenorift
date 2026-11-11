@@ -1,9 +1,11 @@
+import { drawPngArm, drawPngBody, kaiPngActive, pngShoulderX, pngShoulderY } from '../kaiPng';
 import { ARM_MUZZLE, ARM_RIG, type ARM_TEX, FRAMES, FRAME_SIZE } from '../keys';
 import { type Ctx, circle, ellipse, fillOutlined, glow, glowDot, limb, linGrad, poly, rimLight, roundRect, sphereGrad } from '../util';
 
 // Kaï, l'astronaute : combinaison blanche, visière orange, sac à dos à lumières cyan.
-// Corps dessiné tourné vers la droite, pieds au bas de la frame (64x80), SANS le bras armé : le bras et l'arme
-// forment un sprite à part (64x32, voir ARM_RIG) qui pivote à l'épaule selon la visée.
+// Corps tourné vers la droite, pieds au bas de la frame (64x80), SANS le bras armé : le bras (PNG) et l'arme
+// (dessinée) forment un sprite à part (64x32, voir ARM_RIG) qui pivote à l'épaule selon la visée.
+// PNG chargé (kaiPng) : il remplace le dessin. Sinon, repli sur les poses ci-dessous.
 
 const OUT = '#120c24';
 const SUIT = '#f6f8ff';
@@ -411,6 +413,7 @@ function hurtFx(ctx: Ctx): void {
 }
 
 export function drawPlayerFrame(ctx: Ctx, index: number): void {
+  if (drawPngBody(ctx, index, W, H)) return;
   const pose = POSES[index] ?? POSES[0];
   ctx.save();
   drawPose(ctx, pose);
@@ -429,6 +432,26 @@ export const PLAYER_SHOULDER: readonly number[] = POSES.flatMap((pose) => {
   const s = nearShoulder(pose);
   return [Math.round((s.x - W / 2) * 2) / 2, Math.round((s.y - H) * 2) / 2];
 });
+
+/** Épaule de la frame affichée : PNG si chargé, sinon la pose dessinée. */
+export function frameShoulderX(index: number): number {
+  if (kaiPngActive()) {
+    const x = pngShoulderX(index);
+    if (x !== null) return x;
+  }
+  const v = PLAYER_SHOULDER[index * 2];
+  return v === undefined ? ARM_RIG.shoulderX : v;
+}
+
+/** Épaule de la frame affichée : PNG si chargé, sinon la pose dessinée. */
+export function frameShoulderY(index: number): number {
+  if (kaiPngActive()) {
+    const y = pngShoulderY(index);
+    if (y !== null) return y;
+  }
+  const v = PLAYER_SHOULDER[index * 2 + 1];
+  return v === undefined ? ARM_RIG.shoulderY : v;
+}
 
 // ---------------------------------------------------------------- Bras armé (64x32, une texture par arme)
 
@@ -689,36 +712,39 @@ export function drawArmFrame(ctx: Ctx, weapon: ArmWeapon, index: number): void {
   const sy = ARM_RIG.pivotY;
   const tx = HAND_X - (recoil ? RECOIL_PX : 0);
   const ty = HAND_Y - (recoil ? 0.4 : 0);
-  // Coude (deux segments, pli vers le bas)
-  const d = Math.min(Math.hypot(tx - sx, ty - sy), UPPER_ARM + FOREARM - 0.5);
-  const base = Math.atan2(ty - sy, tx - sx);
-  const a = Math.acos(Math.min(1, Math.max(-1, (UPPER_ARM * UPPER_ARM + d * d - FOREARM * FOREARM) / (2 * UPPER_ARM * d))));
-  const ex = sx + Math.cos(base + a) * UPPER_ARM;
-  const ey = sy + Math.sin(base + a) * UPPER_ARM;
 
   ctx.save();
-  // Arme (derrière la main)
+  // Arme (derrière la main) : les PNG du bras n'incluent pas le canon.
   ctx.save();
   ctx.translate(tx, ty);
   GUNS[weapon](ctx);
   ctx.restore();
-  // Épaulière : couvre l'articulation quel que soit l'angle de visée.
-  fillOutlined(ctx, circle(sx, sy, 4.6), sphereGrad(ctx, sx, sy, 4.6, '#ffffff', SUIT, SUIT_SHADE), OUT, 2.2);
-  limb(ctx, sx, sy, ex, ey, 7, linGrad(ctx, sx - 4, sy, sx + 4, sy, [[0, SUIT_MID], [1, SUIT]]), OUT, 2.2);
-  limb(ctx, ex, ey, tx, ty, 6.5, SUIT, OUT, 2.2);
-  fillOutlined(ctx, circle(tx, ty, 3.6), SUIT_MID, OUT, 2);
-  // Brassard cyan
-  ctx.strokeStyle = CYAN;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  const len = Math.max(1, Math.hypot(tx - ex, ty - ey));
-  const mx = (ex + tx) / 2;
-  const my = (ey + ty) / 2;
-  const nx = -(ty - ey) / len;
-  const ny = (tx - ex) / len;
-  ctx.moveTo(mx - nx * 3, my - ny * 3);
-  ctx.lineTo(mx + nx * 3, my + ny * 3);
-  ctx.stroke();
+  const Am = FRAME_SIZE.arm;
+  if (!drawPngArm(ctx, index, Am.w, Am.h)) {
+    // Coude (deux segments, pli vers le bas)
+    const d = Math.min(Math.hypot(tx - sx, ty - sy), UPPER_ARM + FOREARM - 0.5);
+    const base = Math.atan2(ty - sy, tx - sx);
+    const a = Math.acos(Math.min(1, Math.max(-1, (UPPER_ARM * UPPER_ARM + d * d - FOREARM * FOREARM) / (2 * UPPER_ARM * d))));
+    const ex = sx + Math.cos(base + a) * UPPER_ARM;
+    const ey = sy + Math.sin(base + a) * UPPER_ARM;
+    // Épaulière : couvre l'articulation quel que soit l'angle de visée.
+    fillOutlined(ctx, circle(sx, sy, 4.6), sphereGrad(ctx, sx, sy, 4.6, '#ffffff', SUIT, SUIT_SHADE), OUT, 2.2);
+    limb(ctx, sx, sy, ex, ey, 7, linGrad(ctx, sx - 4, sy, sx + 4, sy, [[0, SUIT_MID], [1, SUIT]]), OUT, 2.2);
+    limb(ctx, ex, ey, tx, ty, 6.5, SUIT, OUT, 2.2);
+    fillOutlined(ctx, circle(tx, ty, 3.6), SUIT_MID, OUT, 2);
+    // Brassard cyan
+    ctx.strokeStyle = CYAN;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const len = Math.max(1, Math.hypot(tx - ex, ty - ey));
+    const mx = (ex + tx) / 2;
+    const my = (ey + ty) / 2;
+    const nx = -(ty - ey) / len;
+    const ny = (tx - ex) / len;
+    ctx.moveTo(mx - nx * 3, my - ny * 3);
+    ctx.lineTo(mx + nx * 3, my + ny * 3);
+    ctx.stroke();
+  }
   if (recoil) {
     const m = ARM_MUZZLE[weapon];
     muzzleFlash(ctx, m.x - RECOIL_PX, m.y - 0.4, FLASH[weapon]);

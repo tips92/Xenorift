@@ -5,6 +5,7 @@ import { createAudio } from '../src/audio';
 import { createBubble } from '../src/story/bubble';
 import { PROLOGUE_LINES } from '../src/core/story';
 import { type CutscenePlayer, DEFAULT_LIBERATION, playCutscene } from '../src/story/player';
+import { ensureKaiSprites } from '../src/game2d/art/kaiPng';
 import { PORTRAIT_FRAMES, PORTRAIT_SIZE, drawPortrait } from '../src/story/portraits';
 import type { CutsceneAudio, CutsceneCue, CutsceneId, LiberationParams, Mood, Speaker } from '../src/story/types';
 import { cutsceneAudio } from '../src/ui/screens/cutscene';
@@ -235,6 +236,7 @@ Promise.all([
   document.fonts.load("800 20px 'Orbitron'"),
   document.fonts.load("600 16px 'Exo 2'"),
   document.fonts.load("400 16px 'Exo 2'"),
+  ensureKaiSprites(),
 ])
   .catch(() => undefined)
   .then(() => {
