@@ -233,6 +233,7 @@ export const ARM_RIG = {
 } as const;
 
 /**
+ * Bras DESSINÉ (repli sans les PNG de Kaï) : avec les PNG, la bouche est celle du rendu, `pngMuzzle` (kaiPng.ts).
  * Bouche du canon dans la frame du bras, par arme : le tir part de ce point, dans l'axe de la visée. Même main
  * pour toutes les armes ; seul le canon s'allonge (x ≤ 54 : l'éclair de la frame de recul tient dans les 64 px).
  * Laser : (27, 7) depuis le pivot → debout, devant : (28, -38) des pieds (= l'ancien décalage fixe du pistolet) ;

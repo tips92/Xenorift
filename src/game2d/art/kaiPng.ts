@@ -1,9 +1,13 @@
+import { WEAPON_IDS } from '../../core/weapons';
+import type { WeaponId } from '../../core/types';
 import type { Ctx } from './util';
 
 // Poses de Kaï en PNG (exception : le reste du jeu reste dessiné). Planches à 4× du cadre jeu,
-// sans écart : corps 15 × 256×320, bras 2 × 256×128. Réduites dans 64×80 et 64×32.
-// Le bras n'a pas d'arme : le canon reste dessiné (drawArmFrame) à la main (mains.txt = HAND_X/Y).
-// Épaules : art/sprites/kai/epaules.txt, repère du jeu (centre des pieds, y < 0 vers le haut).
+// sans écart : corps 15 × 256×320 ; bras armé 2 × 4 de 256×128 (colonnes repos, recul ; une rangée par
+// arme dans l'ordre de WEAPON_IDS, armes modélisées dans art/weapons.blend d'après art/ref/Arme Artwork.jpg).
+// Réduites dans 64×80 et 64×32. Seul l'éclair du recul reste dessiné (drawArmFrame), à la bouche du PNG.
+// Épaules : art/sprites/kai/epaules.txt, repère du jeu (centre des pieds, y < 0 vers le haut) ;
+// bouches : art/sprites/kai/canons.txt, repère de la frame du bras (64×32, épaule en ARM_RIG.pivot).
 
 const BODY_FRAMES = 15;
 const BODY_SRC_W = 256;
@@ -13,6 +17,14 @@ const ARM_SRC_H = 128;
 
 const bodyUrl = new URL('../../../art/sprites/kai/planche.png', import.meta.url).href;
 const armUrl = new URL('../../../art/sprites/kai/planche-bras.png', import.meta.url).href;
+
+/** Bouche du canon du bras armé PNG (frame 64×32), repos puis recul : canons.txt. */
+const PNG_MUZZLE: Readonly<Record<WeaponId, readonly [{ x: number; y: number }, { x: number; y: number }]>> = {
+  laser: [{ x: 40.2, y: 20.1 }, { x: 38.0, y: 19.0 }],
+  machinegun: [{ x: 54.1, y: 23.6 }, { x: 51.9, y: 22.5 }],
+  shotgun: [{ x: 47.7, y: 19.3 }, { x: 45.5, y: 18.2 }],
+  rifle: [{ x: 49.0, y: 18.0 }, { x: 46.8, y: 16.9 }],
+};
 
 /** Épaule proche de chaque frame du corps (même ordre que FRAMES.player). */
 export const PNG_SHOULDER: readonly number[] = [
@@ -62,7 +74,7 @@ export function ensureKaiSprites(): Promise<boolean> {
         if (b.naturalWidth !== BODY_FRAMES * BODY_SRC_W || b.naturalHeight !== BODY_SRC_H) {
           throw new Error(`planche ${b.naturalWidth}x${b.naturalHeight}`);
         }
-        if (a.naturalWidth !== 2 * ARM_SRC_W || a.naturalHeight !== ARM_SRC_H) {
+        if (a.naturalWidth !== 2 * ARM_SRC_W || a.naturalHeight !== WEAPON_IDS.length * ARM_SRC_H) {
           throw new Error(`bras ${a.naturalWidth}x${a.naturalHeight}`);
         }
         body = b;
@@ -89,12 +101,19 @@ export function drawPngBody(ctx: Ctx, frame: number, w: number, h: number): bool
   return true;
 }
 
-/** Colle le bras (64×32, repos ou recul) dans le repère courant. Faux si le PNG n'est pas là. */
-export function drawPngArm(ctx: Ctx, frame: number, w: number, h: number): boolean {
+/** Bouche du canon de la frame du bras PNG (repos ou recul), ou null si les PNG ne sont pas chargés. */
+export function pngMuzzle(weapon: WeaponId, frame: number): { readonly x: number; readonly y: number } | null {
+  if (!arm) return null;
+  return PNG_MUZZLE[weapon][frame === 1 ? 1 : 0];
+}
+
+/** Colle le bras armé (64×32, repos ou recul) dans le repère courant. Faux si le PNG n'est pas là. */
+export function drawPngArm(ctx: Ctx, weapon: WeaponId, frame: number, w: number, h: number): boolean {
   if (!arm) return false;
   const i = frame === 1 ? 1 : 0;
+  const row = Math.max(0, WEAPON_IDS.indexOf(weapon));
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(arm, i * ARM_SRC_W, 0, ARM_SRC_W, ARM_SRC_H, 0, 0, w, h);
+  ctx.drawImage(arm, i * ARM_SRC_W, row * ARM_SRC_H, ARM_SRC_W, ARM_SRC_H, 0, 0, w, h);
   return true;
 }

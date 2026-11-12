@@ -5,7 +5,7 @@ import type { ThemeId, WeaponId } from '../src/core/types';
 import { PELLET_SPEED_JITTER, WEAPON_IDS, WEAPONS } from '../src/core/weapons';
 import { createParallax, generatePlatformArt, type ParallaxHandle } from '../src/game2d/art';
 import { PLAYER_FRAME_COUNT, frameShoulderX, frameShoulderY } from '../src/game2d/art/draw/player';
-import { ensureKaiSprites } from '../src/game2d/art/kaiPng';
+import { ensureKaiSprites, pngMuzzle } from '../src/game2d/art/kaiPng';
 import {
   ANIM,
   ARM_MUZZLE,
@@ -325,14 +325,16 @@ class ArtScene extends Phaser.Scene {
       const feet = 140 + row * 146;
       const shot = w.pellets > 1 ? `${w.pellets} plombs ±${w.spreadDeg}°` : w.burst > 1 ? `rafale de ${w.burst}` : w.spreadDeg ? `1 balle ±${w.spreadDeg}°` : '1 tir';
       text(10, feet - 114, `${w.name} — portée ${w.rangeTiles} tuiles · ${shot} · ${w.cooldownMs} ms · dégâts ${w.damage}`);
-      // Planche du bras x2, bouche du canon (ARM_MUZZLE) et épaule (ARM_RIG.pivot) repérées
-      const m = ARM_MUZZLE[id];
+      // Planche du bras x2, bouche du canon (PNG : canons.txt, sinon ARM_MUZZLE) et épaule (ARM_RIG.pivot) repérées
+      const muzzleOf = (f: number) => pngMuzzle(id, f) ?? ARM_MUZZLE[id];
+      const m = muzzleOf(FRAMES.arm.rest);
       for (let f = 0; f < 2; f++) {
+        const mf = muzzleOf(f);
         const fx = 10 + f * (Am.w * 2 + 8);
         const fy = feet - 88;
         this.add.rectangle(fx + Am.w, fy + Am.h, Am.w * 2, Am.h * 2, 0x05010f, 0.55).setStrokeStyle(1, 0x3a3060);
         this.add.image(fx, fy, ARM_TEX[id], f).setOrigin(0, 0).setScale(2);
-        for (const [px, py, col] of [[m.x, m.y, 0xff4fd8], [ARM_RIG.pivotX, ARM_RIG.pivotY, 0xffcc33]] as const) {
+        for (const [px, py, col] of [[mf.x, mf.y, 0xff4fd8], [ARM_RIG.pivotX, ARM_RIG.pivotY, 0xffcc33]] as const) {
           this.add.rectangle(fx + px * 2, fy + py * 2, 7, 1, col);
           this.add.rectangle(fx + px * 2, fy + py * 2, 1, 7, col);
         }

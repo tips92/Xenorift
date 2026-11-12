@@ -464,7 +464,8 @@ async function crouch(t, id, S, standY) {
   await kb(t).up('ArrowDown');
   assertAim(list, S, 0, `${id} accroupi`);
   const y = flattest(list).y0;
-  assert(y > standY + 10, `${id} : tir accroupi plus bas que debout (bouche du canon y ${r1(y)} / ${r1(standY)})`);
+  // Poses PNG de Kaï : épaule accroupie ≈ 9 px sous celle de la pose debout (19 px avec le Kaï dessiné).
+  assert(y > standY + 6, `${id} : tir accroupi plus bas que debout (bouche du canon y ${r1(y)} / ${r1(standY)})`);
 }
 
 /**

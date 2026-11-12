@@ -192,10 +192,12 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   (champignon, barrière d'arène, tronc, Tess et sa capsule, glyphes, branches / lianes / passerelles des `=` ;
   `WORLD1_SHEETS` ; dessins de la Jungle),
   `player.ts` : corps 64x80 sans arme (PNG `art/sprites/kai/planche.png`, repli dessiné), poses accroupie et
-  de reptation, bras armé 64x32 (`planche-bras.png` ; canon dessiné par arme, `GUNS`,
-  éclair de recul `FLASH`) ; `items.ts` : `drawBullet` (projectile par arme), icônes de bonus ; `doors.ts` :
+  de reptation, bras armé 64x32 (`planche-bras.png` : une rangée par arme dans l'ordre de `WEAPON_IDS`, repos et
+  recul, armes modélisées dans `art/weapons.blend` d'après `art/ref/Arme Artwork.jpg`, chaîne dans
+  `art/outils/armes/` hors git ; bouches `canons.txt` = `PNG_MUZZLE` de `kaiPng.ts`, lues par `Player.gunX/Y` ;
+  repli dessiné sans les PNG : `GUNS` et `ARM_MUZZLE`), éclair de recul `FLASH` dessiné à la bouche) ; `items.ts` : `drawBullet` (projectile par arme), icônes de bonus ; `doors.ts` :
   portes, flèche ▲, mur de salle ; `keys.ts` : `ARM_TEX`, `ARM_RIG` (épaule décalée en visée haute et
-  diagonale : la visière reste visible), `ARM_MUZZLE` pour le bras armé, `BULLET_TEX` / `BULLET_SIZE` (`tip` =
+  diagonale : la visière reste visible), `ARM_MUZZLE` pour le bras armé dessiné (repli), `BULLET_TEX` / `BULLET_SIZE` (`tip` =
   point testé contre décor et ennemis) / `BULLET_ADDITIVE` (mode de rendu ; plombs de pompe à contour, en mode
   normal) pour les projectiles ; tileset 8x4 : `TILE_FRAME.WALKWAY` (familles x variantes de `=`) ; `TEX.mushroom`,
   `trunk`, `sporeSpot`, `tess`, `capsule` et leurs `FRAMES`).

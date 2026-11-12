@@ -1,4 +1,4 @@
-import { drawPngArm, drawPngBody, kaiPngActive, pngShoulderX, pngShoulderY } from '../kaiPng';
+import { drawPngArm, drawPngBody, kaiPngActive, pngMuzzle, pngShoulderX, pngShoulderY } from '../kaiPng';
 import { ARM_MUZZLE, ARM_RIG, type ARM_TEX, FRAMES, FRAME_SIZE } from '../keys';
 import { type Ctx, circle, ellipse, fillOutlined, glow, glowDot, limb, linGrad, poly, rimLight, roundRect, sphereGrad } from '../util';
 
@@ -714,13 +714,14 @@ export function drawArmFrame(ctx: Ctx, weapon: ArmWeapon, index: number): void {
   const ty = HAND_Y - (recoil ? 0.4 : 0);
 
   ctx.save();
-  // Arme (derrière la main) : les PNG du bras n'incluent pas le canon.
-  ctx.save();
-  ctx.translate(tx, ty);
-  GUNS[weapon](ctx);
-  ctx.restore();
   const Am = FRAME_SIZE.arm;
-  if (!drawPngArm(ctx, index, Am.w, Am.h)) {
+  // Bras armé PNG (arme modélisée comprise) ; sinon repli dessiné : arme derrière la main, puis le bras.
+  const png = drawPngArm(ctx, weapon, index, Am.w, Am.h);
+  if (!png) {
+    ctx.save();
+    ctx.translate(tx, ty);
+    GUNS[weapon](ctx);
+    ctx.restore();
     // Coude (deux segments, pli vers le bas)
     const d = Math.min(Math.hypot(tx - sx, ty - sy), UPPER_ARM + FOREARM - 0.5);
     const base = Math.atan2(ty - sy, tx - sx);
@@ -746,8 +747,10 @@ export function drawArmFrame(ctx: Ctx, weapon: ArmWeapon, index: number): void {
     ctx.stroke();
   }
   if (recoil) {
+    const p = png ? pngMuzzle(weapon, index) : null;
     const m = ARM_MUZZLE[weapon];
-    muzzleFlash(ctx, m.x - RECOIL_PX, m.y - 0.4, FLASH[weapon]);
+    if (p) muzzleFlash(ctx, p.x, p.y, FLASH[weapon]);
+    else muzzleFlash(ctx, m.x - RECOIL_PX, m.y - 0.4, FLASH[weapon]);
   }
   ctx.restore();
 }
