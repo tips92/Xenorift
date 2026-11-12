@@ -521,7 +521,7 @@ export default async function (t) {
   st = await selectTab(t, 'bench');
   st = await selectWeapon(t, 'machinegun');
   const mg = st.items['weapon.machinegun'];
-  assert(mg.price === 80 && mg.locked && mg.notes.includes('Plan manquant') && st.equip.machinegun === undefined, `mitrailleur : 80, plan manquant, pas de bouton Équiper (${fmt({ mg, equip: st.equip })})`);
+  assert(mg.price === 120 && mg.locked && mg.notes.includes('Plan manquant') && st.equip.machinegun === undefined, `mitrailleur : 120, plan manquant, pas de bouton Équiper (${fmt({ mg, equip: st.equip })})`);
   assert(st.items['upgrade.machinegun.damage'].notes.includes('Arme non possédée'), `améliorations du mitrailleur : arme non possédée (${fmt(st.items['upgrade.machinegun.damage'])})`);
   await refuse(t, 'weapon.machinegun', 'Plan manquant');
   await refuse(t, 'upgrade.machinegun.cooling', 'Arme non possédée');
@@ -689,7 +689,7 @@ export default async function (t) {
   await refuse(t, 'kai.heart', 'Réserve insuffisante');
   assertEq((await shell(t)).crystals, 90, 'mode test : rien débité sans réserve suffisante');
   await back(t, 'Escape', 'select');
-  assertEq(await addCrystals(t, 600), 690, 'réserve portée à 690 (aide DEV)');
+  assertEq(await addCrystals(t, 580), 670, 'réserve portée à 670 (aide DEV)');
   await hangarFromSelectScreen(t);
   await waitCanvas(t);
   st = await hangarState(t);
@@ -698,7 +698,7 @@ export default async function (t) {
   assert(dmgT.price === 60 && !dmgT.locked && dmgT.notes.length === 0, `mode test, Tess à bord : Dégâts niveau 2 achetable, 60, sans note (${fmt(dmgT)})`);
   st = await selectWeapon(t, 'shotgun');
   const sg = st.items['weapon.shotgun'];
-  assert(sg.price === 100 && !sg.locked && sg.notes.includes('Mode test') && st.equip.shotgun === false, `mode test : pompe à 100, note Mode test, Équiper (${fmt({ sg, equip: st.equip })})`);
+  assert(sg.price === 80 && !sg.locked && sg.notes.includes('Mode test') && st.equip.shotgun === false, `mode test : pompe à 80, note Mode test, Équiper (${fmt({ sg, equip: st.equip })})`);
   await equip(t, 'shotgun');
   await waitFor(t, (s) => /Équipée pour cette session \(mode test\)/.test((document.querySelector(`${s} .hg-msg.is-on`) || {}).textContent || ''), {
     timeout: 2000,
@@ -713,7 +713,7 @@ export default async function (t) {
   await t.shot('hangar-test-shotgun');
   await previewShot(t, 'preview-kai-shotgun');
   // Pompe achetée : rangée dans l'ordre des armes, devient l'arme enregistrée (l'arme de la session est oubliée).
-  st = await buy(t, 'weapon.shotgun', 100, 'Acheter la Pompe', 1);
+  st = await buy(t, 'weapon.shotgun', 80, 'Acheter la Pompe', 1);
   assertEq(st.weapons.shotgun, 'Équipée', 'pompe achetée : toujours équipée');
   sh = await shell(t);
   save = await readSave(t);
@@ -853,12 +853,12 @@ export default async function (t) {
   st = await buy(t, 'upgrade.laser.damage', 60, 'Améliorer les dégâts du Pistolet laser (×1,5)', 2);
   const dmgC3 = st.items['upgrade.laser.damage'];
   assert(dmgC3.price === 100 && !dmgC3.locked && dmgC3.notes.length === 0, `Tess à bord : Dégâts niveau 3 achetable à 100, sans note (${fmt(dmgC3)})`);
-  assertEq(st.weapons, { laser: 'Équipé', machinegun: '80', shotgun: 'Plan manquant', rifle: 'Plan manquant' }, 'plan du mitrailleur : achetable, les autres armes sans plan');
+  assertEq(st.weapons, { laser: 'Équipé', machinegun: '120', shotgun: 'Plan manquant', rifle: 'Plan manquant' }, 'plan du mitrailleur : achetable, les autres armes sans plan');
   st = await selectWeapon(t, 'machinegun');
   const mgC = st.items['weapon.machinegun'];
-  assert(mgC.price === 80 && !mgC.locked && mgC.notes.length === 0 && st.equip.machinegun === undefined, `mitrailleur : 80, sans note, pas encore de bouton Équiper (${fmt({ mgC, equip: st.equip })})`);
+  assert(mgC.price === 120 && !mgC.locked && mgC.notes.length === 0 && st.equip.machinegun === undefined, `mitrailleur : 120, sans note, pas encore de bouton Équiper (${fmt({ mgC, equip: st.equip })})`);
   assert(st.items['upgrade.machinegun.damage'].notes.includes('Arme non possédée'), 'améliorations du mitrailleur : arme non possédée avant l’achat');
-  st = await buy(t, 'weapon.machinegun', 80, 'Acheter le Mitrailleur', 1);
+  st = await buy(t, 'weapon.machinegun', 120, 'Acheter le Mitrailleur', 1);
   assertEq(st.weapons.machinegun, 'Possédé', 'mitrailleur acheté : possédé (pas équipé)');
   const up = st.items['upgrade.machinegun.damage'];
   assert(up.price === 30 && !up.locked && up.notes.length === 0, `mitrailleur acheté : ses améliorations achetables (${fmt(up)})`);
@@ -876,7 +876,7 @@ export default async function (t) {
   save = await readSave(t);
   assertEq(
     { crystals: save.crystals, damage: save.upgrades.laser.damage, extraHearts: save.extraHearts, crew: save.crew, blueprints: save.blueprints },
-    { crystals: 110, damage: 2, extraHearts: 1, crew: ['tess', 'mira'], blueprints: ['machinegun'] },
+    { crystals: 70, damage: 2, extraHearts: 1, crew: ['tess', 'mira'], blueprints: ['machinegun'] },
     'achats hors mode test enregistrés',
   );
   await back(t, 'android', 'select');

@@ -246,7 +246,7 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   identifiants (plan 04) : une étape est réussie si son id figure dans `best`, ouverte si c'est la première, une
   réussie ou la suivante d'une réussie (mode test : toutes) ; JOUER lance la première ouverte non réussie (sinon la
   dernière). `unlocked` (index hérité) est encore lu et écrit mais ne décide plus rien. Les récompenses des étapes
-  réussies (plan du mitrailleur pour f1) sont réappliquées au chargement, et enregistrées au changement suivant.
+  réussies (plan de la pompe pour f1) sont réappliquées au chargement, et enregistrées au changement suivant.
 - Clavier : flèches / WASD, Espace = saut (2D) et turbo (vol), K = saut, Haut/W = haut (visée, portes ; ne fait
   plus sauter), Bas/S = accroupi (+ Saut : descente d'une plateforme `=` ou mobile), J/X/F = tir, Maj = turbo,
   Échap/P = pause, Entrée/Espace passent l'intro.
@@ -591,12 +591,12 @@ sans faire échouer. Chaque scénario a un **navigateur neuf** (GPU et shaders �
   au chargement, mention « Tess à l’établi » `.hg-caption .hg-crew` au hangar ; sans marque `prologue`, le premier
   lancement de chaque sauvegarde, par JOUER ou par une carte, passe par le prologue, touché « Passer ») et vérifie sur la
   page : ligne sous JOUER (« Nouvelle aventure », « Continuer · … »), carte d'intro lancée par JOUER (Échap revient à
-  l'accueil avant le lancement), verrous, records et étoiles (cartes, monde, total), page ouverte, plan du
-  mitrailleur rendu à qui a fini f1 (état de l'arme au hangar), retour du hangar sur la même page, glissements (doigt
+  l'accueil avant le lancement), verrous, records et étoiles (cartes, monde, total), page ouverte, plan de la
+  pompe rendu à qui a fini f1 (état de l'arme au hangar), retour du hangar sur la même page, glissements (doigt
   CDP, souris, geste vif, petit glissement qui revient) sans lancer la carte, souris relâchée hors de la zone des
   pages puis survol sans bouton (bande immobile), Entrée sur une carte après un glissement au doigt (carte lancée),
   flèches du clavier, sauvegarde réécrite (histoire relue sans doublon, plan, `unlocked` gardé). Partie E (aides DEV, sautée en `--prod`) : f1 gagné →
-  « Plan : mitrailleur » sur les résultats et « Atterrir » vers la Lune au hangar ; rejoué et gagné → plus de ligne.
+  « Plan : pompe » sur les résultats et « Atterrir » vers la Lune au hangar ; rejoué et gagné → plus de ligne.
 - **Scénario du hangar (plan 03)** : `hangar` (full, ≈ 1 min 30) enchaîne A. lecture de la sauvegarde (version
   inconnue, JSON illisible, version 2 abîmée, migration d'une version 1), B. gain de cristaux de j1 (score et étoiles
   finaux notés), C. hangar entre j1 et j2 (équipement, achat avec confirmation, refus, retour Android vers les

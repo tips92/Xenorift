@@ -63,7 +63,7 @@ export const BOOST_MULS: readonly number[] = [1, 1.25, 1.5];
 
 /** Prix en cristaux ; tableaux indexés par le niveau actuel (prix du niveau suivant). */
 export const PRICES = {
-  weapon: { machinegun: 80, shotgun: 100, rifle: 120 },
+  weapon: { shotgun: 80, rifle: 100, machinegun: 120 },
   upgrade: [30, 60, 100],
   shipGun: [100, 80, 140],
   shipShield: [80, 140],

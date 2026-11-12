@@ -8,7 +8,7 @@
 //     par JOUER comme par une carte des Niveaux ; les lancements suivants mènent droit à la carte d'intro.
 //  B. Version 1 « unlocked: 3 », j1 f1 m1 réussis : j2 (suivante de j1) et f2 (suivante de m1) ouvertes aussi,
 //     records et étoiles (cartes, monde, en-tête) ; JOUER → Canopée des spores ; Niveaux ouverts sur le monde 1 ;
-//     plan du mitrailleur rendu au chargement (hangar : arme achetable) ; retour du hangar sur la même page ; pages :
+//     plan de la pompe rendu au chargement (hangar : arme achetable) ; retour du hangar sur la même page ; pages :
 //     glissement au doigt commencé sur une carte ouverte (page changée, carte non lancée), petit glissement (la page
 //     revient), geste vif, glissement à la souris, flèches du clavier, souris relâchée hors de la zone des pages puis
 //     survol sans bouton (pas de glissement fantôme), Entrée sur j1 après un glissement au doigt (son intro) ; carte
@@ -16,11 +16,11 @@
 //  C. Version 1 « unlocked: 2 », j1 seul réussi : j2 ouverte, f1, m1 et f2 verrouillées (l'index n'ouvre plus
 //     rien) ; JOUER → Canopée des spores ; pas de plan.
 //  D. Version 2, f1 seul réussi (mode test) : j1 (la première), f1 et m1 ouvertes, j2 et f2 verrouillées ; JOUER →
-//     Lisière de Xéna ; plan du mitrailleur, pas de Tess à l'Établi. Version 2, j1 et j2 réussis sans équipage : Tess
+//     Lisière de Xéna ; plan de la pompe, pas de Tess à l'Établi. Version 2, j1 et j2 réussis sans équipage : Tess
 //     rendue au chargement (récompense de j2), mentionnée à l'Établi. Version 2 sans records mais avec des marques d'histoire : « Continuer »
 //     (pas « Nouvelle aventure ») ; marques relues sans doublon ni valeur invalide, plan et `unlocked` gardés à
 //     l'enregistrement suivant (réglage changé).
-//  E. Dev seulement (aides DEV ; sauté en --prod) : f1 gagné → résultats avec « Plan : mitrailleur » ; SUIVANT →
+//  E. Dev seulement (aides DEV ; sauté en --prod) : f1 gagné → résultats avec « Plan : pompe » ; SUIVANT →
 //     hangar « Atterrir » vers la Lune Krator ; f1 rejoué et gagné → plus de ligne de récompense.
 // Sans aide DEV jusqu'à D : passe aussi sur le build de production (--prod).
 import { assert, assertEq, fmt, readSave, waitFor, waitFor3dPhase, waitForScreen } from '../lib/helpers.mjs';
@@ -107,11 +107,11 @@ const lockedBy = (cleared) => ORDER.map((id, i) => !(i === 0 || cleared.includes
 /** Étoiles « n/max » d'un ensemble d'étapes (3 par étape) d'après les records `best`. */
 const starsOf = (ids, best) => `${ids.reduce((n, id) => n + (best[id] ? best[id].stars : 0), 0)}/${ids.length * 3}`;
 
-/** Hangar ouvert depuis les Niveaux : état du mitrailleur sur l'Établi (« Plan manquant » ou son prix). */
-async function machinegunState(t) {
+/** Hangar ouvert depuis les Niveaux : état de la pompe (plan de f1) sur l'Établi (« Plan manquant » ou son prix). */
+async function shotgunState(t) {
   await t.page.locator(`${S} .select-hangar`).click({ timeout: 5000 });
   await waitForScreen(t, 'hangar');
-  return t.ev((h) => document.querySelector(`${h} .hg-weapon[data-weapon="machinegun"] .hg-weapon-state`).textContent.trim(), HG);
+  return t.ev((h) => document.querySelector(`${h} .hg-weapon[data-weapon="shotgun"] .hg-weapon-state`).textContent.trim(), HG);
 }
 
 /** Hangar affiché : mention de l'équipière à l'Établi (« Tess à l’établi »), ou null. */
@@ -200,7 +200,7 @@ export default async function (t) {
     { world: 1, name: 'Monde 1 · Jungle de Xéna', worldStars: starsOf(W1, bestB), total: starsOf(ORDER, bestB) },
     'v1 unlocked 3 : ouvert sur le monde de j2',
   );
-  assertEq(await machinegunState(t), '80', 'v1 avec f1 réussi : plan du mitrailleur rendu au chargement (arme achetable)');
+  assertEq(await shotgunState(t), '80', 'v1 avec f1 réussi : plan de la pompe rendu au chargement (arme achetable)');
   await t.key('Escape', 40);
   await waitForScreen(t, 'select');
   assertEq((await selectState(t)).world, 1, 'retour du hangar : même page (monde 1)');
@@ -285,7 +285,7 @@ export default async function (t) {
     { world: 1, worldStars: starsOf(W1, bestC), total: starsOf(ORDER, bestC) },
     'v1 unlocked 2 : monde 1, étoiles',
   );
-  assertEq(await machinegunState(t), 'Plan manquant', 'v1 sans f1 réussi : pas de plan');
+  assertEq(await shotgunState(t), 'Plan manquant', 'v1 sans f1 réussi : pas de plan');
   await t.key('Escape', 40);
   await waitForScreen(t, 'select');
   await t.key('Escape', 40);
@@ -298,7 +298,7 @@ export default async function (t) {
   sel = await openSelect(t);
   assertEq(locks(sel), lockedBy(['f1']), 'v2, f1 seul réussi : j1, f1 et m1 ouvertes');
   assertEq([sel.cards.j2.locked, sel.cards.m1.locked, sel.cards.f2.locked], [true, false, true], 'v2, f1 seul réussi : j2 et f2 verrouillées, m1 ouverte');
-  assertEq(await machinegunState(t), '80', 'v2, f1 réussi : plan du mitrailleur');
+  assertEq(await shotgunState(t), '80', 'v2, f1 réussi : plan de la pompe');
   assertEq(await crewMention(t), null, 'v2, j2 non réussie : pas de Tess à l’Établi');
   await t.key('Escape', 40);
   await waitForScreen(t, 'select');
@@ -309,7 +309,7 @@ export default async function (t) {
   // j1 et j2 réussis, équipage vide : Tess rendue au chargement (récompense de j2), à l'Établi.
   await loadSave(t, { version: 2, unlocked: 2, best: { j1: { score: 900, stars: 1 }, j2: { score: 800, stars: 1 } }, settings: {}, crew: [] });
   await openSelect(t);
-  await machinegunState(t);
+  await shotgunState(t);
   assertEq(await crewMention(t), 'Tess à l’établi', 'v2, j2 réussie sans équipage : Tess rendue au chargement, à l’Établi');
   await t.key('Escape', 40);
   await waitForScreen(t, 'select');
@@ -336,7 +336,7 @@ export default async function (t) {
   t.log(`v2 réécrite : ${fmt({ unlocked: save.unlocked, best: save.best, blueprints: save.blueprints, story: save.story })}`);
   assertEq(
     { version: save.version, unlocked: save.unlocked, blueprints: save.blueprints, story: save.story },
-    { version: 2, unlocked: 1, blueprints: ['machinegun'], story: { seen: ['prologue', 'tutorial-j1'] } },
+    { version: 2, unlocked: 1, blueprints: ['shotgun'], story: { seen: ['prologue', 'tutorial-j1'] } },
     'v2 réécrite : histoire relue, plan rendu, index hérité gardé',
   );
   await t.key('Escape', 40);
@@ -357,9 +357,9 @@ export default async function (t) {
     );
     t.log(`f1 gagné (partie ${pass}) : ${fmt({ rewards, details: await resultDetails(t) })}`);
     if (pass === 1) {
-      assertEq(rewards, [{ reward: 'blueprint:machinegun', label: 'Plan : mitrailleur' }], 'f1 gagné la première fois : « Plan : mitrailleur »');
-      assertEq((await resultDetails(t)).Plan, 'mitrailleur', 'ligne Plan des résultats');
-      assertEq((await readSave(t)).blueprints, ['machinegun'], 'plan enregistré');
+      assertEq(rewards, [{ reward: 'blueprint:shotgun', label: 'Plan : pompe' }], 'f1 gagné la première fois : « Plan : pompe »');
+      assertEq((await resultDetails(t)).Plan, 'pompe', 'ligne Plan des résultats');
+      assertEq((await readSave(t)).blueprints, ['shotgun'], 'plan enregistré');
       await t.shot('results-f1-plan');
       await press(t, 'results', 'Suivant');
       await waitForScreen(t, 'hangar');

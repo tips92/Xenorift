@@ -1,10 +1,9 @@
-import { WEAPON_IDS } from '../../core/weapons';
 import type { WeaponId } from '../../core/types';
 import type { Ctx } from './util';
 
 // Poses de Kaï en PNG (exception : le reste du jeu reste dessiné). Planches à 4× du cadre jeu,
 // sans écart : corps 15 × 256×320 ; bras armé 2 × 4 de 256×128 (colonnes repos, recul ; une rangée par
-// arme dans l'ordre de WEAPON_IDS, armes modélisées dans art/weapons.blend d'après art/ref/Arme Artwork.jpg).
+// arme dans l'ordre de ARM_ROWS, armes modélisées dans art/weapons.blend d'après art/ref/Arme Artwork.jpg).
 // Réduites dans 64×80 et 64×32. Seul l'éclair du recul reste dessiné (drawArmFrame), à la bouche du PNG.
 // Épaules : art/sprites/kai/epaules.txt, repère du jeu (centre des pieds, y < 0 vers le haut) ;
 // bouches : art/sprites/kai/canons.txt, repère de la frame du bras (64×32, épaule en ARM_RIG.pivot).
@@ -14,6 +13,9 @@ const BODY_SRC_W = 256;
 const BODY_SRC_H = 320;
 const ARM_SRC_W = 256;
 const ARM_SRC_H = 128;
+
+/** Rangées de planche-bras.png (ordre du rendu, indépendant de WEAPON_IDS). */
+const ARM_ROWS: readonly WeaponId[] = ['laser', 'machinegun', 'shotgun', 'rifle'];
 
 const bodyUrl = new URL('../../../art/sprites/kai/planche.png', import.meta.url).href;
 const armUrl = new URL('../../../art/sprites/kai/planche-bras.png', import.meta.url).href;
@@ -74,7 +76,7 @@ export function ensureKaiSprites(): Promise<boolean> {
         if (b.naturalWidth !== BODY_FRAMES * BODY_SRC_W || b.naturalHeight !== BODY_SRC_H) {
           throw new Error(`planche ${b.naturalWidth}x${b.naturalHeight}`);
         }
-        if (a.naturalWidth !== 2 * ARM_SRC_W || a.naturalHeight !== WEAPON_IDS.length * ARM_SRC_H) {
+        if (a.naturalWidth !== 2 * ARM_SRC_W || a.naturalHeight !== ARM_ROWS.length * ARM_SRC_H) {
           throw new Error(`bras ${a.naturalWidth}x${a.naturalHeight}`);
         }
         body = b;
@@ -111,7 +113,7 @@ export function pngMuzzle(weapon: WeaponId, frame: number): { readonly x: number
 export function drawPngArm(ctx: Ctx, weapon: WeaponId, frame: number, w: number, h: number): boolean {
   if (!arm) return false;
   const i = frame === 1 ? 1 : 0;
-  const row = Math.max(0, WEAPON_IDS.indexOf(weapon));
+  const row = Math.max(0, ARM_ROWS.indexOf(weapon));
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(arm, i * ARM_SRC_W, row * ARM_SRC_H, ARM_SRC_W, ARM_SRC_H, 0, 0, w, h);

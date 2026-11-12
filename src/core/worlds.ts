@@ -39,7 +39,7 @@ export const WORLDS: readonly WorldDef[] = [
     theme: 'jungle',
     guardian: { name: 'Méduse-baleine', core: 'Noyau de Xéna', skill: 'doubleJump' },
     castaway: 'tess',
-    flightBoss: { name: 'Léviathan de la nébuleuse', blueprint: 'machinegun' },
+    flightBoss: { name: 'Léviathan de la nébuleuse', blueprint: 'shotgun' },
     stages: [
       { id: 'j1', part: 1, levelId: 'jungle', boss: 'blobKing', before: 'prologue' },
       { id: 'j2', part: 2, levelId: 'jungle2', boss: 'beetleTitan', rewards: [{ kind: 'crew', id: 'tess' }] },
@@ -51,7 +51,7 @@ export const WORLDS: readonly WorldDef[] = [
         after: 'liberation',
         rewards: [{ kind: 'skill', id: 'doubleJump' }],
       },
-      { id: 'f1', part: 4, levelId: 'nebula', rewards: [{ kind: 'blueprint', id: 'machinegun' }] },
+      { id: 'f1', part: 4, levelId: 'nebula', rewards: [{ kind: 'blueprint', id: 'shotgun' }] },
     ],
   },
   {
@@ -60,10 +60,10 @@ export const WORLDS: readonly WorldDef[] = [
     // Glissade et Ozzo (cartographe) : monde 2 au nouveau format (étape 5).
     guardian: { name: 'Ver des sables', core: 'Noyau de Krator', skill: null },
     castaway: null,
-    flightBoss: { name: 'Ver cosmique', blueprint: 'shotgun' },
+    flightBoss: { name: 'Ver cosmique', blueprint: 'rifle' },
     stages: [
       { id: 'm1', part: 1, levelId: 'moon' },
-      { id: 'f2', part: 4, levelId: 'asteroids' },
+      { id: 'f2', part: 4, levelId: 'asteroids', rewards: [{ kind: 'blueprint', id: 'rifle' }] },
     ],
   },
 ];

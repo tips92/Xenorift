@@ -188,7 +188,7 @@ export const BULLET_TEX = {
 export const BULLET_SIZE = {
   laser: { w: 40, h: 10, tip: 16 },
   machinegun: { w: 24, h: 6, tip: 10 },
-  shotgun: { w: 16, h: 16, tip: 7 },
+  shotgun: { w: 20, h: 20, tip: 9 },
   rifle: { w: 56, h: 8, tip: 24 },
 } as const satisfies Record<WeaponId, { w: number; h: number; tip: number }>;
 

@@ -73,14 +73,14 @@ Défilement horizontal, gameplay « à la Mario ». Constantes et règles de lev
   chaque arme a sa jauge de surchauffe (l'icône de la jauge montre l'arme tenue) ; en surchauffe, plus de tir
   jusqu'à ce que la jauge redescende sous 30 %. Un son de tir par arme (une rafale de fusil = 3 sons).
   L'arme équipée est enregistrée dans la sauvegarde et gardée d'un niveau à l'autre ; on part avec le
-  pistolet laser, les autres s'achètent au hangar une fois leur plan récupéré (mitrailleur : en réussissant le
-  vol 1, donné aussi à qui l'avait déjà fini ; les autres plus tard ; en mode test, toutes s'essaient au hangar). Chaque arme s'améliore au hangar (dégâts, cadence, portée,
+  pistolet laser, les autres s'achètent au hangar une fois leur plan récupéré, dans l'ordre pompe (vol 1, donnée aussi à qui
+  l'avait déjà fini), fusil d'assaut (vol 2) puis mitrailleur, la meilleure, en dernier (vol 3) ; prix 80, 100, 120 ; en mode test, toutes s'essaient au hangar). Chaque arme s'améliore au hangar (dégâts, cadence, portée,
   refroidissement, voir « Hangar »). Fiches : `src/core/weapons.ts` (valeurs de départ, à régler sur téléphone).
 
   | | Pistolet laser | Mitrailleur | Pompe | Fusil d'assaut |
   |---|---|---|---|---|
   | Rôle | polyvalent | moyenne portée, arrose | courte portée, gros coup | longue portée, précis |
-  | Portée | 9 tuiles | 7 tuiles | 3,5 tuiles | 12 tuiles |
+  | Portée | 9 tuiles | 7 tuiles | 4 tuiles | 12 tuiles |
   | Tir | 1 trait | 1 balle, dispersion ±3° | 5 plombs en éventail ±14° | rafale de 3 balles (70 ms) |
   | Délai entre tirs | 160 ms | 80 ms | 600 ms | 450 ms par rafale |
   | Dégâts | 2 | 1 | 1 par plomb | 2 par balle |
@@ -229,8 +229,8 @@ haut / bas / gauche / droite dans un couloir (rayon ~12 unités) pour traverser 
   montre la jauge « Énergie » et les cristaux ramassés.
 - Fin : un grand portail de distorsion (warp) → effet de vitesse → résultats. Vol 1 : après le dernier portail,
   le léviathan (déjà vu au loin, qui se rapproche) avale ce portail. On tire sur 4 plaques du dos puis 3 de la
-  queue (une touche chacune, chrono figé) ; vaincu, il recrache le portail devant la Comète. Le plan du
-  mitrailleur est donné aux résultats, sans objet à ramasser. Boucliers à zéro : « Réessayer le combat ».
+  queue (une touche chacune, chrono figé) ; vaincu, il recrache le portail devant la Comète. Le plan de la
+  pompe est donné aux résultats, sans objet à ramasser. Boucliers à zéro : « Réessayer le combat ».
 - Décor : skybox nébuleuse colorée, champ d'étoiles, planètes, traînées de vitesse, et **une créature
   spatiale géante** qui nage au loin (vol 1 : léviathan de la nébuleuse, qui entre dans le couloir au dernier
   portail ; vol 2 : planète à anneaux et ver cosmique). Un seul de ces tubes est dessiné à la fois.
@@ -257,7 +257,7 @@ une sauvegarde neuve, sinon « Continuer · <étape> ».
 - Résultats : score, étoiles, détails et la réserve de cristaux (« +N cristaux » gagnés, nouveau total). Les
   cristaux sont la monnaie du hangar ; les niveaux 2D et les vols en rapportent (en vol : astéroïdes et
   ennemis abattus). Récompense d'une première réussite, en doré : « Équipière : Tess » (Jungle, niveau 2),
-  « Compétence : double saut » (Jungle, niveau 3), « Plan : mitrailleur » (vol 1) ; prime « Boss vaincu +2 000 »
+  « Compétence : double saut » (Jungle, niveau 3), « Plan : pompe » (vol 1), « Plan : fusil d'assaut » (vol 2) ; prime « Boss vaincu +2 000 »
   (gardien : +5 000) sous le score.
 - **Hangar** (dans la Comète) : réserve en haut, aperçu 2D à gauche (Kaï avec l'arme, la Comète et ses
   modules), onglets **Établi** (armes : équiper, acheter ; 4 améliorations à 3 niveaux par arme : dégâts

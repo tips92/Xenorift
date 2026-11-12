@@ -56,7 +56,7 @@ export const meta = {
 const SPECS = {
   laser: { name: 'Pistolet laser', per: 1, damage: 2, range: 576, speed: 900, jitter: 0, spread: 0, gap: 0, heat: 0.2, cool: 0.45, coolDelay: 260, sfx: 'laser', sfxPer: 1, step: '20.00%', overheat: 5, walker: 1, armored: 2 },
   machinegun: { name: 'Mitrailleur', per: 1, damage: 1, range: 448, speed: 1000, jitter: 0, spread: 3, gap: 0, heat: 0.06, cool: 0.5, coolDelay: 260, sfx: 'machinegun', sfxPer: 1, step: '10.00%', overheat: 17, walker: 2, armored: 4 },
-  shotgun: { name: 'Pompe', per: 5, damage: 1, range: 224, speed: 1100, jitter: 0.08, spread: 14, gap: 0, heat: 0.34, cool: 0.5, coolDelay: 700, sfx: 'shotgun', sfxPer: 1, step: '34.00%', overheat: 3, walker: 1, armored: 1 },
+  shotgun: { name: 'Pompe', per: 5, damage: 1, range: 256, speed: 1100, jitter: 0.08, spread: 14, gap: 0, heat: 0.34, cool: 0.5, coolDelay: 700, sfx: 'shotgun', sfxPer: 1, step: '34.00%', overheat: 3, walker: 1, armored: 1 },
   rifle: { name: "Fusil d'assaut", per: 3, damage: 2, range: 768, speed: 1400, jitter: 0, spread: 0, gap: 70, heat: 0.25, cool: 0.4, coolDelay: 550, sfx: 'rifle', sfxPer: 3, step: '25.00%', overheat: 4, walker: 1, armored: 1 },
 };
 const IDS = Object.keys(SPECS);

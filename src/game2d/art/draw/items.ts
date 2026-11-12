@@ -76,25 +76,25 @@ function drawBulletMachinegun(ctx: Ctx): void {
   ctx.fill();
 }
 
-/** Plomb de pompe (16x16) : boule ambre cerclée de sombre, traînée orange, front en x = 15 (mode normal). */
+/** Plomb de pompe (20x20) : boule ambre cerclée de sombre, traînée orange, front en x = 18 (mode normal). */
 function drawBulletShotgun(ctx: Ctx): void {
-  const cy = 8;
-  ctx.fillStyle = linGrad(ctx, 0, 0, 10, 0, [[0, 'rgba(255,138,31,0)'], [1, 'rgba(255,138,31,0.85)']]);
+  const cy = 10;
+  ctx.fillStyle = linGrad(ctx, 0, 0, 13, 0, [[0, 'rgba(255,138,31,0)'], [1, 'rgba(255,138,31,0.85)']]);
   ctx.beginPath();
   ctx.moveTo(0.5, cy);
-  ctx.lineTo(10, cy - 2.4);
-  ctx.lineTo(10, cy + 2.4);
+  ctx.lineTo(13, cy - 3);
+  ctx.lineTo(13, cy + 3);
   ctx.closePath();
   ctx.fill();
-  softDot(ctx, 11.4, cy, 4.6, '#ff8a1f', 0.55);
-  fillOutlined(ctx, circle(11.6, cy, 2.9), '#ffb347', OUT, 1.4);
+  softDot(ctx, 14.4, cy, 5.6, '#ff8a1f', 0.6);
+  fillOutlined(ctx, circle(14.6, cy, 3.6), '#ffb347', OUT, 1.5);
   ctx.fillStyle = '#ffe2b0';
   ctx.beginPath();
-  ctx.arc(12.4, cy - 0.9, 1.1, 0, Math.PI * 2);
+  ctx.arc(15.5, cy - 1.1, 1.4, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.arc(12.6, cy - 1, 0.8, 0, Math.PI * 2);
+  ctx.arc(15.7, cy - 1.2, 0.9, 0, Math.PI * 2);
   ctx.fill();
 }
 

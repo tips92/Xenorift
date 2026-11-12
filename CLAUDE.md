@@ -104,7 +104,7 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   ▶, glissement au doigt ou à la souris, ← → ; ouverte sur le monde de l'étape à jouer ; cartes `data-stage` ;
   bouton « Hangar » avec la réserve), `options` (rubriques Général et Commandes
   avec aperçu des commandes ; panneau repris par `pause`), `intro`, `results` (réserve : « +N cristaux » et
-  total, gain seulement s'il y en a ; récompenses nouvelles « Plan : mitrailleur », « Compétence : double saut »,
+  total, gain seulement s'il y en a ; récompenses nouvelles « Plan : pompe », « Compétence : double saut »,
   « Équipière : Tess » ; prime « Boss vaincu +2 000 » (gardien +5 000) sous le score ; 5 lignes et plus :
   `.results-details.is-dense`, resserrée sous 360 px de haut), `hangar` (onglets Établi / Comète / Kaï,
   achat avec confirmation intégrée, équipement de l'arme ; refus et équipement pour la session annoncés par son propre message `.hg-msg`, pas
@@ -346,7 +346,7 @@ boost }, extraHearts, crew, blueprints, story: { seen } }`). Les joueurs doivent
 version 2 au prochain enregistrement ; version 2 → `readV2` (chaque champ relu : niveaux bornés par
 `clampLevel`, identifiants inconnus filtrés, nombres abîmés → défaut) ; autre version ou JSON illisible →
 `defaults()`. Après lecture, les récompenses de chaque étape réussie sont réappliquées (ensembles : qui avait
-fini f1 reçoit le plan du mitrailleur), enregistrées au changement suivant. `story.seen` (`readStory` : chaînes
+fini f1 reçoit le plan de la pompe), enregistrées au changement suivant. `story.seen` (`readStory` : chaînes
 non vides, sans doublon) : marques des cinématiques vues et des tutoriels finis (`tutorial-j1`) ; absent des
 anciennes sauvegardes, sans changer de version.
 **Nouveau champ** : type dans `SaveData`, valeur dans `defaults()`, lecture validée dans

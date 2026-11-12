@@ -130,7 +130,7 @@ export class ShotPool {
     const scene = this.scene;
     const fx = scene.fx;
     if (scene.grid.solidAtPx(tx, ty)) {
-      fx.spark(tx - b.ux * 4, ty - b.uy * 4, b.color, 7);
+      fx.spark(tx - b.ux * 4, ty - b.uy * 4, b.color, b.weapon === 'shotgun' ? 10 : 7);
       this.impactSfx();
       this.kill(b);
       return true;
@@ -148,7 +148,10 @@ export class ShotPool {
     }
     const e = scene.enemies.hitTestPoint(tx, ty, 6);
     if (e) {
-      fx.spark(tx, ty, b.color, 8);
+      // Plombs de la pompe : impact plus fourni, avec un éclat blanc.
+      const heavy = b.weapon === 'shotgun';
+      fx.spark(tx, ty, b.color, heavy ? 12 : 8);
+      if (heavy) fx.spark(tx, ty, 0xffffff, 4);
       scene.enemies.hit(e, b.damage);
       this.kill(b);
       return true;

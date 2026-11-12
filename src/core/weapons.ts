@@ -5,8 +5,9 @@ import type { SfxId, WeaponId } from './types';
 // rien du navigateur, de Vite ni de Phaser, TypeScript effaçable, imports de valeurs avec l'extension .ts.
 // Valeurs de départ, à régler après essai sur téléphone.
 
-/** Toutes les armes, dans l'ordre d'affichage (choix de l'arme, hangar). */
-export const WEAPON_IDS = ['laser', 'machinegun', 'shotgun', 'rifle'] as const satisfies readonly WeaponId[];
+/** Toutes les armes, dans l'ordre d'affichage (choix de l'arme, hangar) = ordre d'obtention : le mitrailleur, la
+ * meilleure, vient en dernier. */
+export const WEAPON_IDS = ['laser', 'shotgun', 'rifle', 'machinegun'] as const satisfies readonly WeaponId[];
 
 /** Fiche d'une arme. Points de vie des ennemis : 2 (normaux), 4 (blindé). */
 export interface WeaponDef {
@@ -85,7 +86,7 @@ export const WEAPONS: Readonly<Record<WeaponId, WeaponDef>> = {
   shotgun: {
     id: 'shotgun',
     name: 'Pompe',
-    rangeTiles: 3.5,
+    rangeTiles: 4,
     pellets: 5,
     spreadDeg: 14,
     burst: 1,
