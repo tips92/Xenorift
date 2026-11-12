@@ -782,3 +782,8 @@ géante au loin, 4 ennemis par monde).
 - Français partout ; paysage uniquement ; graphismes et sons procéduraux (aucun fichier image ou son sauf
   les PNG de Kaï, `art/sprites/kai/`, et un fichier fourni explicitement).
 - Tenir à jour `docs/SOUHAITS.md` (cases cochées) et ce fichier quand une règle ou l'architecture change.
+- **Cursor** travaille aussi sur ce dépôt : il lit ce fichier et les skills de `.claude/skills/` ; ce qui lui est
+  propre (où il écrit, signature) est dans `.cursor/rules/claude-code.mdc`. Règle commune → ici, jamais en double.
+  Une commande à partager se fait en skill, `.claude/skills/<nom>/SKILL.md`, dossier que Cursor charge aussi.
+- Discussions entre IA : `docs/discussions-ia/` (convention : son `README.md`), `/discussion` pour ouvrir un fil,
+  y répondre, transcrire une réponse venue d'ailleurs, clore. Rien n'y est décidé ; ne lire un fil que sur demande.

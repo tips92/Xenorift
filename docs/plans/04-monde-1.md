@@ -46,7 +46,7 @@
 > - Détail et mesures : journal de la séance (hors dépôt) ; résumé dans CLAUDE.md, recettes « Niveau 2D »,
 >   « Boss 2D » et « Message de LUMA ».
 
-Quatrième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). En cours de réalisation (branche `claude/world-1-completion-866505`, partie de `plans-etapes-1-3` après 3a). Elle s'appuie sur les
+Quatrième étape de l'[ordre de travail](../SOUHAITS.md#ordre-de-travail). Codée sur `main` (4a, 4b et 4c). Elle s'appuie sur les
 étapes [1](01-controles.md) (visée, accroupi, portes), [2](02-armes.md) (arme générique, `loadout`, compétence
 `doubleJump`) et [3](03-hangar.md) (sauvegarde v2, hangar, balise, combat en vol) : 4a et 4b demandent 3a, 4c
 demande 3b. Le monde 1 sert de **modèle** : table des mondes, boss, radio et cinématiques resserviront tels quels.

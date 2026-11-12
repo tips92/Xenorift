@@ -26,8 +26,8 @@ nouvelle arme, boss ou décor demande son dessin et ses sons ; viser 60 i/s sur 
   au-dessus, une seule jauge d'énergie pour le tir et le turbo (branche `claude/vol-tir-bouton`, fusionnée dans
   celle de l'étape 4). Reste l'essai sur téléphone des étapes 1 à 3. La balise de LUMA (fin de l'étape 3) est
   faite avec l'étape 4 (4a).
-- **Étape 4 (monde 1 complet) en cours** sur la branche `claude/world-1-completion-866505` (3b et le tir au
-  bouton y sont fusionnés) :
+- **Étape 4 (monde 1 complet) codée, sur `main`** (`78c11e3` ; les branches des étapes 1 à 4 y sont
+  fusionnées) :
   choix du plan 4 validés le 28/10 tels quels, plus les boss en touches et le tir au bouton en vol le 29/10.
   **Partie 4a faite et vérifiée** (nouveaux scénarios `progress-ids`, `luma-radio`, `boss-mini`), essayée sur
   téléphone le 29/10 : table des mondes et progression par identifiants, écran Niveaux en pages par monde,
@@ -309,8 +309,8 @@ le jeu en 4c.
    **3a et 3b codées et vérifiées** (suite e2e) ; essai sur téléphone à faire ; balise faite avec l'étape 4 (4a).
 4. **Monde 1 complet au nouveau format** : 3 niveaux, mini-boss, méduse-baleine, double saut, vol avec le
    léviathan, LUMA, prologue et cinématique de libération. Il sert de modèle : on valide tout sur un seul
-   monde avant de multiplier les niveaux. **Codé** (plan validé, branche `claude/world-1-completion-866505`) :
-   4a, 4b et 4c en place ; essai sur téléphone de 4b et de 4c à faire.
+   monde avant de multiplier les niveaux. **Codé sur `main`** : 4a, 4b et 4c en place ; essai sur téléphone
+   de 4b et de 4c à faire ; la suite e2e complète n'a pas été rejouée après le léviathan.
 5. **Monde 2** au même format. Plan écrit, à valider : [plans/05-monde-2.md](plans/05-monde-2.md).
 6. **Carte galactique**, puis Boréa, Vulkar et le Cœur de la Faille, avec les cinématiques de fin. Plan écrit,
    à valider : [plans/06-carte-et-mondes.md](plans/06-carte-et-mondes.md).

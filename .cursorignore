@@ -1,0 +1,4 @@
+# Copies du dépôt des sessions Claude Code (une branche chacune) et leurs journaux : Cursor ne les indexe ni ne
+# les modifie.
+.claude/worktrees/
+.claude/historique-sessions/

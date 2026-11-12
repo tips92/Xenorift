@@ -95,7 +95,7 @@ src/
   game3d/          mode vol : flight.ts (partie), parcours et vagues, portails, astéroïdes, tir (shots.ts),
                    ennemis (enemies.ts), cristaux (pickups.ts), créatures, ciel
 preview/           pages d'outil du serveur de dev : graphismes 2D (art), vol simulé (flight), sons du monde 1
-                   (audio), cinématiques (story), boss (bosses), dessins du monde 1 (props)
+                   (audio), cinématiques (story), boss (bosses), dessins du monde 1 (props), modèle de Kaï (kai)
 scripts/           check-levels.ts (validation des niveaux 2D), lib/reach.ts (graphe d'accessibilité)
 tests/e2e/         tests navigateur (lanceur run.mjs, lib/, scenarios/)
 tools/             scripts Windows : environnement, SDK Android, APK
@@ -168,6 +168,8 @@ Le détail fichier par fichier est dans la section « Architecture » de [CLAUDE
 | [SOUHAITS.md](SOUHAITS.md) | **liste des tâches** (cases à cocher), idées, ordre de travail | à chaque décision et à chaque tâche finie |
 | [HISTOIRE.md](HISTOIRE.md) | trame en 5 mondes, personnages, cinématiques | si l'histoire change |
 | [plans/](plans/README.md) | un plan technique par étape, et leur état | avant de coder une étape, puis à sa fin |
+| [discussions-ia/](discussions-ia/README.md) | débats entre IA et l'utilisateur, un fil par sujet (`/discussion`) ; rien n'y est décidé | à chaque prise de parole ; ce qui est retenu passe dans `SOUHAITS.md` puis le plan |
+| `.cursor/rules/claude-code.mdc` | ce qui ne vaut que pour Cursor (le reste : CLAUDE.md, qu'il lit aussi) | quand la façon de travailler de Cursor change |
 | ARCHITECTURE.md | ce fichier | quand un module ou une couche apparaît |
 | `REPRISE.md` (au besoin) | notes de reprise ponctuelles (après un arrêt) | en fin de séance si du travail reste en cours ; supprimé une fois la reprise faite |
 | [tests/e2e/README.md](../tests/e2e/README.md) | écrire et lancer les tests navigateur | quand le banc de test change |

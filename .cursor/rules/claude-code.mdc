@@ -1,0 +1,23 @@
+---
+description: XenoRift partagé avec Claude Code — source des consignes, où écrire, signature
+alwaysApply: true
+---
+
+# Cursor et Claude Code sur XenoRift
+
+Les deux outils travaillent sur ce dépôt. **Source unique des consignes : `CLAUDE.md`**, que Cursor charge comme un
+AGENTS.md ; s'il n'est pas dans ton contexte, le lire d'abord. Ce fichier ne dit que ce qui diffère pour Cursor :
+une règle commune aux deux va dans `CLAUDE.md` (ou `docs/`), jamais en double ici.
+
+- État et prochaine action : `docs/plans/README.md` ; liste des tâches : `docs/SOUHAITS.md`.
+- Skills communs dans `.claude/skills/`, chargés aussi par Cursor : `/discussion` (fils de `docs/discussions-ia/`).
+- Où écrire : Cursor travaille dans `D:\Jeux\XenoRift`, sur `main`. Les sessions Claude ont souvent leur copie
+  dans `.claude/worktrees/`, une branche chacune (`git worktree list`) : ne jamais y écrire ni toucher à leurs
+  branches. `.cursorignore` cache ces copies et `.claude/historique-sessions/` aux outils de Cursor, pas au
+  terminal.
+- Une session Claude peut aussi travailler dans `D:\Jeux\XenoRift`, et `git status` ne dit pas qui a modifié quoi :
+  avant de modifier un fichier déjà modifié et non commité que tu n'as pas touché dans cette conversation,
+  demander. Créer un fichier neuf ne demande rien.
+- Git : comme `CLAUDE.md`, commit seulement sur demande de l'utilisateur, `npm run build` doit passer avant.
+- Signature d'une prise de parole dans `docs/discussions-ia/` : la règle du skill discussion (§3).
+- Shell : PowerShell par défaut ; `. .\tools\env.ps1` avant npm/node (C: est plein).
