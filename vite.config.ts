@@ -43,6 +43,7 @@ export default defineConfig({
         tests: path.resolve('preview/tests.html'),
         arena: path.resolve('preview/arena.html'),
         ship: path.resolve('preview/ship.html'),
+        dock: path.resolve('preview/dock.html'),
       },
       output: {
         manualChunks: { phaser: ['phaser'], three: ['three'] },

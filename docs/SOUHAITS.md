@@ -302,6 +302,10 @@ le jeu en 4c.
       « Échec de l'arrimage. Nouvelle tentative. »
       Autre usage (12/11) : jouer l'arrimage aussi à l'**arrivée sur la planète d'un nouveau monde**, après le
       voyage dans l'espace (la Comète se pose sur une plateforme d'atterrissage ou s'arrime à une station en orbite).
+      Essai fait le 12/11 : `preview/dock.html` (bouton « Tests » de l'accueil) : 4 approches (dérive, vent solaire,
+      axe vertical, tempête), carburant, cadran « arrivée prévue », écart admis 1,5 m et dérive 0,8 m/s au contact ;
+      les 19 alertes s'affichent (texte + bips, voix de synthèse du téléphone si possible). Les enregistrements de
+      Romain remplaceront la synthèse (identifiants de `VOICE` dans `preview/dock.ts`).
 - [ ] **Exploration de vaisseau en vue à la première personne** (dans l'esprit des vieux jeux de tir en
       couloirs) : Kaï fouille l'intérieur d'un vaisseau ou d'une épave pour trouver des trésors (cristaux, plans,
       pièces rares), avec des monstres qui peuvent surgir. Pistes : couloirs et salles dessinés par code (three),

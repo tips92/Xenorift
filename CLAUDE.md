@@ -239,6 +239,9 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   diag `arena-preview`, aussi en `--prod`),
   `/preview/ship.html?stats=0` (essai : épave à la première personne, carte ASCII `MAP` en tête du fichier, monstres en
   images dessinées face à la caméra, carte d'accès et sas ; `__xrShip` ; scénario diag `ship-preview`),
+  `/preview/dock.html?level=1..4` (essai : arrimage sur écran de visée, poussées sur les bords, 4 approches, axe
+  vertical en 3 et 4 ; alertes de LUMA `VOICE` en texte, bips et voix de synthèse si le téléphone en a, en attendant
+  les enregistrements ; `__xrDock` ; scénario diag `dock-preview`),
   `/preview/tests.html` (page des essais, ouverte par le bouton « Tests » de l'accueil ; les pages d'essai y reviennent).
   Ailleurs : `scripts/check-levels.ts` (validateur) et `scripts/lib/reach.ts` (grille `LevelGrid` et graphe
   d'accessibilité `ReachGraph` : sauts selon `DESIGN_RULES`, portes, faisceau de balise infranchissable `inBeam` /
@@ -651,7 +654,7 @@ géante au loin, 4 ennemis par monde).
   part du point de contrôle d'avant son arène, sans arrivée ; ignoré sans arène). `?kai=glb` : le corps de Kaï
   est le rendu de profil de `art/kai.glb` (export de `art/kai.blend`, `art/outils/export-kai.py`) à la place du
   PNG ; une seule pose tant que le fichier n'a pas de squelette, le bras armé reste le sprite du jeu. Le
-  `.glb` n'entre dans le build (et l'APK) que par l'arène d'essai (`preview/arena.html`). Les pages d'essai `tests`, `arena` et `ship` sont des entrées
+  `.glb` n'entre dans le build (et l'APK) que par l'arène d'essai (`preview/arena.html`). Les pages d'essai `tests`, `arena`, `ship` et `dock` sont des entrées
   de `vite.config.ts`, donc dans l'APK : bouton « Tests » de l'accueil → `preview/tests.html`.
 - Clavier : flèches / WASD (ZQSD en AZERTY) ; Espace = saut en 2D et turbo en vol ; K = saut ; Haut/W = haut
   (visée, portes, monter en vol), ne fait PAS sauter ; Bas/S = accroupi (puis ← → : reptation ; + saut :

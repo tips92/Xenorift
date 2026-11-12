@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Xeno Rift — arrimage (essai)</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        color: #e8f6ff;
+        font-family: 'Exo 2', sans-serif;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      canvas {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      button {
+        font-family: inherit;
+      }
+      #back {
+        position: fixed;
+        top: 10px;
+        left: 12px;
+        font-size: 18px;
+        color: #c8fdff;
+        background: rgba(20, 10, 40, 0.6);
+        border: 1px solid rgba(200, 253, 255, 0.45);
+        border-radius: 8px;
+        width: 40px;
+        height: 36px;
+        z-index: 3;
+      }
+      #voice {
+        position: fixed;
+        top: 10px;
+        right: 12px;
+        font-size: 13px;
+        color: #c8fdff;
+        background: rgba(20, 10, 40, 0.6);
+        border: 1px solid rgba(200, 253, 255, 0.45);
+        border-radius: 8px;
+        height: 36px;
+        padding: 0 10px;
+        z-index: 3;
+      }
+      .thr {
+        position: fixed;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #c8fdff;
+        font-size: 34px;
+        background: rgba(30, 60, 90, 0.28);
+        border: 2px solid rgba(63, 240, 255, 0.55);
+        border-radius: 16px;
+        touch-action: none;
+        z-index: 2;
+      }
+      .thr.on {
+        background: rgba(63, 240, 255, 0.4);
+        color: #fff;
+      }
+      .thr[hidden] {
+        display: none;
+      }
+      #thr-left {
+        left: 10px;
+        top: 50%;
+        width: 84px;
+        height: 150px;
+        margin-top: -75px;
+      }
+      #thr-right {
+        right: 10px;
+        top: 50%;
+        width: 84px;
+        height: 150px;
+        margin-top: -75px;
+      }
+      /* Avec l'axe vertical : ◀ ▶ sous le pouce gauche, ▲ ▼ sous le pouce droit. */
+      body.vert #thr-left,
+      body.vert #thr-right,
+      body.vert #thr-up,
+      body.vert #thr-down {
+        top: auto;
+        margin-top: 0;
+        width: 78px;
+        height: 78px;
+      }
+      body.vert #thr-left {
+        left: 10px;
+        bottom: 20px;
+      }
+      body.vert #thr-right {
+        left: 98px;
+        right: auto;
+        bottom: 20px;
+      }
+      body.vert #thr-up {
+        right: 10px;
+        bottom: 106px;
+      }
+      body.vert #thr-down {
+        right: 10px;
+        bottom: 20px;
+      }
+      #menu {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        background: rgba(3, 2, 12, 0.72);
+        text-align: center;
+        z-index: 4;
+      }
+      #menu[hidden] {
+        display: none;
+      }
+      #menu h2 {
+        margin: 0;
+        font-size: 30px;
+        color: #c8fdff;
+        text-shadow: 0 0 12px #3ff0ff;
+      }
+      #menu p {
+        margin: 0 24px;
+        max-width: 34em;
+        font-size: 15px;
+        line-height: 1.4;
+        color: #d6e4ff;
+      }
+      #levels {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      #levels button {
+        color: #e8f6ff;
+        background: rgba(20, 10, 46, 0.85);
+        border: 1px solid rgba(63, 240, 255, 0.55);
+        border-radius: 10px;
+        padding: 10px 14px;
+        font-size: 15px;
+        min-width: 120px;
+      }
+      #levels button small {
+        display: block;
+        font-size: 12px;
+        color: #9fb4d8;
+      }
+      #levels button.best {
+        border-color: #ffd36b;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="screen"></canvas>
+    <button id="back" type="button" aria-label="Retour">◀</button>
+    <button id="voice" type="button">Voix : —</button>
+    <div class="thr" id="thr-left">◀</div>
+    <div class="thr" id="thr-right">▶</div>
+    <div class="thr" id="thr-up" hidden>▲</div>
+    <div class="thr" id="thr-down" hidden>▼</div>
+    <div id="menu">
+      <h2 id="menu-title">Arrimage</h2>
+      <p id="menu-text">
+        Garde le sas de la station au centre du viseur. Les poussées gauche / droite corrigent la dérive ; la Comète
+        avance toute seule. Choisis une approche :
+      </p>
+      <div id="levels"></div>
+    </div>
+    <script type="module" src="./dock.ts"></script>
+  </body>
+</html>
