@@ -9,7 +9,7 @@
 // Échap ; marque « liberation-1 ») : « Compétence : double saut », « Boss vaincu +5 000 ») → SUIVANT → hangar
 // (DÉCOLLER vers le Vol 1) → Vol 1
 // gagné
-// aussitôt (réserve + cristaux ramassés avant la victoire, 0 en général ; récompense « Plan : mitrailleur ») →
+// aussitôt (réserve + cristaux ramassés avant la victoire, 0 en général ; récompense « Plan : pompe ») →
 // SUIVANT → hangar
 // (ATTERRIR vers la Lune) → Lune : 5 cristaux ramassés, 3 vies perdues → « MISSION ÉCHOUÉE » (Plus de vies ! ;
 // réserve inchangée, les cristaux de la tentative sont perdus) → RÉESSAYER (3 vies, 2 cristaux) → victoire par la
@@ -308,7 +308,7 @@ export default async function (t) {
   t.log(`f1 : ${f1Got} cristal(aux) ramassé(s) avant la victoire`);
   assertEq(await resultsBank(t), { gain: gainText(f1Got), bank: 3 + f1Got }, 'f1 : réserve = 3 + cristaux du vol');
   assertEq(await bankNow(t), 3 + f1Got, 'f1 : réserve enregistrée');
-  assertEq((await resultDetails(t)).Plan, 'mitrailleur', 'f1 réussi la première fois : « Plan : mitrailleur »');
+  assertEq((await resultDetails(t)).Plan, 'pompe', 'f1 réussi la première fois : « Plan : pompe »');
   played.push('f1');
   await assertProgress(t, played, 'après f1');
   await t.shot('f1-results');
@@ -364,7 +364,7 @@ export default async function (t) {
   assertEq(ids, played, 'étapes de la campagne : toutes jouées par le parcours, dans l’ordre');
   for (const id of ids) assert(save.best[id] && save.best[id].score > 0, `record de ${id} sauvegardé (${JSON.stringify(save.best)})`);
   assert(stages.every((s) => s.cleared && s.unlocked), `toutes les étapes réussies et ouvertes (${JSON.stringify(stages)})`);
-  assertEq(save.blueprints, ['machinegun'], 'plan du mitrailleur enregistré');
+  assertEq(save.blueprints, ['shotgun', 'rifle'], 'plans de la pompe (f1) et du fusil (f2) enregistrés');
   assertEq(save.crew, ['tess'], 'Tess dans l’équipage');
   assertEq(save.loadout.skills.doubleJump, true, 'double saut appris');
   assertEq([...save.story.seen].sort(), ['liberation-1', 'prologue', 'tutorial-j1'], 'histoire : prologue, libération et tutoriel vus');

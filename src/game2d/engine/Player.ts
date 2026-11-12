@@ -2,7 +2,7 @@ import type * as Phaser from 'phaser';
 import type { InputApi, WeaponId } from '../../core/types';
 import { PLAYER_SHOULDER } from '../art';
 import { frameShoulderX, frameShoulderY } from '../art/draw/player';
-import { kaiPngActive } from '../art/kaiPng';
+import { kaiPngActive, pngMuzzle } from '../art/kaiPng';
 import { kaiModelActive } from '../art/kaiSheet';
 import { ANIM, ARM_MUZZLE, ARM_RIG, ARM_TEX, FRAMES, FRAME_SIZE, TEX } from '../art/keys';
 import {
@@ -192,16 +192,21 @@ export class Player {
    * Bouche du canon (voir ARM_RIG / ARM_MUZZLE) : épaule de la frame (décalée selon la visée), puis le
    * canon tourné selon la visée.
    */
+  /** Bouche du canon dans la frame du bras : celle du PNG rendu (arme modélisée), sinon celle du dessin. */
+  private get muzzle(): { readonly x: number; readonly y: number } {
+    return (kaiPngActive() && pngMuzzle(this.weaponId, FRAMES.arm.rest)) || ARM_MUZZLE[this.weaponId];
+  }
+
   get gunX(): number {
     const a = AIM_ANGLE[this.aim];
-    const m = ARM_MUZZLE[this.weaponId];
+    const m = this.muzzle;
     const sx = this.shotShoulderX();
     return this.x + this.facing * (sx + (m.x - ARM_RIG.pivotX) * Math.cos(a) + (m.y - ARM_RIG.pivotY) * Math.sin(a));
   }
 
   get gunY(): number {
     const a = AIM_ANGLE[this.aim];
-    const m = ARM_MUZZLE[this.weaponId];
+    const m = this.muzzle;
     const sy = this.shotShoulderY();
     return this.feetY + sy - (m.x - ARM_RIG.pivotX) * Math.sin(a) + (m.y - ARM_RIG.pivotY) * Math.cos(a);
   }

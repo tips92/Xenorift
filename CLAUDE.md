@@ -17,7 +17,8 @@ léviathan du vol 1 : 4 plaques dorsales puis 3 sur la queue ; essai sur télép
 La Lune reste à l'ancien format (étape 5).
 Paysage uniquement, tout se joue au tactile (le clavier sert aux tests sur PC). Aucun fichier son :
 graphismes dessinés par code (Canvas 2D, géométries et shaders three), sauf les poses de Kaï (PNG
-`art/sprites/kai/`, dans l'APK) ; sons et musiques synthétisés (Web Audio).
+`art/sprites/kai/`, dans l'APK) ; sons et musiques synthétisés (Web Audio), sauf les voix d'EVA de l'essai
+d'arrimage (mp3 fournis, `art/voix/arrimage/`, liste dans son README).
 Docs : `docs/GDD.md` (conception et contraintes techniques), `docs/SOUHAITS.md` (liste vivante + ordre de
 travail), `docs/HISTOIRE.md` (trame en 5 mondes), `docs/plans/` (plans techniques des prochaines étapes ;
 **`docs/plans/README.md` donne l'état de chaque étape et la prochaine action**), `docs/ARCHITECTURE.md`
@@ -104,7 +105,7 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   ▶, glissement au doigt ou à la souris, ← → ; ouverte sur le monde de l'étape à jouer ; cartes `data-stage` ;
   bouton « Hangar » avec la réserve), `options` (rubriques Général et Commandes
   avec aperçu des commandes ; panneau repris par `pause`), `intro`, `results` (réserve : « +N cristaux » et
-  total, gain seulement s'il y en a ; récompenses nouvelles « Plan : mitrailleur », « Compétence : double saut »,
+  total, gain seulement s'il y en a ; récompenses nouvelles « Plan : pompe », « Compétence : double saut »,
   « Équipière : Tess » ; prime « Boss vaincu +2 000 » (gardien +5 000) sous le score ; 5 lignes et plus :
   `.results-details.is-dense`, resserrée sous 360 px de haut), `hangar` (onglets Établi / Comète / Kaï,
   achat avec confirmation intégrée, équipement de l'arme ; refus et équipement pour la session annoncés par son propre message `.hg-msg`, pas
@@ -192,10 +193,12 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   (champignon, barrière d'arène, tronc, Tess et sa capsule, glyphes, branches / lianes / passerelles des `=` ;
   `WORLD1_SHEETS` ; dessins de la Jungle),
   `player.ts` : corps 64x80 sans arme (PNG `art/sprites/kai/planche.png`, repli dessiné), poses accroupie et
-  de reptation, bras armé 64x32 (`planche-bras.png` ; canon dessiné par arme, `GUNS`,
-  éclair de recul `FLASH`) ; `items.ts` : `drawBullet` (projectile par arme), icônes de bonus ; `doors.ts` :
+  de reptation, bras armé 64x32 (`planche-bras.png` : une rangée par arme dans l'ordre de `WEAPON_IDS`, repos et
+  recul, armes modélisées dans `art/weapons.blend` d'après `art/ref/Arme Artwork.jpg`, chaîne dans
+  `art/outils/armes/` hors git ; bouches `canons.txt` = `PNG_MUZZLE` de `kaiPng.ts`, lues par `Player.gunX/Y` ;
+  repli dessiné sans les PNG : `GUNS` et `ARM_MUZZLE`), éclair de recul `FLASH` dessiné à la bouche) ; `items.ts` : `drawBullet` (projectile par arme), icônes de bonus ; `doors.ts` :
   portes, flèche ▲, mur de salle ; `keys.ts` : `ARM_TEX`, `ARM_RIG` (épaule décalée en visée haute et
-  diagonale : la visière reste visible), `ARM_MUZZLE` pour le bras armé, `BULLET_TEX` / `BULLET_SIZE` (`tip` =
+  diagonale : la visière reste visible), `ARM_MUZZLE` pour le bras armé dessiné (repli), `BULLET_TEX` / `BULLET_SIZE` (`tip` =
   point testé contre décor et ennemis) / `BULLET_ADDITIVE` (mode de rendu ; plombs de pompe à contour, en mode
   normal) pour les projectiles ; tileset 8x4 : `TILE_FRAME.WALKWAY` (familles x variantes de `=`) ; `TEX.mushroom`,
   `trunk`, `sporeSpot`, `tess`, `capsule` et leurs `FRAMES`).
@@ -231,7 +234,18 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   `/preview/story.html?cut=prologue|liberation&t=<s>&hold=1&ui=0&sound=1` (cinématiques, curseur, Passer),
   `/preview/bosses.html?view=blob|beetle|whale|whale-sheet&grey=0..1&boxes=1` (boss à l'échelle du jeu, boîtes),
   `/preview/props.html?view=objects|trunk|walkways|scene` (dessins de `world1.ts`),
-  `/preview/kai.html` (modèle `art/kai.glb` dans le cadre 64×80 du sprite, à côté du Kaï PNG du jeu).
+  `/preview/kai.html` (modèle `art/kai.glb` dans le cadre 64×80 du sprite, à côté du Kaï PNG du jeu),
+  `/preview/arena.html?auto=1&stats=0` (essai : arène 3D vue du dessus, Kaï du `.glb` animé et bras tendu vers la
+  visée, vagues d'ennemis ; sticks tactiles à gauche et à droite, ZQSD + flèches, souris ; `__xrArena` ; scénario
+  diag `arena-preview`, aussi en `--prod`),
+  `/preview/ship.html?stats=0` (essai : épave à la première personne, carte ASCII `MAP` en tête du fichier, monstres en
+  images dessinées face à la caméra, carte d'accès et sas ; `__xrShip` ; scénario diag `ship-preview`),
+  `/preview/dock.html?level=1..4` (essai : arrimage ; la station se place selon le point d'arrivée prévu, à l'échelle
+  du viseur holographique central où il faut amener la cible du sas ; 3 boutons de poussée par bord (▲ ◀/▶ ▼), axe
+  vertical en 3 et 4 ; compte à rebours des 4 dernières secondes ; alertes `VOICE` en texte, bips et voix d'EVA
+  (`CLIP_OF` → `art/voix/arrimage/*.mp3`, un fichier absent reste texte et bip) ou synthèse ; `__xrDock` ; scénario
+  diag `dock-preview`),
+  `/preview/tests.html` (page des essais, ouverte par le bouton « Tests » de l'accueil ; les pages d'essai y reviennent).
   Ailleurs : `scripts/check-levels.ts` (validateur) et `scripts/lib/reach.ts` (grille `LevelGrid` et graphe
   d'accessibilité `ReachGraph` : sauts selon `DESIGN_RULES`, portes, faisceau de balise infranchissable `inBeam` /
   `crossesBeam`, bornes d'arène vides, rebonds de champignon (`LevelGrid.bounce`, `MUSHROOM_RULES` écourtées sous
@@ -344,7 +358,7 @@ boost }, extraHearts, crew, blueprints, story: { seen } }`). Les joueurs doivent
 version 2 au prochain enregistrement ; version 2 → `readV2` (chaque champ relu : niveaux bornés par
 `clampLevel`, identifiants inconnus filtrés, nombres abîmés → défaut) ; autre version ou JSON illisible →
 `defaults()`. Après lecture, les récompenses de chaque étape réussie sont réappliquées (ensembles : qui avait
-fini f1 reçoit le plan du mitrailleur), enregistrées au changement suivant. `story.seen` (`readStory` : chaînes
+fini f1 reçoit le plan de la pompe), enregistrées au changement suivant. `story.seen` (`readStory` : chaînes
 non vides, sans doublon) : marques des cinématiques vues et des tutoriels finis (`tutorial-j1`) ; absent des
 anciennes sauvegardes, sans changer de version.
 **Nouveau champ** : type dans `SaveData`, valeur dans `defaults()`, lecture validée dans
@@ -643,7 +657,8 @@ géante au loin, 4 ennemis par monde).
   part du point de contrôle d'avant son arène, sans arrivée ; ignoré sans arène). `?kai=glb` : le corps de Kaï
   est le rendu de profil de `art/kai.glb` (export de `art/kai.blend`, `art/outils/export-kai.py`) à la place du
   PNG ; une seule pose tant que le fichier n'a pas de squelette, le bras armé reste le sprite du jeu. Le
-  `.glb` n'est pas dans l'APK (les PNG de Kaï, eux, y sont).
+  `.glb` n'entre dans le build (et l'APK) que par l'arène d'essai (`preview/arena.html`). Les pages d'essai `tests`, `arena`, `ship` et `dock` sont des entrées
+  de `vite.config.ts`, donc dans l'APK : bouton « Tests » de l'accueil → `preview/tests.html`.
 - Clavier : flèches / WASD (ZQSD en AZERTY) ; Espace = saut en 2D et turbo en vol ; K = saut ; Haut/W = haut
   (visée, portes, monter en vol), ne fait PAS sauter ; Bas/S = accroupi (puis ← → : reptation ; + saut :
   descente d'étage) ; J/X/F = tir (en vol : tant que la touche est tenue) ; Maj = turbo ; Échap/P =

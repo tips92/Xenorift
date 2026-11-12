@@ -1,0 +1,10 @@
+# Bouche du canon du bras armé, frame 64x32 (épaule en 10, 12) : arme, frame (00 repos, 01 recul), x, y
+# Mesurée dans art/weapons.blend (vide Bouche_<arme>, projeté par Caméra_bras, action visée).
+laser       00  40.16  20.08
+laser       01  37.98  18.96
+machinegun  00  54.10  23.64
+machinegun  01  51.92  22.52
+shotgun     00  47.66  19.30
+shotgun     01  45.48  18.19
+rifle       00  48.95  18.03
+rifle       01  46.77  16.92

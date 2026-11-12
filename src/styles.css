@@ -942,6 +942,20 @@ svg {
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--ink-faint);
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.footer-try {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--ink-faint);
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
 }
 
 /* ------------------------------------------------------------------ Choix du niveau */

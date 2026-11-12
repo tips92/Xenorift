@@ -62,8 +62,8 @@ remonter le vieux réseau de portails jusqu'au cœur de la Faille. Il y découvr
 | 4. Vulkar (volcans, forges astréennes) | lave qui monte | Salamandre de magma | Grappin | Abords de la Faille | Sentinelle astréenne |
 | 5. Cœur de la Faille | morceaux des mondes précédents, gravité qui s'inverse | Éon | — | Effondrement | Le Vide (poursuite) |
 
-**Les armes** : les boss des vols 1, 2 et 3 laissent chacun un plan d'arme (mitrailleur, pompe, fusil
-d'assaut). Une fois le plan récupéré, l'arme s'achète et s'améliore à l'établi avec des cristaux.
+**Les armes** : les boss des vols 1, 2 et 3 laissent chacun un plan d'arme (pompe, fusil d'assaut, puis
+mitrailleur, la meilleure). Une fois le plan récupéré, l'arme s'achète et s'améliore à l'établi avec des cristaux.
 
 **Les naufragés** (un par monde, de 1 à 4) agrandissent le hangar :
 
@@ -96,8 +96,8 @@ d'assaut). Une fois le plan récupéré, l'arme s'achète et s'améliore à l'é
 - **Éon** : 3 phases. À chaque phase, un gardien libéré vient aider Kaï (la méduse-baleine le porte, le ver
   creuse un passage, le colosse gèle la lave). La dernière phase demande toutes les compétences.
 - **Boss des vols** : le léviathan de la nébuleuse suit les portails, avale celui de la distorsion, et on libère
-  le portail en tirant sur ses plaques (4 sur le dos, puis 3 sur la queue) ; il le recrache avec le plan du
-  mitrailleur. Le ver cosmique
+  le portail en tirant sur ses plaques (4 sur le dos, puis 3 sur la queue) ; il le recrache avec le plan de la
+  pompe. Le ver cosmique
   s'enroule autour des astéroïdes, la raie solaire lance des éruptions, la Sentinelle protège ses anneaux
   par des boucliers. Le dernier vol est une fuite : le Vide engloutit la Faille derrière la Comète.
 
