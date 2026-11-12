@@ -49,6 +49,13 @@ export function createTitleScreen(ctx: UiCtx, a: TitleActions): Screen {
 
   const footer = div('title-footer');
   footer.append(el('span', 'footer-tag', 'Démo v0.1'));
+  // Essai : arène 3D avec le modèle de Kaï (page à part, preview/arena.html, aussi dans l'APK).
+  const tryArena = el('button', 'footer-try', 'Essai 3D') as HTMLButtonElement;
+  tryArena.type = 'button';
+  tryArena.addEventListener('click', () => {
+    location.href = 'preview/arena.html';
+  });
+  footer.append(tryArena);
 
   root.append(main, footer);
 

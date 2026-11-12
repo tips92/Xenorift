@@ -283,6 +283,38 @@ le jeu en 4c.
 
 ---
 
+## Nouveaux gameplays (idées du 12/11/2026, rien de décidé)
+
+- [ ] **Amarrage** : la Comète s'approche d'un autre vaisseau ou d'une station pour s'y arrimer et y entrer.
+      Mini-jeu de poussée en apesanteur : on touche gauche / droite pour donner de petites impulsions et garder la
+      Comète centrée sur la cible du sas, l'inertie la fait dériver. Pistes : vitesse d'approche à tenir,
+      carburant limité, réussite plus ou moins propre (bonus). Ferait le lien entre un vol et l'exploration
+      d'un vaisseau.
+      Précisions de Romain (12/11) : **difficulté croissante**, d'abord gauche / droite seulement, l'axe vertical
+      s'ajoute ensuite. **Vue** : un simple écran de visée (réticule, cible du sas, distance, vitesse) avec les
+      boutons de poussée sur les bords. **Alertes vocales** enregistrées par Romain (fichiers son fournis, donc
+      exception permise à « aucun fichier son ») ; voix de LUMA a priori. Textes à enregistrer :
+      « Séquence d'arrimage engagée. » · « Arrimage dans 500 mètres. » · « Arrimage dans 300 mètres. » ·
+      « Arrimage dans 100 mètres. » · « 50 mètres. » · « 10 mètres. » · « Alignement correct. » ·
+      « Dérive à gauche. » · « Dérive à droite. » · « Dérive vers le haut. » · « Dérive vers le bas. » ·
+      « Vitesse excessive. » · « Réduisez la poussée. » · « Carburant faible. » · « Alerte collision ! » ·
+      « Urgence : calibration avant collision ! » · « Contact. Arrimage réussi. » · « Arrimage parfait. » ·
+      « Échec de l'arrimage. Nouvelle tentative. »
+      Autre usage (12/11) : jouer l'arrimage aussi à l'**arrivée sur la planète d'un nouveau monde**, après le
+      voyage dans l'espace (la Comète se pose sur une plateforme d'atterrissage ou s'arrime à une station en orbite).
+- [ ] **Exploration de vaisseau en vue à la première personne** (dans l'esprit des vieux jeux de tir en
+      couloirs) : Kaï fouille l'intérieur d'un vaisseau ou d'une épave pour trouver des trésors (cristaux, plans,
+      pièces rares), avec des monstres qui peuvent surgir. Pistes : couloirs et salles dessinés par code (three),
+      commandes tactiles du vol réutilisées (joystick + TIR), arrive après un amarrage.
+- [ ] **Survie en vue du dessus en 3D** : Kaï (ou la Comète) au centre, les ennemis arrivent de tous côtés par
+      vagues de plus en plus fortes. Proche de la piste « défense de la Comète » des niveaux bonus (section 6).
+      Pistes : joystick pour bouger, tir automatique ou TIR tenu, bonus entre les vagues.
+      Retenu (12/11) pour essayer le **modèle 3D de Kaï** (`art/kai.glb`, squelette et animations) : arène d'essai
+      `preview/arena.html` (serveur de dev). Mesuré dans Chrome : 57 i/s, mais 195 appels de dessin dont ~180 pour Kaï
+      (74 maillages, 21 k triangles) : à alléger (pièces fusionnées, ~10 k triangles) avant le téléphone.
+
+---
+
 ## Bugs connus (mineurs, relevés par les tests le 27/10/2026)
 
 - [x] **Vol : 3e restauration du contexte WebGL pendant la pause** : l'étape échouait aussitôt derrière le
