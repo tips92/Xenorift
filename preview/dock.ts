@@ -1,9 +1,11 @@
 import '@fontsource/exo-2/600.css';
 
 // Essai : arrimage de la Comète à une station, vu sur l'écran de visée. La Comète avance seule ; les
-// poussées latérales (bords de l'écran) corrigent la dérive pour garder le sas au centre. Difficulté
-// croissante : dérive, vent solaire, puis l'axe vertical. Alertes de LUMA en texte, bips et, si le
-// téléphone sait le faire, voix de synthèse (en attendant les enregistrements de Romain : VOICE).
+// poussées latérales (bords de l'écran) corrigent la dérive. Comme sur le petit cadran « arrivée prévue », la
+// station se place à l'écran selon le point d'arrivée prévu (position + dérive × temps restant), à grande
+// échelle : il faut amener la cible dessinée sur le sas dans le viseur holographique du centre. Difficulté
+// croissante : dérive, vent solaire, puis l'axe vertical. Alertes en texte, bips et voix : enregistrements
+// d'EVA (art/voix/arrimage/, ceux qui manquent restent en texte et bip), ou synthèse du téléphone.
 // http://localhost:5173/preview/dock.html  (?level=1..4 : départ direct)
 // Clavier : ← → (Q D) poussées latérales, ↑ ↓ (Z S) poussées verticales, Entrée : rejouer.
 
@@ -23,30 +25,60 @@ const LEVELS: Level[] = [
   { name: 'Approche 4', desc: 'Tempête', start: 700, drift: 0.65, wind: 0.26, vert: true, fuel: 120 },
 ];
 
-/** Alertes de LUMA : un enregistrement par texte (fichiers à venir, même identifiant). */
+/** Alertes : texte affiché (et dit par la synthèse). */
 const VOICE = {
   engage: "Séquence d'arrimage engagée.",
   d500: 'Arrimage dans 500 mètres.',
   d300: 'Arrimage dans 300 mètres.',
   d100: 'Arrimage dans 100 mètres.',
-  d50: '50 mètres.',
-  d10: '10 mètres.',
+  d50: 'Arrimage dans 50 mètres.',
+  d10: 'Arrimage dans 10 mètres.',
+  c4: 'Quatre.',
+  c3: 'Trois.',
+  c2: 'Deux.',
+  c1: 'Un.',
   aligned: 'Alignement correct.',
-  driftL: 'Dérive à gauche.',
-  driftR: 'Dérive à droite.',
-  driftU: 'Dérive vers le haut.',
-  driftD: 'Dérive vers le bas.',
-  speed: 'Vitesse excessive.',
+  driftL: 'Attention, dérive à gauche.',
+  driftR: 'Attention, dérive à droite.',
+  driftU: 'Attention, dérive vers le haut.',
+  driftD: 'Attention, dérive vers le bas.',
+  speed: 'Vitesse excessive. Ralentissez.',
   reduce: 'Réduisez la poussée.',
   fuel: 'Carburant faible.',
-  collision: 'Alerte collision !',
-  urgent: 'Urgence : calibration avant collision !',
-  success: 'Contact. Arrimage réussi.',
+  collision: 'Collision !',
+  urgent: 'Impact imminent.',
+  contact: 'Contact.',
+  success: 'Arrimage réussi.',
   perfect: 'Arrimage parfait.',
-  fail: "Échec de l'arrimage. Nouvelle tentative.",
+  fail: "Échec de l'arrimage.",
 } as const;
 type VoiceId = keyof typeof VOICE;
 const URGENT: ReadonlySet<VoiceId> = new Set(['collision', 'urgent', 'speed']);
+const COUNT: readonly VoiceId[] = ['c1', 'c2', 'c3', 'c4'];
+const DIST: Partial<Record<VoiceId, number>> = { d500: 500, d300: 300, d100: 100, d50: 50, d10: 10 };
+
+/** Enregistrements d'EVA (art/voix/arrimage/<nom>.mp3, liste dans son README) ; un fichier absent = texte et bip. */
+const CLIP_OF: Partial<Record<VoiceId, string>> = {
+  d100: 'dock_100m',
+  d50: 'dock_50m',
+  d10: 'dock_10m',
+  c4: 'count_4',
+  c3: 'count_3',
+  c2: 'count_2',
+  c1: 'count_1',
+  driftL: 'drift_left',
+  driftR: 'drift_right',
+  driftU: 'drift_up',
+  driftD: 'drift_down',
+  urgent: 'impact_imminent',
+  speed: 'speed_too_high',
+  collision: 'collision',
+  aligned: 'aligned',
+  contact: 'contact',
+  success: 'docking_success',
+  fail: 'docking_failed',
+};
+const CLIP_URLS = import.meta.glob('../art/voix/arrimage/*.mp3', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
 
 const THRUST = 1.4; // m/s²
 const FUEL_RATE = 9; // % par seconde de poussée sur un axe
@@ -55,9 +87,12 @@ const PERFECT = 0.4;
 const MAX_LAT_SPEED = 0.8; // m/s au contact
 const STEP = 1 / 60;
 
-const approach = (d: number): number => 3 + 0.06 * d;
+// Vitesse d'approche automatique : A0 + B × distance (lente au contact, le temps du compte à rebours).
+const A0 = 1.2;
+const B = 0.08;
+const approach = (d: number): number => A0 + B * d;
 /** Temps restant avant le contact, à la vitesse d'approche automatique. */
-const timeLeft = (d: number): number => Math.log(approach(d) / 3) / 0.06;
+const timeLeft = (d: number): number => Math.log(approach(d) / A0) / B;
 
 // ---------- état ----------
 const params = new URLSearchParams(location.search);
@@ -80,17 +115,27 @@ const st = {
   thrusting: false,
 };
 const input = { left: false, right: false, up: false, down: false };
+type Dir = keyof typeof input;
 let autopilot = false;
 let timeScale = 1;
 const said = new Set<VoiceId>();
 const lastSaid = new Map<VoiceId, number>();
+/** Animation de la vue : roulis des poussées, verrouillage du viseur (0 à 1). */
+let bank = 0;
+let lock = 0;
+let aimLocked = false;
 
 // ---------- audio ----------
 let ac: AudioContext | null = null;
 let noise: AudioBuffer | null = null;
 let hiss: GainNode | null = null;
+let voiceBus: GainNode | null = null;
 function audio(): AudioContext | null {
-  if (ac) return ac;
+  if (ac) {
+    // Créé hors geste (?level=) : il attend un toucher pour jouer.
+    if (ac.state === 'suspended') void ac.resume();
+    return ac;
+  }
   const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
   ac = new Ctor();
@@ -108,6 +153,10 @@ function audio(): AudioContext | null {
   hiss.gain.value = 0;
   src.connect(bp).connect(hiss).connect(ac.destination);
   src.start();
+  voiceBus = ac.createGain();
+  voiceBus.gain.value = 1;
+  voiceBus.connect(ac.destination);
+  loadClips(ac);
   return ac;
 }
 function beep(freq: number, dur: number, type: OscillatorType = 'sine', vol = 0.12, at = 0): void {
@@ -141,18 +190,76 @@ function crash(): void {
   s.stop(c.currentTime + 1.3);
 }
 
+// ---------- enregistrements ----------
+interface Clip {
+  buf: AudioBuffer;
+  at: number;
+  dur: number;
+}
+const clips = new Map<VoiceId, Clip>();
+let clipsAsked = false;
+/** Silence de tête et de queue retiré : la durée sert aussi à enchaîner les alertes. */
+function trimmed(buf: AudioBuffer): Clip {
+  const d = buf.getChannelData(0);
+  let a = 0;
+  while (a < d.length && Math.abs(d[a]) < 0.02) a++;
+  let b = d.length - 1;
+  while (b > a && Math.abs(d[b]) < 0.02) b--;
+  const pad = Math.round(0.04 * buf.sampleRate);
+  const s = Math.max(0, a - pad);
+  const e = Math.min(d.length, b + pad);
+  return { buf, at: s / buf.sampleRate, dur: Math.max(0.05, (e - s) / buf.sampleRate) };
+}
+function loadClips(c: AudioContext): void {
+  if (clipsAsked) return;
+  clipsAsked = true;
+  for (const [id, name] of Object.entries(CLIP_OF) as [VoiceId, string][]) {
+    const url = CLIP_URLS[`../art/voix/arrimage/${name}.mp3`];
+    if (!url) continue;
+    fetch(url)
+      .then((r) => r.arrayBuffer())
+      .then((b) => c.decodeAudioData(b))
+      .then((buf) => clips.set(id, trimmed(buf)))
+      .catch(() => undefined);
+  }
+}
+let playing: AudioBufferSourceNode | null = null;
+function stopClip(): void {
+  if (!playing) return;
+  try {
+    playing.stop();
+  } catch {
+    // déjà fini
+  }
+  playing = null;
+}
+/** Joue l'enregistrement s'il est chargé ; renvoie sa durée (0 sinon). */
+function playClip(id: VoiceId, delay: number): number {
+  const c = ac;
+  const clip = clips.get(id);
+  if (!c || !voiceBus || !clip) return 0;
+  stopClip();
+  const s = c.createBufferSource();
+  s.buffer = clip.buf;
+  s.connect(voiceBus);
+  s.start(c.currentTime + delay, clip.at, clip.dur);
+  playing = s;
+  return clip.dur + delay;
+}
+
 // ---------- voix et alertes ----------
 const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
-let voiceOn = !!synth;
+type VoiceMode = 'eva' | 'synth' | 'beep';
+let voiceMode: VoiceMode = 'eva';
 const voiceBtn = document.querySelector('#voice') as HTMLButtonElement;
 function voiceLabel(): void {
-  voiceBtn.textContent = synth ? (voiceOn ? 'Voix : synthèse' : 'Voix : bips') : 'Voix : bips (pas de synthèse)';
+  voiceBtn.textContent = voiceMode === 'eva' ? 'Voix : EVA' : voiceMode === 'synth' ? 'Voix : synthèse' : 'Voix : bips';
 }
 voiceLabel();
 voiceBtn.addEventListener('click', () => {
-  if (!synth) return;
-  voiceOn = !voiceOn;
-  if (!voiceOn) synth.cancel();
+  voiceMode = voiceMode === 'eva' ? (synth ? 'synth' : 'beep') : voiceMode === 'synth' ? 'beep' : 'eva';
+  synth?.cancel();
+  stopClip();
   voiceLabel();
 });
 
@@ -175,26 +282,50 @@ function sayOnce(id: VoiceId): void {
   said.add(id);
   say(id, 0);
 }
-function pumpVoice(dt: number): void {
-  speaking -= dt;
-  alertLeft -= dt;
-  if (speaking > 0 || queue.length === 0) return;
-  const id = queue.shift() as VoiceId;
+/** Coupe ce qui se dit et annonce tout de suite (compte à rebours, contact). */
+function sayNow(...ids: VoiceId[]): void {
+  queue.length = 0;
+  for (const id of ids) {
+    said.add(id);
+    lastSaid.set(id, st.t);
+    queue.push(id);
+  }
+  speaking = 0;
+  stopClip();
+  synth?.cancel();
+}
+function utter(id: VoiceId): number {
   alertText = VOICE[id];
   alertUrgent = URGENT.has(id) || id === 'fail';
   alertLeft = 2.2;
-  speaking = 0.4 + VOICE[id].length * 0.055;
+  const counting = COUNT.includes(id);
   if (alertUrgent) {
     beep(880, 0.12, 'square', 0.08);
     beep(660, 0.12, 'square', 0.08, 0.15);
-  } else beep(1320, 0.08, 'sine', 0.1);
-  if (synth && voiceOn) {
+  } else if (counting) beep(1000, 0.06, 'sine', 0.09);
+  else beep(1320, 0.08, 'sine', 0.1);
+  const textTime = 0.4 + VOICE[id].length * 0.055;
+  if (voiceMode === 'eva') {
+    const d = playClip(id, alertUrgent ? 0.3 : 0.08);
+    return d > 0 ? d + 0.25 : textTime;
+  }
+  if (voiceMode === 'synth' && synth) {
     const u = new SpeechSynthesisUtterance(VOICE[id]);
     u.lang = 'fr-FR';
     u.rate = 1.12;
     u.pitch = 1.15;
     synth.speak(u);
   }
+  return textTime;
+}
+function pumpVoice(dt: number): void {
+  speaking -= dt;
+  alertLeft -= dt;
+  if (speaking > 0) return;
+  // Une annonce de distance dépassée pendant l'attente ne se dit plus.
+  while (queue.length > 0 && st.phase === 'run' && st.dist < (DIST[queue[0]] ?? 0) * 0.8) queue.shift();
+  if (queue.length === 0) return;
+  speaking = utter(queue.shift() as VoiceId);
 }
 
 // ---------- partie ----------
@@ -218,10 +349,11 @@ function start(level: number): void {
   lastSaid.clear();
   queue.length = 0;
   speaking = 0;
+  stopClip();
   synth?.cancel();
   clearTimeout(menuTimer);
   document.body.classList.toggle('vert', L.vert);
-  thrUp.hidden = thrDown.hidden = !L.vert;
+  for (const el of vertPads) el.hidden = !L.vert;
   menu.hidden = true;
   sayOnce('engage');
 }
@@ -236,16 +368,14 @@ function finish(): void {
   st.finalSpeed = sp;
   if (off <= TOL && sp <= MAX_LAT_SPEED) {
     st.result = off <= PERFECT && sp <= 0.3 ? 'perfect' : 'success';
-    queue.length = 0;
-    say('success', 0);
-    if (st.result === 'perfect') say('perfect', 0);
+    if (st.result === 'perfect') sayNow('contact', 'success', 'perfect');
+    else sayNow('contact', 'success');
     beep(523, 0.25, 'triangle', 0.12);
     beep(659, 0.25, 'triangle', 0.12, 0.12);
     beep(784, 0.45, 'triangle', 0.12, 0.24);
   } else {
     st.result = 'fail';
-    queue.length = 0;
-    say('fail', 0);
+    sayNow('collision', 'fail');
     crash();
   }
   if (hiss && ac) hiss.gain.setTargetAtTime(0, ac.currentTime, 0.05);
@@ -291,26 +421,33 @@ function sim(dt: number): void {
 
   // Alertes
   const d = st.dist;
-  if (d <= 500 && LEVELS[st.level].start > 500) sayOnce('d500');
-  if (d <= 300) sayOnce('d300');
-  if (d <= 100) sayOnce('d100');
-  if (d <= 50) sayOnce('d50');
-  if (d <= 10) sayOnce('d10');
   const tl = timeLeft(Math.max(d, 0));
-  const px = st.x + st.vx * tl;
-  const py = st.y + st.vy * tl;
-  const pred = Math.hypot(px, L.vert ? py : 0);
-  const lat = Math.hypot(st.vx, L.vert ? st.vy : 0);
-  if (d < 60 && pred > TOL * 2) say('collision', 3);
-  else if (d < 140 && pred > TOL * 1.3) say('urgent', 5);
-  if (lat > 1.6) say('speed', 4);
-  if (st.thrusting && lat > 1.2 && ((input.left && st.vx < -1) || (input.right && st.vx > 1))) say('reduce', 5);
-  if (st.fuel < L.fuel * 0.25 && st.fuel > 0) say('fuel', 12);
-  if (pred > TOL && d > 30) {
-    if (Math.abs(px) > Math.abs(L.vert ? py : 0)) say(px < 0 ? 'driftL' : 'driftR', 5);
-    else say(py > 0 ? 'driftU' : 'driftD', 5);
-  } else if (pred < 0.6 && lat < 0.5 && (lastSaid.has('driftL') || lastSaid.has('driftR') || lastSaid.has('driftU') || lastSaid.has('driftD'))) {
-    say('aligned', 8);
+  // Compte à rebours des 4 dernières secondes : il passe avant tout le reste.
+  const n = Math.ceil(tl);
+  if (n >= 1 && n <= COUNT.length) {
+    const id = COUNT[n - 1];
+    if (!said.has(id)) sayNow(id);
+  } else {
+    if (d <= 500 && LEVELS[st.level].start > 500) sayOnce('d500');
+    if (d <= 300) sayOnce('d300');
+    if (d <= 100) sayOnce('d100');
+    if (d <= 50) sayOnce('d50');
+    if (d <= 10) sayOnce('d10');
+    const px = st.x + st.vx * tl;
+    const py = st.y + st.vy * tl;
+    const pred = Math.hypot(px, L.vert ? py : 0);
+    const lat = Math.hypot(st.vx, L.vert ? st.vy : 0);
+    if (d < 60 && pred > TOL * 2) say('collision', 3);
+    else if (d < 140 && pred > TOL * 1.3) say('urgent', 5);
+    if (lat > 1.6) say('speed', 4);
+    if (st.thrusting && lat > 1.2 && ((input.left && st.vx < -1) || (input.right && st.vx > 1))) say('reduce', 5);
+    if (st.fuel < L.fuel * 0.25 && st.fuel > 0) say('fuel', 12);
+    if (pred > TOL && d > 30) {
+      if (Math.abs(px) > Math.abs(L.vert ? py : 0)) say(px < 0 ? 'driftL' : 'driftR', 5);
+      else say(py > 0 ? 'driftU' : 'driftD', 5);
+    } else if (pred < 0.6 && lat < 0.5 && (lastSaid.has('driftL') || lastSaid.has('driftR') || lastSaid.has('driftU') || lastSaid.has('driftD'))) {
+      say('aligned', 8);
+    }
   }
   if (st.dist <= 0) {
     st.dist = 0;
@@ -399,13 +536,101 @@ function drawStation(cx: number, cy: number, k: number, t: number): void {
   g.strokeStyle = '#3ff0ff';
   g.lineWidth = Math.max(1.5, k * 0.18);
   g.stroke();
-  g.strokeStyle = 'rgba(63,240,255,0.6)';
-  g.lineWidth = Math.max(1, k * 0.08);
+}
+
+/** Cible holographique posée sur le sas : c'est elle qu'on amène dans le viseur. */
+function drawTarget(x: number, y: number, r: number, ok: boolean, t: number): void {
+  const col = ok ? '120,255,160' : '255,176,60';
+  g.strokeStyle = `rgba(${col},0.25)`;
+  g.lineWidth = 6;
   g.beginPath();
-  g.moveTo(cx - k * 1.6, cy);
-  g.lineTo(cx + k * 1.6, cy);
-  g.moveTo(cx, cy - k * 1.6);
-  g.lineTo(cx, cy + k * 1.6);
+  g.arc(x, y, r, 0, Math.PI * 2);
+  g.stroke();
+  g.strokeStyle = `rgba(${col},0.95)`;
+  g.lineWidth = 2;
+  g.beginPath();
+  g.arc(x, y, r, 0, Math.PI * 2);
+  g.stroke();
+  // Anneau intérieur en tirets qui tourne
+  g.save();
+  g.translate(x, y);
+  g.rotate(t * 0.8);
+  g.setLineDash([5, 5]);
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.arc(0, 0, r * 0.62, 0, Math.PI * 2);
+  g.stroke();
+  g.setLineDash([]);
+  g.restore();
+  // Point central et quatre pointes tournées vers lui
+  g.fillStyle = `rgba(${col},1)`;
+  g.beginPath();
+  g.arc(x, y, Math.max(2.5, r * 0.12), 0, Math.PI * 2);
+  g.fill();
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2;
+    const ux = Math.cos(a);
+    const uy = Math.sin(a);
+    const tip = r * 1.12;
+    const base = r * 1.5;
+    const w = r * 0.22;
+    g.beginPath();
+    g.moveTo(x + ux * tip, y + uy * tip);
+    g.lineTo(x + ux * base - uy * w, y + uy * base + ux * w);
+    g.lineTo(x + ux * base + uy * w, y + uy * base - ux * w);
+    g.closePath();
+    g.fill();
+  }
+}
+
+/** Viseur holographique fixe au centre : son cercle vaut l'écart admis au contact. */
+function drawSight(cx: number, cy: number, R: number, ok: boolean, t: number): void {
+  const col = ok ? '120,255,160' : '120,240,255';
+  const flick = 0.85 + 0.15 * Math.sin(t * 23);
+  g.strokeStyle = `rgba(${col},${0.14 * flick})`;
+  g.lineWidth = 8;
+  g.beginPath();
+  g.arc(cx, cy, R, 0, Math.PI * 2);
+  g.stroke();
+  g.strokeStyle = `rgba(${col},${0.85 * flick})`;
+  g.lineWidth = 1.6;
+  g.beginPath();
+  g.arc(cx, cy, R, 0, Math.PI * 2);
+  g.stroke();
+  // Graduations
+  g.beginPath();
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const l = i % 6 === 0 ? 0.22 : 0.09;
+    g.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
+    g.lineTo(cx + Math.cos(a) * R * (1 - l), cy + Math.sin(a) * R * (1 - l));
+  }
+  g.stroke();
+  // Crochets : ils se referment sur le viseur quand la cible y est.
+  const br = R * (1.55 - 0.32 * lock);
+  g.lineWidth = 3;
+  g.save();
+  g.translate(cx, cy);
+  g.rotate(t * 0.25 * (1 - lock));
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    g.beginPath();
+    g.arc(0, 0, br, a - 0.32, a + 0.32);
+    g.stroke();
+  }
+  g.restore();
+  // Croix centrale
+  g.lineWidth = 1.2;
+  g.strokeStyle = `rgba(${col},0.7)`;
+  g.beginPath();
+  g.moveTo(cx - R * 0.45, cy);
+  g.lineTo(cx - R * 0.15, cy);
+  g.moveTo(cx + R * 0.15, cy);
+  g.lineTo(cx + R * 0.45, cy);
+  g.moveTo(cx, cy - R * 0.45);
+  g.lineTo(cx, cy - R * 0.15);
+  g.moveTo(cx, cy + R * 0.15);
+  g.lineTo(cx, cy + R * 0.45);
   g.stroke();
 }
 
@@ -422,47 +647,69 @@ function draw(): void {
   g.fillRect(0, 0, W, H);
   const cx = W / 2;
   const cy = H / 2;
-  const F = Math.min(W, H) * 1.1;
-  // Étoiles qui défilent vers l'écran
+  const m = Math.min(W, H);
+  const F = m * 1.1;
+  // Point d'arrivée prévu, comme sur le petit cadran, mais à l'échelle du viseur.
+  const R = m * 0.11;
+  const S = R / TOL;
+  const tl = timeLeft(Math.max(st.dist, 0));
+  const px = st.x + st.vx * tl;
+  const py = L.vert ? st.y + st.vy * tl : 0;
+  const pred = Math.hypot(px, py);
+  const ox = -px * S;
+  const oy = py * S;
+  aimLocked = st.phase !== 'menu' && pred <= TOL;
+
+  // Scène (étoiles, station, cible), penchée par les poussées latérales.
+  g.save();
+  g.translate(cx, cy);
+  g.rotate(bank);
+  g.translate(-cx, -cy);
   for (const s of STARS) {
     let z = s.z - starShift;
     z = ((z % 620) + 620) % 620 + 5;
-    const sx = cx + ((s.x - st.x * 0.3) / z) * F * 0.25;
-    const sy = cy + ((s.y + st.y * 0.3) / z) * F * 0.25;
+    const sx = cx + (s.x / z) * F * 0.25 + ox * 0.18;
+    const sy = cy + (s.y / z) * F * 0.25 + oy * 0.18;
     const r = Math.min(2.2, 60 / z);
     g.fillStyle = `rgba(200,220,255,${Math.min(1, 80 / z)})`;
     g.fillRect(sx, sy, r, r);
   }
-  // Station : le sas est à (−x, +y) de la Comète, à la distance restante.
   const d = Math.max(st.dist, 1.2);
   const k = F / d;
-  const sx = cx - st.x * k;
-  const sy = cy + st.y * k;
-  drawStation(sx, sy, k, st.t);
+  const tx = cx + ox;
+  const ty = cy + oy;
+  drawStation(tx, ty, k, st.t);
+  drawTarget(tx, ty, R * 0.42, aimLocked, st.t);
+  g.restore();
 
-  // Viseur : zone d'arrimage (écart admis projeté au plan du sas)
-  const tolR = TOL * k;
-  const off = Math.hypot(st.x, L?.vert ? st.y : 0);
-  const okNow = off <= TOL;
-  g.strokeStyle = okNow ? 'rgba(120,255,160,0.9)' : 'rgba(255,170,60,0.9)';
-  g.lineWidth = 2;
-  g.setLineDash([6, 6]);
-  g.beginPath();
-  g.arc(cx, cy, Math.max(10, Math.min(tolR, Math.min(W, H) * 0.45)), 0, Math.PI * 2);
-  g.stroke();
-  g.setLineDash([]);
-  g.strokeStyle = 'rgba(200,253,255,0.85)';
-  g.lineWidth = 1.5;
-  g.beginPath();
-  g.moveTo(cx - 26, cy);
-  g.lineTo(cx - 8, cy);
-  g.moveTo(cx + 8, cy);
-  g.lineTo(cx + 26, cy);
-  g.moveTo(cx, cy - 26);
-  g.lineTo(cx, cy - 8);
-  g.moveTo(cx, cy + 8);
-  g.lineTo(cx, cy + 26);
-  g.stroke();
+  // Hors champ : flèche au bord, vers la cible.
+  const ol = Math.hypot(ox, oy);
+  const maxOff = Math.max(40, Math.min(W / 2 - 125, H / 2 - 40));
+  if (ol > maxOff) {
+    const ux = ox / ol;
+    const uy = oy / ol;
+    const ex = cx + ux * maxOff;
+    const ey = cy + uy * maxOff;
+    g.fillStyle = 'rgba(255,176,60,0.95)';
+    g.beginPath();
+    g.moveTo(ex + ux * 14, ey + uy * 14);
+    g.lineTo(ex - uy * 10, ey + ux * 10);
+    g.lineTo(ex + uy * 10, ey - ux * 10);
+    g.closePath();
+    g.fill();
+  }
+  // Fil de guidage du viseur vers la cible.
+  if (st.phase === 'run' && !aimLocked) {
+    g.strokeStyle = 'rgba(255,176,60,0.45)';
+    g.lineWidth = 1.2;
+    g.setLineDash([4, 6]);
+    g.beginPath();
+    g.moveTo(cx + (ox / ol) * R, cy + (oy / ol) * R);
+    g.lineTo(cx + (ox / ol) * Math.min(ol, maxOff), cy + (oy / ol) * Math.min(ol, maxOff));
+    g.stroke();
+    g.setLineDash([]);
+  }
+  drawSight(cx, cy, R, aimLocked, st.t);
 
   // Écran : cadre, lignes de balayage
   g.strokeStyle = 'rgba(63,240,255,0.5)';
@@ -472,10 +719,9 @@ function draw(): void {
   for (let y = 54; y < H - 20; y += 4) g.fillRect(104, y, W - 208, 1);
 
   if (st.phase === 'menu') return;
+  const below = cy + R * 1.6;
+  if (st.phase === 'run') text(aimLocked ? '◆ ALIGNÉ ◆' : 'HORS AXE', cx, below + 14, 12, aimLocked ? '#78ffa0' : '#ffb070', 'center');
   // Lectures
-  const tl = timeLeft(Math.max(st.dist, 0));
-  const px = st.x + st.vx * tl;
-  const py = st.y + st.vy * tl;
   text(`DISTANCE  ${Math.max(0, st.dist).toFixed(0)} m`, 118, 78, 15, '#c8fdff');
   text(`APPROCHE  ${approach(Math.max(st.dist, 0)).toFixed(1)} m/s`, 118, 98, 13, '#9fb4d8');
   const lat = L.vert ? `${st.vx >= 0 ? '→' : '←'} ${Math.abs(st.vx).toFixed(2)}  ${st.vy >= 0 ? '↑' : '↓'} ${Math.abs(st.vy).toFixed(2)}` : `${st.vx >= 0 ? '→' : '←'} ${Math.abs(st.vx).toFixed(2)} m/s`;
@@ -490,10 +736,10 @@ function draw(): void {
   g.fillRect(cx - fw / 2 + 1, 65, (fw - 2) * f, 8);
   text('CARBURANT', cx, 90, 11, '#9fb4d8', 'center');
 
-  // Point d'arrivée prévu (petit cadran en bas)
-  const gx = cx;
-  const gy = H - 70;
+  // Petit cadran « arrivée prévue », en bas à droite du cadre
   const gr = 34;
+  const gx = W - 118 - gr;
+  const gy = H - 40 - gr;
   g.strokeStyle = 'rgba(200,253,255,0.5)';
   g.lineWidth = 1;
   g.beginPath();
@@ -509,13 +755,12 @@ function draw(): void {
   g.arc(gx, gy, TOL * scale, 0, Math.PI * 2);
   g.stroke();
   let mx = px * scale;
-  let my = -(L.vert ? py : 0) * scale;
+  let my = -py * scale;
   const ml = Math.hypot(mx, my);
   if (ml > gr) {
     mx *= gr / ml;
     my *= gr / ml;
   }
-  const pred = Math.hypot(px, L.vert ? py : 0);
   g.fillStyle = pred <= TOL ? '#78ffa0' : '#ffaa3c';
   g.beginPath();
   g.moveTo(gx + mx, gy + my - 5);
@@ -525,12 +770,12 @@ function draw(): void {
   g.fill();
   text('ARRIVÉE PRÉVUE', gx, gy + gr + 14, 10, '#9fb4d8', 'center');
 
-  // Alerte de LUMA
+  // Alerte, sous le viseur
   if (alertLeft > 0 && alertText) {
     const a = Math.min(1, alertLeft * 2);
     g.globalAlpha = a;
-    text(alertText, cx, 140, 22, alertUrgent ? '#ff6a7a' : '#ffe6a8', 'center');
-    text('LUMA', cx, 118, 11, '#9fb4d8', 'center');
+    const big = COUNT.some((id) => VOICE[id] === alertText);
+    text(alertText, cx, below + (big ? 52 : 44), big ? 30 : 22, alertUrgent ? '#ff6a7a' : '#ffe6a8', 'center');
     g.globalAlpha = 1;
   }
   if (st.phase === 'done') {
@@ -545,8 +790,7 @@ const menu = document.querySelector('#menu') as HTMLElement;
 const menuTitle = document.querySelector('#menu-title') as HTMLElement;
 const menuText = document.querySelector('#menu-text') as HTMLElement;
 const levelsEl = document.querySelector('#levels') as HTMLElement;
-const thrUp = document.querySelector('#thr-up') as HTMLElement;
-const thrDown = document.querySelector('#thr-down') as HTMLElement;
+const vertPads = [...document.querySelectorAll<HTMLElement>('.thr.v')];
 function showMenu(): void {
   if (st.phase === 'run') return;
   levelsEl.textContent = '';
@@ -568,12 +812,19 @@ function showMenu(): void {
 showMenu();
 
 // ---------- commandes ----------
-const THR: Record<string, keyof typeof input> = { 'thr-left': 'left', 'thr-right': 'right', 'thr-up': 'up', 'thr-down': 'down' };
-for (const [id, dir] of Object.entries(THR)) {
-  const el = document.getElementById(id) as HTMLElement;
+// Trois boutons de chaque côté (▲ au-dessus, ◀ ou ▶ au milieu, ▼ dessous) : une direction peut avoir deux boutons.
+const keyHeld: Record<Dir, boolean> = { left: false, right: false, up: false, down: false };
+const pads: { dir: Dir; on: boolean; el: HTMLElement }[] = [];
+function refresh(dir: Dir): void {
+  input[dir] = keyHeld[dir] || pads.some((p) => p.dir === dir && p.on);
+}
+for (const el of document.querySelectorAll<HTMLElement>('.thr')) {
+  const pad = { dir: el.dataset.dir as Dir, on: false, el };
+  pads.push(pad);
   const set = (on: boolean): void => {
-    input[dir] = on;
+    pad.on = on;
     el.classList.toggle('on', on);
+    refresh(pad.dir);
   };
   el.addEventListener('pointerdown', (e) => {
     e.preventDefault();
@@ -585,7 +836,7 @@ for (const [id, dir] of Object.entries(THR)) {
   el.addEventListener('pointercancel', () => set(false));
   el.addEventListener('lostpointercapture', () => set(false));
 }
-const KEYS: Record<string, keyof typeof input> = {
+const KEYS: Record<string, Dir> = {
   ArrowLeft: 'left',
   KeyA: 'left',
   KeyQ: 'left',
@@ -600,21 +851,33 @@ const KEYS: Record<string, keyof typeof input> = {
 window.addEventListener('keydown', (e) => {
   const k = KEYS[e.code];
   if (k) {
-    input[k] = true;
+    keyHeld[k] = true;
+    refresh(k);
     e.preventDefault();
   }
   if (e.code === 'Enter' && st.phase !== 'run') start(st.phase === 'done' && st.result !== 'fail' ? Math.min(st.level + 1, LEVELS.length - 1) : st.level);
 });
 window.addEventListener('keyup', (e) => {
   const k = KEYS[e.code];
-  if (k) input[k] = false;
+  if (k) {
+    keyHeld[k] = false;
+    refresh(k);
+  }
 });
 window.addEventListener('blur', () => {
-  input.left = input.right = input.up = input.down = false;
+  for (const p of pads) {
+    p.on = false;
+    p.el.classList.remove('on');
+  }
+  for (const k of Object.keys(keyHeld) as Dir[]) {
+    keyHeld[k] = false;
+    refresh(k);
+  }
 });
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 document.querySelector('#back')?.addEventListener('click', () => {
   synth?.cancel();
+  stopClip();
   location.href = 'tests.html';
 });
 
@@ -633,6 +896,10 @@ function frame(now: number): void {
     pumpVoice(STEP);
   }
   if (st.phase === 'run') starShift += approach(st.dist) * raw * timeScale * 0.5;
+  const run = st.phase === 'run' && st.fuel > 0;
+  const bankTo = run ? ((input.left ? 1 : 0) - (input.right ? 1 : 0)) * 0.04 : 0;
+  bank += (bankTo - bank) * Math.min(1, raw * 4);
+  lock += ((aimLocked ? 1 : 0) - lock) * Math.min(1, raw * 8);
   if (hiss && ac) hiss.gain.setTargetAtTime(st.phase === 'run' && st.thrusting ? 0.07 : 0, ac.currentTime, 0.03);
   draw();
 }
@@ -656,6 +923,8 @@ if (lv >= 1 && lv <= LEVELS.length) start(lv - 1);
     finalOff: st.finalOff,
     alert: alertLeft > 0 ? alertText : '',
     said: [...lastSaid.keys()],
+    locked: aimLocked,
+    clips: [...clips.keys()],
   }),
   start: (level: number) => start(level - 1),
   autopilot: (on = true) => {
@@ -665,8 +934,9 @@ if (lv >= 1 && lv <= LEVELS.length) start(lv - 1);
   timeScale: (s: number) => {
     timeScale = s;
   },
-  voice: (on: boolean) => {
-    voiceOn = on && !!synth;
+  /** true : voix d'EVA ; false : bips seulement ; 'synth' : synthèse du téléphone. */
+  voice: (on: boolean | 'synth') => {
+    voiceMode = on === 'synth' ? 'synth' : on ? 'eva' : 'beep';
     voiceLabel();
   },
 };

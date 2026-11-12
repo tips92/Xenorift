@@ -306,6 +306,11 @@ le jeu en 4c.
       axe vertical, tempête), carburant, cadran « arrivée prévue », écart admis 1,5 m et dérive 0,8 m/s au contact ;
       les 19 alertes s'affichent (texte + bips, voix de synthèse du téléphone si possible). Les enregistrements de
       Romain remplaceront la synthèse (identifiants de `VOICE` dans `preview/dock.ts`).
+      Retour de Romain (12/11) : la station semblait seulement se rapprocher. Fait : vue calée sur le point
+      d'arrivée prévu (comme le petit cadran, en grand), cible holographique sur le sas à amener dans un viseur
+      au centre, léger roulis aux poussées, 3 boutons par bord (▲ ◀ ▼ à gauche, ▲ ▶ ▼ à droite), 8 voix d'EVA
+      (ElevenLabs) branchées, compte à rebours 4-3-2-1, approche finale ralentie (1,2 m/s au contact).
+      Reste : 13 voix à générer (`art/voix/arrimage/README.md`), licence de la voix à vérifier.
 - [ ] **Exploration de vaisseau en vue à la première personne** (dans l'esprit des vieux jeux de tir en
       couloirs) : Kaï fouille l'intérieur d'un vaisseau ou d'une épave pour trouver des trésors (cristaux, plans,
       pièces rares), avec des monstres qui peuvent surgir. Pistes : couloirs et salles dessinés par code (three),

@@ -17,7 +17,8 @@ léviathan du vol 1 : 4 plaques dorsales puis 3 sur la queue ; essai sur télép
 La Lune reste à l'ancien format (étape 5).
 Paysage uniquement, tout se joue au tactile (le clavier sert aux tests sur PC). Aucun fichier son :
 graphismes dessinés par code (Canvas 2D, géométries et shaders three), sauf les poses de Kaï (PNG
-`art/sprites/kai/`, dans l'APK) ; sons et musiques synthétisés (Web Audio).
+`art/sprites/kai/`, dans l'APK) ; sons et musiques synthétisés (Web Audio), sauf les voix d'EVA de l'essai
+d'arrimage (mp3 fournis, `art/voix/arrimage/`, liste dans son README).
 Docs : `docs/GDD.md` (conception et contraintes techniques), `docs/SOUHAITS.md` (liste vivante + ordre de
 travail), `docs/HISTOIRE.md` (trame en 5 mondes), `docs/plans/` (plans techniques des prochaines étapes ;
 **`docs/plans/README.md` donne l'état de chaque étape et la prochaine action**), `docs/ARCHITECTURE.md`
@@ -239,9 +240,11 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   diag `arena-preview`, aussi en `--prod`),
   `/preview/ship.html?stats=0` (essai : épave à la première personne, carte ASCII `MAP` en tête du fichier, monstres en
   images dessinées face à la caméra, carte d'accès et sas ; `__xrShip` ; scénario diag `ship-preview`),
-  `/preview/dock.html?level=1..4` (essai : arrimage sur écran de visée, poussées sur les bords, 4 approches, axe
-  vertical en 3 et 4 ; alertes de LUMA `VOICE` en texte, bips et voix de synthèse si le téléphone en a, en attendant
-  les enregistrements ; `__xrDock` ; scénario diag `dock-preview`),
+  `/preview/dock.html?level=1..4` (essai : arrimage ; la station se place selon le point d'arrivée prévu, à l'échelle
+  du viseur holographique central où il faut amener la cible du sas ; 3 boutons de poussée par bord (▲ ◀/▶ ▼), axe
+  vertical en 3 et 4 ; compte à rebours des 4 dernières secondes ; alertes `VOICE` en texte, bips et voix d'EVA
+  (`CLIP_OF` → `art/voix/arrimage/*.mp3`, un fichier absent reste texte et bip) ou synthèse ; `__xrDock` ; scénario
+  diag `dock-preview`),
   `/preview/tests.html` (page des essais, ouverte par le bouton « Tests » de l'accueil ; les pages d'essai y reviennent).
   Ailleurs : `scripts/check-levels.ts` (validateur) et `scripts/lib/reach.ts` (grille `LevelGrid` et graphe
   d'accessibilité `ReachGraph` : sauts selon `DESIGN_RULES`, portes, faisceau de balise infranchissable `inBeam` /
