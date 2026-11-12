@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Xeno Rift — essais de gameplay</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: radial-gradient(ellipse at 50% 120%, #2a0f4a, #05010f 70%);
+        color: #e8f6ff;
+        font-family: 'Exo 2', sans-serif;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 14px 18px 4px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #c8fdff;
+        text-shadow: 0 0 10px #3ff0ff;
+      }
+      p.lead {
+        margin: 4px 18px 12px;
+        font-size: 14px;
+        color: #9fb4d8;
+      }
+      main {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 14px;
+        padding: 0 18px 18px;
+      }
+      button {
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .back {
+        font-size: 18px;
+        color: #c8fdff;
+        background: rgba(20, 10, 40, 0.6);
+        border: 1px solid rgba(200, 253, 255, 0.45);
+        border-radius: 8px;
+        width: 42px;
+        height: 38px;
+      }
+      .card {
+        text-align: left;
+        color: inherit;
+        background: rgba(20, 10, 46, 0.75);
+        border: 1px solid rgba(63, 240, 255, 0.45);
+        border-radius: 12px;
+        padding: 14px 16px;
+        min-height: 110px;
+      }
+      .card strong {
+        display: block;
+        font-size: 19px;
+        color: #3ff0ff;
+        margin-bottom: 6px;
+      }
+      .card span {
+        font-size: 14px;
+        line-height: 1.4;
+        color: #d6e4ff;
+      }
+      .card[disabled] {
+        opacity: 0.45;
+        cursor: default;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <button class="back" type="button" data-go="../index.html" aria-label="Retour">◀</button>
+      <h1>Essais de gameplay</h1>
+    </header>
+    <p class="lead">Prototypes à essayer : rien n'est enregistré, ◀ en haut à gauche pour revenir.</p>
+    <main>
+      <button class="card" type="button" data-go="arena.html">
+        <strong>Arène 3D — survie</strong>
+        <span>Kaï en 3D vu du dessus, vagues d'ennemis. Stick gauche : bouger ; stick droit : viser et tirer.</span>
+      </button>
+      <button class="card" type="button" data-go="ship.html">
+        <strong>Épave — exploration</strong>
+        <span>Vue à la première personne dans un vaisseau abandonné : cristaux, carte d'accès, monstres, sas de sortie.</span>
+      </button>
+      <button class="card" type="button" disabled>
+        <strong>Arrimage — bientôt</strong>
+        <span>Écran de visée, poussées gauche / droite pour centrer la Comète sur le sas.</span>
+      </button>
+    </main>
+    <script type="module" src="./tests.ts"></script>
+  </body>
+</html>

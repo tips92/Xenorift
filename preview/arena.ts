@@ -616,7 +616,7 @@ function stickMove(s: Stick, cx: number, cy: number): void {
   stickDraw(s);
 }
 document.querySelector('#back')?.addEventListener('click', () => {
-  location.href = '../index.html';
+  location.href = 'tests.html';
 });
 window.addEventListener('pointerdown', (e) => {
   if ((e.target as HTMLElement).id === 'back') return;

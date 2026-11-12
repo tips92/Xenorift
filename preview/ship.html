@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Xeno Rift — épave (essai)</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        color: #e8f6ff;
+        font-family: 'Exo 2', sans-serif;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #view {
+        position: fixed;
+        inset: 0;
+      }
+      #view canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #hurt {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 30, 60, 0.75));
+        opacity: 0;
+      }
+      #hud {
+        position: fixed;
+        top: 10px;
+        left: 14px;
+        right: 150px;
+        display: flex;
+        gap: 18px;
+        align-items: center;
+        pointer-events: none;
+        font-size: 18px;
+        text-shadow: 0 0 6px #000;
+      }
+      #back {
+        pointer-events: auto;
+        font: 600 18px 'Exo 2', sans-serif;
+        color: #c8fdff;
+        background: rgba(20, 10, 40, 0.6);
+        border: 1px solid rgba(200, 253, 255, 0.45);
+        border-radius: 8px;
+        width: 40px;
+        height: 36px;
+      }
+      #hearts {
+        color: #ff5a8c;
+        letter-spacing: 3px;
+        font-size: 22px;
+      }
+      #crystals {
+        color: #3ff0ff;
+      }
+      #card {
+        color: #ff9a2e;
+      }
+      #map {
+        position: fixed;
+        top: 10px;
+        right: 12px;
+        width: 132px;
+        height: 96px;
+        border: 1px solid rgba(200, 253, 255, 0.35);
+        border-radius: 6px;
+        background: rgba(5, 2, 20, 0.55);
+        pointer-events: none;
+      }
+      #msg {
+        position: fixed;
+        top: 60px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 17px;
+        color: #ffe6a8;
+        text-shadow: 0 0 8px #000;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      #msg.on {
+        opacity: 1;
+      }
+      #banner {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: 32px;
+        color: #c8fdff;
+        text-shadow: 0 0 14px #3ff0ff;
+        background: rgba(5, 1, 15, 0.55);
+      }
+      #banner.on {
+        display: flex;
+      }
+      #banner small {
+        display: block;
+        font-size: 17px;
+        color: #e8f6ff;
+        margin-top: 8px;
+      }
+      #cross {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        width: 18px;
+        height: 18px;
+        margin: -9px 0 0 -9px;
+        border: 2px solid rgba(127, 248, 255, 0.7);
+        border-radius: 50%;
+        pointer-events: none;
+      }
+      #cross.lock {
+        border-color: #ff5a8c;
+      }
+      #stats {
+        position: fixed;
+        bottom: 6px;
+        left: 50%;
+        transform: translateX(-50%);
+        font: 12px monospace;
+        color: #9fb4d8;
+        pointer-events: none;
+        opacity: 0.8;
+      }
+      .stick {
+        position: fixed;
+        width: 120px;
+        height: 120px;
+        margin: -60px 0 0 -60px;
+        border-radius: 50%;
+        border: 2px solid rgba(200, 253, 255, 0.45);
+        background: rgba(20, 10, 40, 0.25);
+        pointer-events: none;
+        display: none;
+      }
+      .stick.on {
+        display: block;
+      }
+      .stick i {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 50px;
+        height: 50px;
+        margin: -25px 0 0 -25px;
+        border-radius: 50%;
+        background: rgba(63, 240, 255, 0.55);
+      }
+      #fire {
+        position: fixed;
+        right: 26px;
+        bottom: 30px;
+        width: 96px;
+        height: 96px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 154, 46, 0.8);
+        background: rgba(255, 120, 30, 0.25);
+        color: #ffe6c8;
+        font: 600 16px 'Exo 2', sans-serif;
+        pointer-events: none;
+      }
+      #fire.on {
+        background: rgba(255, 140, 40, 0.55);
+      }
+      .hint {
+        position: fixed;
+        bottom: 26px;
+        font-size: 14px;
+        color: rgba(232, 246, 255, 0.55);
+        pointer-events: none;
+      }
+      #hint-l {
+        left: 18px;
+      }
+      #hint-r {
+        right: 140px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="view"></div>
+    <div id="hurt"></div>
+    <div id="cross"></div>
+    <div id="hud">
+      <button id="back" type="button" aria-label="Retour">◀</button><span id="hearts"></span><span id="crystals"></span
+      ><span id="card"></span>
+    </div>
+    <canvas id="map" width="264" height="192"></canvas>
+    <div id="msg"></div>
+    <div id="stats"></div>
+    <div class="stick" id="stick-move"><i></i></div>
+    <div id="fire">TIR</div>
+    <span class="hint" id="hint-l">◀ avancer</span>
+    <span class="hint" id="hint-r">glisser : tourner</span>
+    <div id="banner"></div>
+    <script type="module" src="./ship.ts"></script>
+  </body>
+</html>

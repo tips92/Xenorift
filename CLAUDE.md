@@ -236,7 +236,10 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   `/preview/kai.html` (modèle `art/kai.glb` dans le cadre 64×80 du sprite, à côté du Kaï PNG du jeu),
   `/preview/arena.html?auto=1&stats=0` (essai : arène 3D vue du dessus, Kaï du `.glb` animé et bras tendu vers la
   visée, vagues d'ennemis ; sticks tactiles à gauche et à droite, ZQSD + flèches, souris ; `__xrArena` ; scénario
-  diag `arena-preview`, aussi en `--prod`).
+  diag `arena-preview`, aussi en `--prod`),
+  `/preview/ship.html?stats=0` (essai : épave à la première personne, carte ASCII `MAP` en tête du fichier, monstres en
+  images dessinées face à la caméra, carte d'accès et sas ; `__xrShip` ; scénario diag `ship-preview`),
+  `/preview/tests.html` (page des essais, ouverte par le bouton « Tests » de l'accueil ; les pages d'essai y reviennent).
   Ailleurs : `scripts/check-levels.ts` (validateur) et `scripts/lib/reach.ts` (grille `LevelGrid` et graphe
   d'accessibilité `ReachGraph` : sauts selon `DESIGN_RULES`, portes, faisceau de balise infranchissable `inBeam` /
   `crossesBeam`, bornes d'arène vides, rebonds de champignon (`LevelGrid.bounce`, `MUSHROOM_RULES` écourtées sous
@@ -648,8 +651,8 @@ géante au loin, 4 ennemis par monde).
   part du point de contrôle d'avant son arène, sans arrivée ; ignoré sans arène). `?kai=glb` : le corps de Kaï
   est le rendu de profil de `art/kai.glb` (export de `art/kai.blend`, `art/outils/export-kai.py`) à la place du
   PNG ; une seule pose tant que le fichier n'a pas de squelette, le bras armé reste le sprite du jeu. Le
-  `.glb` n'entre dans le build (et l'APK) que par l'arène d'essai (`preview/arena.html`, entrée `arena` de
-  `vite.config.ts`, bouton « Essai 3D » de l'accueil, retour ◀ vers `index.html`).
+  `.glb` n'entre dans le build (et l'APK) que par l'arène d'essai (`preview/arena.html`). Les pages d'essai `tests`, `arena` et `ship` sont des entrées
+  de `vite.config.ts`, donc dans l'APK : bouton « Tests » de l'accueil → `preview/tests.html`.
 - Clavier : flèches / WASD (ZQSD en AZERTY) ; Espace = saut en 2D et turbo en vol ; K = saut ; Haut/W = haut
   (visée, portes, monter en vol), ne fait PAS sauter ; Bas/S = accroupi (puis ← → : reptation ; + saut :
   descente d'étage) ; J/X/F = tir (en vol : tant que la touche est tenue) ; Maj = turbo ; Échap/P =

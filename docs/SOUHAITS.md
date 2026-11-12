@@ -306,12 +306,17 @@ le jeu en 4c.
       couloirs) : Kaï fouille l'intérieur d'un vaisseau ou d'une épave pour trouver des trésors (cristaux, plans,
       pièces rares), avec des monstres qui peuvent surgir. Pistes : couloirs et salles dessinés par code (three),
       commandes tactiles du vol réutilisées (joystick + TIR), arrive après un amarrage.
+      Essai fait le 12/11 : `preview/ship.html` (bouton « Tests » de l'accueil) : épave de 22 x 16 cases, 5 cristaux,
+      carte d'accès, sas, 9 monstres (rampants au corps à corps, cracheurs à distance), mini-carte des cases vues.
 - [ ] **Survie en vue du dessus en 3D** : Kaï (ou la Comète) au centre, les ennemis arrivent de tous côtés par
       vagues de plus en plus fortes. Proche de la piste « défense de la Comète » des niveaux bonus (section 6).
       Pistes : joystick pour bouger, tir automatique ou TIR tenu, bonus entre les vagues.
       Retenu (12/11) pour essayer le **modèle 3D de Kaï** (`art/kai.glb`, squelette et animations) : arène d'essai
       `preview/arena.html` (serveur de dev). Mesuré dans Chrome : 57 i/s, mais 195 appels de dessin dont ~180 pour Kaï
       (74 maillages, 21 k triangles) : à alléger (pièces fusionnées, ~10 k triangles) avant le téléphone.
+      Essai sur téléphone apprécié par Romain (12/11). **Idée d'usage** : mini-niveaux à l'intérieur d'un niveau 2D.
+      Kaï passe dans un **vortex** et doit **nettoyer le Vide** : il résiste aux vagues d'ennemis le temps qu'une
+      **bombe anti-vide** se charge et explose (chrono visible), puis revient dans le niveau 2D.
 
 ---
 

@@ -37,8 +37,13 @@ export default defineConfig({
     target: 'es2020',
     chunkSizeWarningLimit: 2000,
     rollupOptions: {
-      // Arène 3D d'essai : page à part, ouverte depuis l'accueil (« Essai 3D »).
-      input: { main: path.resolve('index.html'), arena: path.resolve('preview/arena.html') },
+      // Essais de gameplay : pages à part, ouvertes depuis l'accueil (« Tests »).
+      input: {
+        main: path.resolve('index.html'),
+        tests: path.resolve('preview/tests.html'),
+        arena: path.resolve('preview/arena.html'),
+        ship: path.resolve('preview/ship.html'),
+      },
       output: {
         manualChunks: { phaser: ['phaser'], three: ['three'] },
       },

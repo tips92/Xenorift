@@ -13,6 +13,8 @@ export const meta = {
 export default async function (t) {
   await t.goto('');
   await t.page.locator('button.footer-try').click();
+  await t.page.waitForSelector('body[data-ready]');
+  await t.page.locator('button.card', { hasText: 'Arène' }).click();
   await waitFor(t, () => window.__xrArena?.info().loaded, { timeout: 30000, label: 'modèle chargé' });
   await t.ev(() => {
     window.__xrArena.god(true);
@@ -44,8 +46,9 @@ export default async function (t) {
   await t.wait(300);
   const [sx, sy] = await t.ev(() => window.__xrArena.screen());
   await t.shot('kai-loupe', { clip: { x: Math.round(sx - 90), y: Math.round(sy - 90), width: 180, height: 180 }, zoom: 3 });
-  // Retour à l'accueil du jeu.
+  // Retour à la page des essais, puis à l'accueil du jeu.
   await t.page.locator('#back').click();
-  await t.page.waitForURL(/index\.html|\/$/);
+  await t.page.waitForURL(/tests\.html/);
+  await t.page.locator('button.back').click();
   await t.page.waitForSelector('button.footer-try');
 }
