@@ -92,6 +92,7 @@ src/
                    naufragé npc.ts, instantané du combat snapshot.ts…), art/ (dessins, dont draw/beacon.ts,
                    draw/bosses.ts, draw/world1.ts ; créature du décor dans parallax.ts), levels/ (un dossier par
                    monde : jungle/j1.ts, j2.ts, j3.ts)
+  rift/            arène 3D d'une faille (survie, 3 vagues), chargée à la demande ; pas une étape de campagne
   game3d/          mode vol : flight.ts (partie), parcours et vagues, portails, astéroïdes, tir (shots.ts),
                    ennemis (enemies.ts), cristaux (pickups.ts), créatures, ciel
 preview/           pages d'outil du serveur de dev : graphismes 2D (art), vol simulé (flight), sons du monde 1

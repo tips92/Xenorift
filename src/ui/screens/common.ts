@@ -13,6 +13,7 @@ export type ScreenName =
   | 'results'
   | 'hangar'
   | 'fail'
+  | 'rift'
   | 'end'
   | 'error';
 

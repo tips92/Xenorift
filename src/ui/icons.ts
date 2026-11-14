@@ -18,6 +18,8 @@ export const ICONS = {
   /** Compétence du double saut (hangar, plus tard). */
   doublejump: `<svg ${V24}><path d="M5 12.6l7-6.1 7 6.1M5 19.4l7-6.1 7 6.1" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 3.5h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".6"/></svg>`,
   gate: `<svg ${V24}><ellipse cx="12" cy="12" rx="7" ry="9" fill="none" stroke="currentColor" stroke-width="2.6"/><ellipse cx="12" cy="12" rx="3" ry="4.4" fill="currentColor" opacity=".45"/></svg>`,
+  /** Faille harmonisée (carte de niveau) et vortex. */
+  rift: `<svg ${V24}><path d="M12 3.2c4.4 0 7.4 2.7 7.4 6 0 2.5-1.7 4.4-4.2 5-1.7.4-3.2-.7-3.2-2.3 0-1.1.8-1.9 1.9-1.9 2.2 0 3.4 2.2 2.2 4.1-1.5 2.4-4.6 3.6-7.6 2.6" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><circle cx="12" cy="12.4" r="1.55" fill="currentColor"/></svg>`,
   boost: `<svg ${V24}><path d="M4 6l6.5 6L4 18M12 6l6.5 6-6.5 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   hex: `<svg ${V24}><path class="hex-fill" d="M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
   back: `<svg ${V24}><path d="M15.5 4.5L8 12l7.5 7.5" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,

@@ -8,7 +8,7 @@ import type { WeaponMods } from './weapons';
 export type StageKind = 'platform' | 'flight';
 export type ThemeId = (typeof THEME_IDS)[number];
 export type CourseId = (typeof COURSE_IDS)[number];
-/** Cinématique (src/story) : 'prologue', 'liberation' (paramétrée par le monde). */
+/** Cinématique (src/story) : 'prologue', 'liberation' (paramétrée par le monde), 'rift' (écho d'une faille). */
 export type CutsceneId = (typeof CUTSCENE_IDS)[number];
 
 /** Place d'une étape dans son monde : niveaux 1 à 3, 4 = le vol qui le quitte. */
@@ -237,6 +237,16 @@ export interface StartAt {
   snapshot?: unknown;
 }
 
+/**
+ * Voyage dans une faille : l'instantané 2D est opaque (noté par le mode plateforme). `cleared` au retour :
+ * la bombe a harmonisé le vide. L'interface ne lit pas `snapshot`.
+ */
+export interface RiftTrip {
+  readonly id: string;
+  readonly snapshot: unknown;
+  readonly cleared?: boolean;
+}
+
 // ---------------------------------------------------------------- Entrées
 
 /**
@@ -409,6 +419,16 @@ export interface ModeHooks {
   loadout: Readonly<PlayLoadout>;
   /** Départ imposé (?at=boss, ou nouvel essai d'un combat) ; ignoré par un niveau qui n'a pas ce point. */
   startAt?: Readonly<StartAt>;
+  /**
+   * Retour d'une faille : restaurer la partie 2D (prioritaire sur startAt). Posé par l'interface, lu par
+   * le mode plateforme.
+   */
+  riftReturn?: Readonly<RiftTrip>;
+  /**
+   * Kaï entre dans un vortex. L'interface fond, libère Phaser, lance l'arène 3D, puis rappelle le mode
+   * plateforme avec `riftReturn`. Une seule fois.
+   */
+  onRift?(trip: RiftTrip): void;
   /** Étape réussie. À appeler une seule fois, après l'animation de fin. */
   onComplete(result: StageResult): void;
   /**
@@ -472,4 +492,9 @@ export interface SaveData {
   blueprints: WeaponId[];
   /** Absent des anciennes sauvegardes (v1, v2 du plan 03) : valeur par défaut, sans changer de version. */
   story: StoryProgress;
+  /**
+   * Failles harmonisées (RiftId, core/rifts.ts), dans l'ordre de RIFT_IDS. Absent des sauvegardes d'avant :
+   * tableau vide, sans changer de version. Ne débloque pas d'étape.
+   */
+  rifts: string[];
 }

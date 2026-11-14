@@ -41,8 +41,10 @@ import { SporeRain } from './sporeRain';
 import { FallingTrunk } from './trunk';
 import { bossBar, endSession, haptic, music, musicLevel, radio, reportError, sfx, toast } from './session';
 import type { Session } from './session';
-import { readFightSnapshot } from './snapshot';
-import type { FightSnapshot } from './snapshot';
+import { riftForStage } from '../../core/rifts';
+import { readFightSnapshot, readRiftSnapshot } from './snapshot';
+import type { FightSnapshot, RiftSnapshot } from './snapshot';
+import { Vortex } from './vortex';
 import {
   BG_RGB,
   CAMERA_EDGE_BOTTOM,
@@ -130,6 +132,12 @@ export class PlatformScene extends Phaser.Scene {
    */
   fightSnap: FightSnapshot | null = null;
   fightRetry = false;
+  /** Vortex 'V' (faille du Vide) ; null s'il n'y en a pas. */
+  vortex: Vortex | null = null;
+  /** Départ vers la faille déjà demandé : un seul appel à onRift. */
+  private riftLeft = false;
+  /** Retour de faille : la bombe a harmonisé (toast). -1 : pas un retour. */
+  private riftBack: -1 | 0 | 1 = -1;
 
   /** Horloge de jeu (ms, hors pause). */
   clockMs = 0;
@@ -210,6 +218,9 @@ export class PlatformScene extends Phaser.Scene {
     this.npc = null;
     this.fightSnap = null;
     this.fightRetry = false;
+    this.vortex = null;
+    this.riftLeft = false;
+    this.riftBack = -1;
     this.arenaK = null;
     this.levelArt = false;
     this.bossHudOn = false;
@@ -309,6 +320,10 @@ export class PlatformScene extends Phaser.Scene {
     this.items = new Items(this, p);
     // Portes : elles ne lisent this.player qu'à la mise à jour, on peut donc les créer avant lui.
     this.doors = new Doors(this, p.doors);
+    if (p.vortices.length > 0) {
+      const rift = riftForStage(session.stage.id);
+      this.vortex = new Vortex(this, p.vortices, rift && rift.radio ? rift.radio : null);
+    }
     // Renforts du boss créés dès maintenant, cachés (le collider des marcheurs est posé plus bas).
     const reserve: EnemySpawn[] = [];
     if (bossId && p.boss) {
@@ -341,12 +356,15 @@ export class PlatformScene extends Phaser.Scene {
     this.levelEvents = new LevelEvents(level.radio, this.sayRadio, level.events, this.playLevelEvent);
     this.gun.onOverheat = this.onGunOverheat;
     // Nouvel essai d'un combat : état noté au point de contrôle d'avant l'arène (départ à ce K).
+    const back = session.hooks.riftReturn;
+    const riftSnap = back ? readRiftSnapshot(back.snapshot, level.id) : null;
     const at = session.hooks.startAt;
-    const snap = at && at.at === 'boss' && start === this.arenaK ? readFightSnapshot(at.snapshot, level.id) : null;
-    if (snap) this.restoreFight(snap);
+    const snap = !riftSnap && at && at.at === 'boss' && start === this.arenaK ? readFightSnapshot(at.snapshot, level.id) : null;
+    if (riftSnap) this.restoreRift(riftSnap, back?.cleared === true);
+    else if (snap) this.restoreFight(snap);
     this.glyphs = p.glyphs.length > 0 ? new Glyphs(this, p.glyphs) : null;
     // Arrivée au départ P seulement (pas depuis un point de contrôle, ?at=boss) : Kaï figé jusqu'à onLanded.
-    if (level.start && start === p.start) {
+    if (!riftSnap && level.start && start === p.start) {
       this.arrival = createArrival(this, level.start, this.respawnX, this.respawnFeetY);
       this.state = 'enter';
       this.arrival.play(this.player, this.onLanded);
@@ -377,14 +395,15 @@ export class PlatformScene extends Phaser.Scene {
       lives: this.lives,
       crystals: this.crystals,
       crystalsTotal: p.crystalsTotal,
-      weapon,
+      weapon: this.player.weapon,
       heat: 0,
       overheated: false,
       speedLeft: 0,
       rapidLeft: 0,
       shield: false,
     });
-    if (snap) this.refreshPowerHud();
+    if (snap || riftSnap) this.refreshPowerHud();
+    if (riftSnap) this.showToast(this.riftBack === 1 ? 'Faille harmonisée' : 'De retour dans la salle', this.riftBack === 1 ? 'good' : 'info');
 
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, this.onPostUpdate, this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.onResize, this);
@@ -440,6 +459,79 @@ export class PlatformScene extends Phaser.Scene {
     if (this.levelEvents && s.events) this.levelEvents.restore(s.events);
     if (this.npc) this.npc.restore(s.castaway);
     for (let i = 0; i < this.trunks.length; i++) this.trunks[i].restore(s.trunks[i] === true);
+  }
+
+  /** Retour de faille : même salle, même endroit, vies et progrès gardés. Pas un « Réessayer le combat ». */
+  private restoreRift(s: RiftSnapshot, cleared: boolean): void {
+    this.riftBack = cleared ? 1 : 0;
+    this.elapsedMs = s.timeMs;
+    this.crystals = s.crystals;
+    this.enemiesKilled = s.enemiesKilled;
+    this.speedLeftMs = s.speedLeftMs;
+    this.rapidLeftMs = s.rapidLeftMs;
+    this.player.shield = s.shield;
+    this.applyPowers();
+    this.items.restore(s.items);
+    this.enemies.restore(s.deadEnemies);
+    if (this.levelEvents && s.events) this.levelEvents.restore(s.events);
+    if (this.npc) this.npc.restore(s.castaway);
+    for (let i = 0; i < this.trunks.length; i++) this.trunks[i].restore(s.trunks[i] === true);
+    this.hearts = Math.max(1, Math.min(this.maxHearts, Math.round(s.hearts)));
+    this.lives = Math.max(1, Math.round(s.lives));
+    this.respawnX = s.respawnX;
+    this.respawnFeetY = s.respawnY;
+    if (s.weapon !== this.player.weapon) {
+      this.player.setWeapon(s.weapon);
+      this.gun.setWeapon(s.weapon);
+    }
+    this.player.facing = s.facing;
+    this.player.teleport(s.x, s.y);
+    this.player.invulnMs = 500;
+  }
+
+  /** État noté au moment d'entrer dans le vortex (une fois, hors de la boucle de jeu). */
+  private noteRift(): RiftSnapshot {
+    const s = this.session;
+    return {
+      level: s ? s.level.id : '',
+      timeMs: this.elapsedMs,
+      crystals: this.crystals,
+      enemiesKilled: this.enemiesKilled,
+      speedLeftMs: this.speedLeftMs,
+      rapidLeftMs: this.rapidLeftMs,
+      shield: this.player.shield,
+      items: this.items.snapshot(),
+      deadEnemies: this.enemies.snapshot(),
+      events: this.levelEvents ? this.levelEvents.snapshot() : null,
+      castaway: this.npc ? this.npc.snapshot() : false,
+      trunks: this.trunks.map((t) => t.state !== 'stand'),
+      x: this.player.x,
+      y: this.player.feetY,
+      hearts: this.hearts,
+      lives: this.lives,
+      weapon: this.player.weapon,
+      facing: this.player.facing,
+      respawnX: this.respawnX,
+      respawnY: this.respawnFeetY,
+    };
+  }
+
+  /** Haut sur le vortex : fige la partie et demande à l'interface le voyage. */
+  private tryRift(): boolean {
+    if (this.riftLeft || this.state !== 'play' || !this.vortex || !this.vortex.enter(this.player)) return false;
+    const s = this.session;
+    if (!s || !s.hooks.onRift) return false;
+    const rift = riftForStage(s.stage.id);
+    if (!rift || !rift.placed) return false;
+    this.riftLeft = true;
+    this.state = 'over';
+    const trip = { id: rift.id, snapshot: this.noteRift() };
+    try {
+      s.hooks.onRift(trip);
+    } catch (err) {
+      reportError('onRift', err);
+    }
+    return true;
   }
 
   /** Note l'état de la partie (point de contrôle d'avant l'arène atteint, ou combat commencé sans lui). */
@@ -547,9 +639,18 @@ export class PlatformScene extends Phaser.Scene {
         this.snapCamera();
         if (this.glyphs) this.glyphs.wake(a.x, a.feetY - PLAYER_HALF_H);
         if (this.levelEvents) this.levelEvents.trigger('door');
+      } else if (!npcHolds) {
+        this.tryRift();
       }
     }
     this.doors.update(dtMs, !npcHolds);
+    if (this.vortex && this.state === 'play') {
+      this.vortex.update(dtMs, p, true);
+      const say = this.vortex.takeRadio();
+      if (say) radio(s, say);
+    } else if (this.vortex) {
+      this.vortex.update(dtMs, p, false);
+    }
     // Radio : après les portes (une fenêtre franchie par une porte ou une téléportation est sautée).
     if (this.levelEvents) this.levelEvents.update(p.x);
     if (this.glyphs) this.glyphs.update(p.x, p.feetY - PLAYER_HALF_H);
@@ -1278,6 +1379,10 @@ export class PlatformScene extends Phaser.Scene {
         reportError('destroyLevelArt', err);
       }
       this.levelArt = false;
+    }
+    if (this.vortex) {
+      this.vortex.destroy();
+      this.vortex = null;
     }
     this.mushrooms = null;
     this.trunks = [];

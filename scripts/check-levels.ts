@@ -284,11 +284,18 @@ function checkLevel(id: string, level: LevelData): Report {
     if (!g.solid(d.col, d.row + 1)) warn(`décor (${d.col}, ${d.row}) : ne repose pas sur un sol plein`);
   }
   const glyphs = find('G');
-  if (glyphs.length > 0) {
-    const enclosed = enclosedCells(g);
+  const vortices = find('V');
+  const enclosed = glyphs.length > 0 || vortices.length > 0 ? enclosedCells(g) : null;
+  if (glyphs.length > 0 && enclosed) {
     for (const p of glyphs) {
       if (!enclosed[g.key(p.col, p.row)]) err(`glyphe (${p.col}, ${p.row}) hors d'une salle close : il serait dessiné sur le ciel`);
     }
+  }
+  // Vortex 'V' : case vide (déjà hors de SOLID_CHARS), sur un sol, dans une salle. Il ne bloque pas le graphe.
+  for (const p of vortices) {
+    const at = `vortex (${p.col}, ${p.row})`;
+    if (!g.standable(p.col, p.row)) err(`${at} : pas de sol, ou pas la place de s'y tenir`);
+    if (enclosed && !enclosed[g.key(p.col, p.row)]) err(`${at} hors d'une salle close`);
   }
 
   // ---- Portes : par paires, posées sur un sol, 2 cases de haut (la case et celle du dessus, vide)
@@ -440,6 +447,7 @@ function checkLevel(id: string, level: LevelData): Report {
   );
   rep.notes.push(`sortie : ${E ? exitName : 'aucune, la défaite du gardien termine le niveau'}`);
   if (glyphs.length > 0) rep.notes.push(`glyphes : ${glyphs.length} (${glyphs.map((p) => `${p.col},${p.row}`).join(' ')})`);
+  if (vortices.length > 0) rep.notes.push(`vortex : ${vortices.map((p) => `${p.col},${p.row}`).join(' ')}`);
   const mushrooms = find('o');
   if (mushrooms.length > 0) rep.notes.push(`champignons : ${mushrooms.length} (${mushrooms.map((p) => `${p.col},${p.row}`).join(' ')})`);
   if (doors.length > 0) {

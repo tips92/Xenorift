@@ -267,6 +267,12 @@ export const RADIO = {
     scrambled: true,
     text: `Brouillage… Vise son cœur quand il s’ouvre${NB}!`,
   },
+  'rift-j1': {
+    speaker: 'luma',
+    mood: 'worried',
+    text: `Une faille du Vide. Haut pour entrer. Tiens trois vagues${NB}: la bombe libère le vide.`,
+    keys: `Une faille du Vide. ↑ pour entrer. Tiens trois vagues${NB}: la bombe libère le vide.`,
+  },
 } as const satisfies Record<string, RadioMessage>;
 
 /** Marque de story.seen posée à la réussite de TUTORIAL_STAGE : les messages `tutorial` se taisent ensuite. */
@@ -332,6 +338,17 @@ export interface CutsceneInfo {
 export const CUTSCENES: Readonly<Record<CutsceneId, CutsceneInfo>> = {
   prologue: { title: 'Prologue', perWorld: false },
   liberation: { title: 'Libération du gardien', perWorld: true },
+  // Vision avant de retenter une faille (à la place d'une vidéo : aucun SDK). Pas dans WORLDS.
+  rift: { title: 'Écho du Vide', perWorld: false },
+};
+
+/** Répliques de l'écho du Vide (cinématique `rift`, ~8 s). */
+export const RIFT_ECHO_LINES = {
+  hold: luma(
+    'worried',
+    `Le Vide reprend la faille. La bombe n’a pas fini${NB}: tiens encore trois vagues.`,
+  ),
+  back: luma('neutral', 'Je te renvoie au même endroit. Les cœurs repartent au plein.'),
 };
 
 /** Marque de story.seen d'une cinématique jouée pour une étape du monde `world` : 'prologue', 'liberation-1'… */

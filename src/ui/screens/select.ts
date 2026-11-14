@@ -1,4 +1,5 @@
-import { getCrystals, getSave, isUnlocked, nextToPlay } from '../../core/save';
+import { riftForStage } from '../../core/rifts';
+import { getCrystals, getSave, isRiftCleared, isUnlocked, nextToPlay } from '../../core/save';
 import { STAGES } from '../../core/stages';
 import type { SaveData, StageDef } from '../../core/types';
 import { WORLDS } from '../../core/worlds';
@@ -61,6 +62,14 @@ function stageCard(ctx: UiCtx, a: SelectActions, save: Readonly<SaveData>, stage
 
   const art = div('card-art');
   art.innerHTML = stageIcon(stage);
+  const rift = riftForStage(stage.id);
+  if (rift && isRiftCleared(rift.id)) {
+    const mark = div('card-rift');
+    mark.innerHTML = ICONS.rift;
+    mark.title = 'Faille harmonisée';
+    c.append(mark);
+    c.setAttribute('aria-label', `${c.getAttribute('aria-label')}, faille harmonisée`);
+  }
 
   const title = el('h3', 'card-title', stage.title);
   const sub = el('p', 'card-sub', stage.subtitle);

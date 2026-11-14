@@ -3,6 +3,7 @@ import { type Bubble, createBubble } from './bubble';
 import { type CutsceneEvent, type CutsceneScript, type View, VH } from './scenes/common';
 import { createLiberation } from './scenes/liberation';
 import { createPrologue } from './scenes/prologue';
+import { createRiftEcho } from './scenes/riftEcho';
 import { ensureStoryStyles } from './styles';
 import type { CutsceneAudio, CutsceneHandle, CutsceneId, LiberationParams, Mood, Speaker } from './types';
 
@@ -45,6 +46,7 @@ const SKIP_ICON =
   'stroke-linecap="round" stroke-linejoin="round" d="M5 6l6 6-6 6M13 6l6 6-6 6"/></svg>';
 
 function createScript(id: CutsceneId, params: LiberationParams | undefined): CutsceneScript {
+  if (id === 'rift') return createRiftEcho();
   return id === 'liberation' ? createLiberation(params ?? DEFAULT_LIBERATION) : createPrologue();
 }
 

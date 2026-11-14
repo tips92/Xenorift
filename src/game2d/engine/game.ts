@@ -274,6 +274,9 @@ function dropGame(): void {
   }
   // Retiré tout de suite : le nouveau canvas prend sa place sans attendre la frame suivante.
   if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+  // L'aide DEV pointe encore l'ancienne scène si SHUTDOWN n'a pas tourné (contexte lâché pour une faille).
+  const w = window as unknown as { __xr2d?: unknown };
+  delete w.__xr2d;
 }
 
 function ensureGame(container: HTMLElement): Phaser.Game {
@@ -373,6 +376,27 @@ export function resumeSession(session: Session): void {
   }
 }
 
+/**
+ * Lâche le contexte WebGL de Phaser (faille 3D ensuite : un seul contexte à la fois).
+ * À appeler une fois la session relâchée. La prochaine partie plateforme recrée le jeu.
+ */
+export function releasePlatformContext(): void {
+  if (current) {
+    current.alive = false;
+    releaseSession(current);
+  }
+  const g = game;
+  if (g) {
+    try {
+      const gl = webglRenderer(g)?.gl;
+      gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    } catch {
+      // Contexte déjà inutilisable.
+    }
+  }
+  dropGame();
+}
+
 /** Libère le jeu : arrête la scène, masque le canvas, endort la boucle. Sans effet si la session a été remplacée. */
 export function releaseSession(session: Session): void {
   if (current !== session) return;
@@ -383,8 +407,8 @@ export function releaseSession(session: Session): void {
   setCanvasVisible(false);
   const g = game;
   const stop = (): void => {
-    // Une nouvelle session a pu démarrer entre-temps : elle a déjà relancé la scène.
-    if (current) return;
+    // Une nouvelle session a pu démarrer, ou le contexte a été lâché (voyage vers une faille).
+    if (current || game !== g) return;
     const scene = getScene();
     if (scene) {
       const status = scene.sys.settings.status;

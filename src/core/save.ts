@@ -29,6 +29,7 @@ import {
   UPGRADE_STATS,
 } from './hangar.ts';
 import type { HangarItemId, ItemState, PurchaseResult } from './hangar';
+import { RIFT_IDS, isRiftId, type RiftId } from './rifts.ts';
 import { STAGES } from './stages.ts';
 import { TUTORIAL_MARK, TUTORIAL_STAGE } from './story.ts';
 import { isWeaponId, WEAPON_IDS } from './weapons.ts';
@@ -84,6 +85,7 @@ function defaults(): SaveData {
     crew: [],
     blueprints: [],
     story: { seen: [] },
+    rifts: [],
   };
 }
 
@@ -168,7 +170,14 @@ function readV2(src: Record<string, unknown>): SaveData {
   out.crew = CREW_IDS.filter((id) => crew.includes(id)) as CrewId[];
   const plans = Array.isArray(src.blueprints) ? (src.blueprints as unknown[]) : [];
   out.blueprints = WEAPON_IDS.filter((id) => id !== 'laser' && plans.includes(id));
+  out.rifts = readRifts(src.rifts);
   return out;
+}
+
+/** Failles harmonisées : identifiants connus, dans l'ordre de RIFT_IDS. Absent ou abîmé : aucune. */
+function readRifts(raw: unknown): RiftId[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return RIFT_IDS.filter((id) => list.includes(id));
 }
 
 /**
@@ -254,6 +263,18 @@ export function updateSettings(patch: Partial<Settings>): Readonly<Settings> {
 }
 
 // ---------------------------------------------------------------- Progression (par identifiants d'étape)
+
+/** Faille harmonisée (bonus, à part de la campagne). */
+export function isRiftCleared(id: string): boolean {
+  return data.rifts.includes(id);
+}
+
+/** Marque une faille harmonisée. Déjà faite, ou identifiant inconnu : rien. */
+export function clearRift(id: string): void {
+  if (!isRiftId(id) || data.rifts.includes(id)) return;
+  data.rifts = RIFT_IDS.filter((known) => known === id || data.rifts.includes(known));
+  persist();
+}
 
 /** Étape réussie au moins une fois (son id figure dans les records). */
 export function isCleared(id: string): boolean {

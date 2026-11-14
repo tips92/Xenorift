@@ -114,6 +114,7 @@ export const LEGEND = {
   N: "naufragé du monde (Tess dans la Jungle), au plus un, posé sur le sol, sa capsule sur les 2 cases vides à sa gauche ; Haut près de lui : il parle, LUMA le téléporte à bord (il rejoint l'équipage à la réussite : récompense 'crew' de l'étape) ; une porte 'D' voisine (à 1 colonne, même ligne) doit être le seul passage vers la sortie : l'appui Haut devant elle le secourt d'abord",
   '*': 'décor sans collision',
   G: "glyphe astréen : décor gravé sur le mur du fond d'une salle close (case vide), qui s'allume quand Kaï approche",
+  V: "vortex du Vide (case vide, sans collision, sur un sol, dans une salle close) : Haut dessus envoie Kaï dans la faille du monde, puis le ramène ici",
 } as const;
 
 export type LegendChar = keyof typeof LEGEND;

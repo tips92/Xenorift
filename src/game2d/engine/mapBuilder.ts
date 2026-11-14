@@ -76,6 +76,8 @@ export interface ParsedLevel {
   mushrooms: GridPos[];
   /** Naufragé 'N' (le premier lu ; engine/npc.ts), null sans naufragé. */
   castaway: GridPos | null;
+  /** Vortex 'V' (cases vides, engine/vortex.ts), par colonne puis par ligne. */
+  vortices: GridPos[];
   /** Cristaux posés + blocs « ? ». */
   crystalsTotal: number;
 }
@@ -132,6 +134,7 @@ export function parseLevel(level: LevelData): ParsedLevel {
   let exit: ExitSpot | null = null;
   let boss: GridPos | null = null;
   let castaway: GridPos | null = null;
+  const vortices: GridPos[] = [];
   let bonusCrystals = 0;
 
   for (let row = 0; row < rows; row++) {
@@ -241,6 +244,9 @@ export function parseLevel(level: LevelData): ParsedLevel {
         case 'N':
           if (!castaway) castaway = { col, row };
           break;
+        case 'V':
+          vortices.push({ col, row });
+          break;
         default:
           break;
       }
@@ -258,6 +264,7 @@ export function parseLevel(level: LevelData): ParsedLevel {
   doors.sort((a, b) => a.col - b.col || a.row - b.row);
   bounds.sort((a, b) => a.col - b.col);
   glyphs.sort((a, b) => a.col - b.col || a.row - b.row);
+  vortices.sort((a, b) => a.col - b.col || a.row - b.row);
   mushrooms.sort((a, b) => a.col - b.col || a.row - b.row);
   const arena: ArenaSpot | null = bounds.length >= 2 ? { col0: bounds[0].col, col1: bounds[1].col, row: bounds[0].row } : null;
 
@@ -283,6 +290,7 @@ export function parseLevel(level: LevelData): ParsedLevel {
     glyphs,
     mushrooms,
     castaway,
+    vortices,
     crystalsTotal: crystals.length + bonusCrystals,
   };
 }

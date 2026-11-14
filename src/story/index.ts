@@ -6,5 +6,5 @@ export { playCutscene, DEFAULT_LIBERATION, type CutsceneOptions, type CutscenePl
 export { createBubble, typingDuration, BUBBLE_CPS, BIP_GAP_S, type Bubble, type BubbleOptions } from './bubble';
 export { drawPortrait, renderPortraitStrip, PORTRAIT_SIZE, PORTRAIT_FRAME, PORTRAIT_FRAMES, SPEAKER_NAME } from './portraits';
 export { ensureStoryStyles } from './styles';
-export { PROLOGUE_LINES, LIBERATION_LINES, LIBERATION_BANNERS } from '../core/story';
+export { PROLOGUE_LINES, LIBERATION_LINES, LIBERATION_BANNERS, RIFT_ECHO_LINES } from '../core/story';
 export type { Line } from './scenes/common';
