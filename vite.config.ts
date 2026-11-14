@@ -32,7 +32,16 @@ export default defineConfig({
   // Chemins relatifs : nécessaire pour la WebView Capacitor (Android / iOS).
   base: './',
   plugins: [serveKaiGlb()],
-  server: { port: 5173, strictPort: true },
+  server: {
+    port: 5173,
+    strictPort: true,
+    // Les copies de travail (.claude/worktrees) et dist/ sont réécrites par d'autres
+    // builds. Sans ça, Vite recharge la page en boucle et le navigateur n'atteint
+    // jamais DOMContentLoaded.
+    watch: {
+      ignored: ['**/.claude/**', '**/dist/**'],
+    },
+  },
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 2000,
