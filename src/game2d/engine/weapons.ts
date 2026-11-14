@@ -1,3 +1,5 @@
+import { t } from '../../core/i18n/locale';
+import { UI } from '../../core/i18n/ui';
 import type { InputApi, WeaponId } from '../../core/types';
 import {
   createWeaponStats,
@@ -147,7 +149,7 @@ export class Gun {
       this.heat = 1;
       this.overheated = true;
       scene.playSfx('overheat');
-      scene.showToast('Surchauffe !', 'bad');
+      scene.showToast(t(UI.overheatToast), 'bad');
       if (this.onOverheat) this.onOverheat();
     }
   }

@@ -1,4 +1,6 @@
 import { BASE_HEARTS, BASE_SHIELDS, MAX_SHIP_GUN_LEVEL } from '../core/hangar';
+import { onLocale, t } from '../core/i18n/locale';
+import { UI } from '../core/i18n/ui';
 import { resolveShipGun, shipGunId } from '../core/shipGuns';
 import type { AudioApi, BossHud, FlightHud, HudApi, PlatformHud, PowerUpKind, RadioId, ToastKind, WeaponId } from '../core/types';
 import { WEAPONS, isWeaponId } from '../core/weapons';
@@ -126,9 +128,9 @@ function createHeatGauge(cls: string, svg: string, title?: string): HeatGauge {
     head.append(el('span', 'fl-label', title), icon(ICONS.boost, 'fl-turbo'));
     const body = div('heat-body');
     body.append(head, track);
-    box.append(ico, body, el('span', 'heat-label', 'SURCHAUFFE'));
+    box.append(ico, body, el('span', 'heat-label', t(UI.overheat)));
   } else {
-    box.append(ico, track, el('span', 'heat-label', 'SURCHAUFFE'));
+    box.append(ico, track, el('span', 'heat-label', t(UI.overheat)));
   }
   return { el: box, grad, ico, q: -1, level: '', over: false };
 }
@@ -232,7 +234,7 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
   const shieldBox = div('fl-shield');
   const pips = div('fl-pips');
   const pipEls: HTMLSpanElement[] = [];
-  shieldBox.append(el('span', 'fl-label', 'Bouclier'), pips);
+  shieldBox.append(el('span', 'fl-label', t(UI.shield)), pips);
   flLeft.append(shieldBox);
 
   const flCenter = div('fl-center');
@@ -250,7 +252,7 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
   const gatesEl = div('fl-gates');
   const gatesN = el('b', 'hud-num', '0');
   const gatesT = el('small', 'hud-total', '/0');
-  gatesEl.append(icon(ICONS.gate, 'ico ico-gate'), el('span', 'fl-gates-label', 'Portails'), gatesN, gatesT);
+  gatesEl.append(icon(ICONS.gate, 'ico ico-gate'), el('span', 'fl-gates-label', t(UI.gates)), gatesN, gatesT);
   flCenter.append(timer, gatesEl);
 
   // Cristaux ramassés pendant le vol (sous le bouclier).
@@ -261,7 +263,7 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
 
   // Énergie de la Comète, chauffée par le tir et le turbo (à gauche du bouton pause) : l'icône montre le canon
   // léger ou la mitrailleuse, le repère du turbo s'allume quand il pousse.
-  const flEnergy = createHeatGauge('fl-energy', shipGunIcon(0), 'Énergie');
+  const flEnergy = createHeatGauge('fl-energy', shipGunIcon(0), t(UI.energy));
 
   fl.append(prog, flLeft, flCryst, flCenter, flEnergy.el);
 
@@ -269,7 +271,7 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
 
   const pauseBtn = el('button', 'hud-pause');
   pauseBtn.type = 'button';
-  pauseBtn.setAttribute('aria-label', 'Pause');
+  pauseBtn.setAttribute('aria-label', t(UI.pause));
   pauseBtn.innerHTML = ICONS.pause;
   pauseBtn.addEventListener('click', (e) => {
     e.preventDefault();
@@ -751,6 +753,22 @@ export function createHud(uiRoot: HTMLElement, onPauseClick: () => void, audio: 
 
   resetPlatform();
   resetFlight();
+
+  onLocale(() => {
+    root.querySelectorAll('.heat-label').forEach((n) => {
+      n.textContent = t(UI.overheat);
+    });
+    const energy = root.querySelector('.fl-energy .fl-label');
+    if (energy) energy.textContent = t(UI.energy);
+    const shield = root.querySelector('.fl-shield .fl-label');
+    if (shield) shield.textContent = t(UI.shield);
+    const gates = root.querySelector('.fl-gates-label');
+    if (gates) gates.textContent = t(UI.gates);
+    pauseBtn.setAttribute('aria-label', t(UI.pause));
+    for (const slot of [speedSlot, rapidSlot, shieldSlot]) {
+      slot.el.setAttribute('aria-label', powerLabel(slot.el.dataset.kind as 'speed' | 'rapid' | 'shield'));
+    }
+  });
 
   return {
     showPlatform(): void {

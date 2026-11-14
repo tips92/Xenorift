@@ -1,4 +1,6 @@
 import type { TouchLayout, TouchOptions } from '../core/types';
+import { onLocale, t } from '../core/i18n/locale';
+import { UI } from '../core/i18n/ui';
 import { ICON_DOWN, ICON_JUMP, ICON_LASER, ICON_LEFT, ICON_RIGHT, ICON_SHOT, ICON_TURBO, ICON_UP } from './icons';
 import { readStick, type StickDir } from './stick';
 import { injectTouchStyles } from './styles';
@@ -176,8 +178,8 @@ export class TouchControls {
     this.arrowU = this.makeArrow('xr-dpad-u', ICON_UP);
     this.arrowD = this.makeArrow('xr-dpad-d', ICON_DOWN);
     this.dpadKnob = div('xr-dpad-knob', this.dpad);
-    this.fireBtn = this.makeButton(this.platformLayer, 'xr-fire', 'TIR', ICON_LASER, 'fire');
-    this.jumpBtn = this.makeButton(this.platformLayer, 'xr-jump', 'SAUT', ICON_JUMP, 'jump');
+    this.fireBtn = this.makeButton(this.platformLayer, 'xr-fire', t(UI.btnFire), ICON_LASER, 'fire');
+    this.jumpBtn = this.makeButton(this.platformLayer, 'xr-jump', t(UI.btnJump), ICON_JUMP, 'jump');
 
     // --- Disposition « vol »
     this.flightLayer = div('xr-tc-layer xr-tc-flight', root);
@@ -187,8 +189,14 @@ export class TouchControls {
     this.stickKnob = div('xr-stick-knob', this.stickBase);
     // Gros TIR sous le pouce droit, TURBO au-dessus (énergie partagée : voir game3d/shots.ts, ShipGun). TIR créé
     // après TURBO : entre les deux, là où leurs zones de toucher élargies se recouvrent, TIR l'emporte.
-    this.boostBtn = this.makeButton(this.flightLayer, 'xr-boost', 'TURBO', ICON_TURBO, 'boost');
-    this.shootBtn = this.makeButton(this.flightLayer, 'xr-shoot', 'TIR', ICON_SHOT, 'fire');
+    this.boostBtn = this.makeButton(this.flightLayer, 'xr-boost', t(UI.btnBoost), ICON_TURBO, 'boost');
+    this.shootBtn = this.makeButton(this.flightLayer, 'xr-shoot', t(UI.btnFire), ICON_SHOT, 'fire');
+    onLocale(() => {
+      this.relabel(this.fireBtn, t(UI.btnFire));
+      this.relabel(this.jumpBtn, t(UI.btnJump));
+      this.relabel(this.boostBtn, t(UI.btnBoost));
+      this.relabel(this.shootBtn, t(UI.btnFire));
+    });
 
     this.buttons = [this.fireBtn, this.jumpBtn, this.boostBtn, this.shootBtn];
 
@@ -331,6 +339,11 @@ export class TouchControls {
   };
 
   // ---------------------------------------------------------------- boutons
+
+  private relabel(b: HoldButton, label: string): void {
+    const span = b.el.querySelector('.xr-btn-label');
+    if (span) span.textContent = label;
+  }
 
   private makeButton(parent: HTMLElement, cls: string, label: string, svg: string, action: TouchPress): HoldButton {
     const el = div(`xr-ctl xr-glass xr-btn ${cls}`, parent);

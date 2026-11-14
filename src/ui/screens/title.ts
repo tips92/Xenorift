@@ -1,3 +1,5 @@
+import { t } from '../../core/i18n/locale';
+import { UI } from '../../core/i18n/ui';
 import { div, el } from '../dom';
 import { ICONS } from '../icons';
 import type { UiCtx } from '../services';
@@ -28,11 +30,11 @@ export function createTitleScreen(ctx: UiCtx, a: TitleActions): Screen {
   logo.append(glow, text);
 
   const bar = div('logo-bar');
-  const tagline = el('p', 'tagline', 'L’odyssée de Kaï');
+  const tagline = el('p', 'tagline', t(UI.tagline));
 
   const actions = div('title-actions');
   const play = button(ctx, {
-    label: 'Jouer',
+    label: t(UI.play),
     sub: a.playSub,
     icon: ICONS.play,
     cls: 'btn-primary btn-xl',
@@ -40,17 +42,17 @@ export function createTitleScreen(ctx: UiCtx, a: TitleActions): Screen {
   });
   const row = div('title-row');
   row.append(
-    button(ctx, { label: 'Niveaux', icon: ICONS.grid, onPress: a.levels }),
-    button(ctx, { label: 'Options', icon: ICONS.gear, onPress: a.options }),
+    button(ctx, { label: t(UI.levels), icon: ICONS.grid, onPress: a.levels }),
+    button(ctx, { label: t(UI.options), icon: ICONS.gear, onPress: a.options }),
   );
   actions.append(play, row);
 
   main.append(logo, bar, tagline, actions);
 
   const footer = div('title-footer');
-  footer.append(el('span', 'footer-tag', 'Démo v0.1'));
+  footer.append(el('span', 'footer-tag', t(UI.demo)));
   // Essais de gameplay (pages à part, preview/tests.html, aussi dans l'APK).
-  const tryArena = el('button', 'footer-try', 'Tests') as HTMLButtonElement;
+  const tryArena = el('button', 'footer-try', t(UI.tests)) as HTMLButtonElement;
   tryArena.type = 'button';
   tryArena.addEventListener('click', () => {
     location.href = 'preview/tests.html';

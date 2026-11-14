@@ -222,6 +222,10 @@ de commit. Identifiants du code en anglais. Suivre le style du fichier modifié 
   et créature selon le parcours), `creatures`, `planets`, `gates`, `asteroids` (PV `rockHp`, cristal
   `rockDropsCrystal`, `shotTest`, `aim`), `ship` (canons fusionnés selon le niveau, `muzzleWorld`, `fireFlash`),
   `effects`, `util.ts` (`Bin`, `segmentHitsSphere`), `rng.ts` (aléatoire à graine).
+- `src/rift` — arène 3D de survie d'une faille (`startRift`, chargé par `import()`). Trois vagues, bombe
+  d'harmonisation, Kaï en billboard (dessin 2D de l'arme équipée). `destroy` jette le renderer Three
+  (`discardRenderer`) : pas les deux contextes WebGL en même temps. Le 2D, lui, est lâché avant
+  (`releasePlatformContext` de `game2d`, qui détruit le `Phaser.Game`).
 - `preview/` — pages d'outil du serveur de dev (hors build et hors typecheck) : `/preview/art.html?theme=jungle|moon&view=world|sheet|weapons`
   (graphismes 2D, thème lu dans `THEME_IDS` ; la planche montre aussi Kaï assemblé avec son bras, les portes, la
   balise et son faisceau, le tileset et ses 25 tuiles ; `weapons` : les 4 bras
@@ -326,6 +330,13 @@ affichent « +N cristaux », la réserve, les récompenses NOUVELLES et la prime
 (`makeResults(…, settled)` : valeurs finales, réserve relue). Écran Niveaux : bouton « Hangar », sans départ,
 retour aux Niveaux sur la même page. JOUER lance `nextToPlay()` (première étape ouverte non réussie, sinon la
 dernière ; ligne dessous : `playSubtitle`), sans passer par le hangar.
+Faille (bonus, pas une étape) : dans une salle, Haut sur un vortex `V` appelle `onRift` avec un instantané
+opaque (`RiftSnapshot`, même mémoire que le combat plus l'endroit, les vies, les cœurs et l'arme). L'interface
+fond (`FADE_MS`), détruit Phaser, lance `src/rift`. Trois vagues tenues : `clearRift`, retour 2D au vortex
+(`riftReturn`). Défaite : écran « Le Vide se referme » — « Harmoniser encore » joue la cinématique `rift`
+(écho, à la place d'une vidéo : aucun SDK pub) puis relance l'arène, vies et cœurs au départ ; « Revenir dans
+la salle » restaure le 2D sans marquer la faille. Les vies du niveau ne changent pas. Catalogue : `core/rifts.ts`
+(une faille par monde ; seule `xena` est posée, dans j1).
 En 2D, une partie va de `enter` (arrivée, ≤ 0,7 s, commandes coupées ; seulement si `LevelData.start`) à `play`,
 puis `exit` (sortie, ≤ 2,62 s ; en j3, défaite du gardien, 2,5 s) et `over` ; `dead` entre une vie perdue et la
 réapparition. La radio (`HudApi.radio`)
@@ -352,7 +363,9 @@ et la barre de boss sont vidées par `hud.hide()` à la fin de l'étape ; la pau
 **Sauvegarde** (`core/save.ts`, localStorage `xeno-rift-save-v1` — clé gardée, la version est dans les données —,
 `{ version: 2, unlocked, best: { [stageId]: { score, stars } }, settings, loadout: { equipped, owned, skills:
 { doubleJump } }, crystals, upgrades: { [weaponId]: { damage, fireRate, range, cooling } }, ship: { gun, shield,
-boost }, extraHearts, crew, blueprints, story: { seen } }`). Les joueurs doivent garder leur progression.
+boost }, extraHearts, crew, blueprints, story: { seen }, rifts }`). Les joueurs doivent garder leur progression.
+`rifts` : failles harmonisées (`RiftId` de `core/rifts.ts`), absentes des anciennes sauvegardes → tableau vide,
+sans nouvelle version. `clearRift` / `isRiftCleared`. Ne débloque pas d'étape.
 `load()` : version 1
 → `readBase` (`unlocked`, `best`, `settings`, `loadout`, `story` gardés ; le reste par défaut, réserve 0), réécrite en
 version 2 au prochain enregistrement ; version 2 → `readV2` (chaque champ relu : niveaux bornés par
@@ -435,6 +448,9 @@ une récompense `crew` ; une porte `D` voisine (à 1 colonne, même ligne) doit 
 (check-levels le prouve avec la borne haute de `ReachGraph`, double saut compris) ; déclencheur radio `rescue` (sa
 réplique puis celle de LUMA, `interrupt`). Dans j2 : salle murée creusée dans le rocher, portes (126, 11) ↔ (134, 7)
 et (146, 7) ↔ (148, 11), Tess en (145, 7).
+Vortex `V` (case vide, sans collision, sur un sol, dans une salle close) : Haut dessus ouvre la faille du monde.
+j1 : colonne 135, ligne 5, salle aux cristaux derrière la porte (128, 5). check-levels le note et vérifie le sol
+et la salle ; il ne bloque pas le graphe.
 Portes `D` : par paires dans l'ordre (colonne, puis ligne), posées sur un sol, case du dessus vide ; check-levels
 vérifie la parité et le sol, et relie les deux portes d'une paire dans le graphe d'accessibilité. Les cases vides
 d'une salle close (aucun chemin vers le bord de la carte sans traverser de case pleine) reçoivent un mur de fond
@@ -484,6 +500,7 @@ dans `setSettings()` et application au démarrage dans `App.ts` ; les modes lise
 des commandes tactiles passent par `input.setTouchOptions` (`TouchOptions` ; crans `TOUCH_SIZE_STEPS` /
 `TOUCH_OPACITY_STEPS` de
 `input/touch.ts`, repris par l'aperçu du panneau) ; `load()` ne valide pas les valeurs : `touchStep` les borne.
+La langue est un réglage de plus (`Settings.language`, défaut `system`) : choix dans Options / Pause, résolution et catalogues dans `src/core/i18n/`, `?lang=`. Le détail, les familles de textes et l'audio (voix EVA non refaite) sont dans [docs/LANGUES.md](docs/LANGUES.md). Toute chaîne joueur ou tout audio linguistique nouveau met cette doc à jour dans le même changement.
 
 **Son / musique** : effet = `SfxId` + recette dans `RECIPES` (`audio/sfx.ts` ; monde 1 : `WORLD1_SFX_IDS` et
 `WORLD1_RECIPES` de `audio/world1Sfx.ts`, repris par `...WORLD1_RECIPES`) + son nom dans la liste `SFX`

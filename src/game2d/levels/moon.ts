@@ -193,7 +193,7 @@ const LANDING: Segment = [
 export const MOON: LevelData = {
   id: 'moon',
   theme: 'moon',
-  name: stageText('m1').title,
+  name: stageText('m1').title.fr,
   music: 'moon',
   map: joinSegments('moon', [
     START,

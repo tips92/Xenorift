@@ -1,3 +1,4 @@
+import { onLocale, t } from '../core/i18n/locale';
 import { getSave } from '../core/save';
 import { BUBBLE_CPS, RADIO, RADIO_TIMING, TUTORIAL_MARK, radioHoldS, type Mood, type RadioMessage, type Speaker } from '../core/story';
 import type { AudioApi, RadioId } from '../core/types';
@@ -137,7 +138,7 @@ export function createRadio(
     const m: RadioMessage = RADIO[id];
     current = m;
     currentId = id;
-    currentText = m.keys && !touchShown() ? m.keys : m.text;
+    currentText = t(m.keys && !touchShown() ? m.keys : m.text);
     currentHold = radioHoldS(currentText);
     played.push(id);
     setPhase('open');
@@ -223,6 +224,15 @@ export function createRadio(
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) sleep();
     else wake();
+  });
+
+  onLocale(() => {
+    const b = bubble;
+    if (!b || !current || !b.visible) return;
+    currentText = t(current.keys && !touchShown() ? current.keys : current.text);
+    currentHold = radioHoldS(currentText);
+    setPhase('typing');
+    void b.say(current.speaker, current.scrambled ? 'scrambled' : current.mood, currentText);
   });
 
   return {

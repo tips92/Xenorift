@@ -13,13 +13,19 @@ import {
   UPGRADE_STATS,
   upgradeItemId,
   weaponItemId,
+  type HangarItem,
   type HangarItemId,
   type HangarItemKind,
   type HangarTab,
   type ItemState,
 } from '../../core/hangar';
 import { equipWeapon, getCrystals, getItemState, getSave, playLoadout, purchase } from '../../core/save';
+import { getLocale, t as tr, tf } from '../../core/i18n/locale';
+import { statName, weaponName } from '../../core/i18n/names';
+import { UI } from '../../core/i18n/ui';
+import { stageTitle } from '../../core/story';
 import type { CrewId, StageDef, UpgradeStat, WeaponId } from '../../core/types';
+import { SHIP_GUN_MULS, SHIP_GUNS } from '../../core/shipGuns';
 import { WEAPON_IDS, WEAPONS } from '../../core/weapons';
 import { div, el, formatNumber, icon, play, prefersReducedMotion } from '../dom';
 import { departLabel } from '../flow';
@@ -27,6 +33,7 @@ import type { HangarPreview, PreviewView } from '../hangarPreview';
 import { ICONS, upgradeIcon, weaponIcon } from '../icons';
 import type { UiCtx } from '../services';
 import { button, screenHeader, screenRoot, type Screen } from './common';
+import { crystalsText } from './select';
 
 // Hangar de la Comète (docs/plans/03-hangar.md, points 4 et 7) : réserve de cristaux en haut, aperçu à
 // gauche (canvas chargé à la demande : hors du bundle de l'accueil), onglets Établi / Comète / Kaï et liste
@@ -101,6 +108,7 @@ interface WeaponStatus {
 
 /** Ligne d'effet : multiplicateur ou valeur actuels → suivants (niveau max : l'effet actuel). */
 function effectLine(st: ItemState): string {
+  if (getLocale() !== 'fr') return effectLineIntl(st);
   const it = st.item;
   const l = st.level;
   const arrow = (a: string, b: string): string => (st.maxed ? a : `${a} → ${b}`);
@@ -131,6 +139,7 @@ function effectLine(st: ItemState): string {
  * « Acheter la Pompe », « Installer le bouclier renforcé (4 boucliers) »…
  */
 function buyPhrase(st: ItemState): string {
+  if (getLocale() !== 'fr') return buyPhraseIntl(st);
   const it = st.item;
   const l = st.level;
   switch (it.kind) {
@@ -152,10 +161,84 @@ function buyPhrase(st: ItemState): string {
   }
 }
 
+function itemBlurb(it: HangarItem): string {
+  if (getLocale() === 'fr') return it.desc;
+  if (it.kind === 'upgrade' && it.stat) return tr(UI.statDesc[it.stat]);
+  if (it.weapon === 'machinegun' || it.weapon === 'shotgun' || it.weapon === 'rifle') return tr(UI.weaponDesc[it.weapon]);
+  if (it.kind === 'shipGun') return tr(UI.itemDesc.gun);
+  if (it.kind === 'shipShield') return tr(UI.itemDesc.shield);
+  if (it.kind === 'shipBoost') return tr(UI.itemDesc.boost);
+  if (it.kind === 'heart') return tr(UI.itemDesc.heart);
+  return it.desc;
+}
+
+function itemLabel(it: { kind: string; name: string; weapon: WeaponId | null; stat: UpgradeStat | null }): string {
+  if (getLocale() === 'fr') return it.name;
+  if (it.kind === 'weapon' && it.weapon) return weaponName(it.weapon);
+  if (it.kind === 'upgrade' && it.stat) return statName(it.stat);
+  if (it.kind === 'shipGun') return tr(UI.minigun);
+  if (it.kind === 'shipShield') return tr(UI.shieldItem);
+  if (it.kind === 'shipBoost') return tr(UI.boostItem);
+  if (it.kind === 'heart') return tr(UI.heartItem);
+  return it.name;
+}
+
+function effectLineIntl(st: ItemState): string {
+  const it = st.item;
+  const l = st.level;
+  const arrow = (a: string, b: string): string => (st.maxed ? a : `${a} → ${b}`);
+  switch (it.kind) {
+    case 'upgrade': {
+      if (!it.stat) return st.effect ?? st.nextEffect ?? '';
+      const m = UPGRADE_MULS[it.stat];
+      const name = statName(it.stat);
+      return st.maxed ? `${name} ${formatMul(m[l])}` : `${name} ${arrow(formatMul(m[l]), formatMul(m[l + 1] ?? m[l]))}`;
+    }
+    case 'shipBoost':
+      return tf(UI.boostLine, { span: arrow(formatMul(BOOST_MULS[l]), formatMul(BOOST_MULS[l + 1] ?? BOOST_MULS[l])) });
+    case 'shipShield':
+      return tf(UI.shieldsN, { n: arrow(String(maxShieldsFor(l)), String(maxShieldsFor(l + 1))) });
+    case 'heart':
+      return tf(UI.heartsN, { n: arrow(String(maxHeartsFor(l)), String(maxHeartsFor(l + 1))) });
+    case 'shipGun':
+      if (l === 0) {
+        return tf(UI.gunSwap, {
+          from: tr(UI.lightCannon),
+          to: tr(UI.minigun),
+          mul: formatMul(SHIP_GUNS.light.cooldownMs / SHIP_GUNS.machinegun.cooldownMs),
+        });
+      }
+      return tf(UI.gunMuls, { d: formatMul(SHIP_GUN_MULS.damage[l + 1]), r: formatMul(SHIP_GUN_MULS.fireRate[l + 1]) });
+    case 'weapon':
+      return it.weapon === 'machinegun' || it.weapon === 'shotgun' || it.weapon === 'rifle' ? tr(UI.weaponDesc[it.weapon]) : tr(UI.laserDesc);
+  }
+}
+
+function buyPhraseIntl(st: ItemState): string {
+  const it = st.item;
+  const l = st.level;
+  switch (it.kind) {
+    case 'weapon':
+      return tf(UI.buyWeapon, { name: it.weapon ? weaponName(it.weapon) : it.name });
+    case 'upgrade': {
+      const m = it.stat ? UPGRADE_MULS[it.stat][l + 1] : 0;
+      return tf(UI.upgradeStat, { stat: it.stat ? statName(it.stat) : it.name, mul: m ? formatMul(m) : '' });
+    }
+    case 'shipGun':
+      return l === 0 ? tr(UI.installMinigun) : tf(UI.upgradeMinigun, { effect: effectLineIntl(st) });
+    case 'shipShield':
+      return l === 0 ? tf(UI.installShield, { n: maxShieldsFor(1) }) : tf(UI.moreShield, { n: maxShieldsFor(l + 1) });
+    case 'shipBoost':
+      return (l === 0 ? tf(UI.installBoost, { mul: formatMul(BOOST_MULS[1]) }) : tf(UI.moreBoost, { mul: formatMul(BOOST_MULS[l + 1] ?? BOOST_MULS[l]) }));
+    case 'heart':
+      return tf(UI.buyHeart, { n: maxHeartsFor(l + 1) });
+  }
+}
+
 function pips(level: number, max: number): HTMLElement {
   const p = el('span', 'hg-pips');
   p.setAttribute('role', 'img');
-  p.setAttribute('aria-label', `Niveau ${level} sur ${max}`);
+  p.setAttribute('aria-label', tf(UI.levelOf, { level, max }));
   for (let i = 0; i < max; i++) p.append(el('span', `hg-pip${i < level ? ' is-on' : ''}`));
   return p;
 }
@@ -194,7 +277,7 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
   wallet.setAttribute('role', 'status');
   const walletN = el('span', 'hg-wallet-n');
   wallet.append(icon(ICONS.crystal, 'ico hg-wallet-ico'), walletN);
-  const header = screenHeader(ctx, 'Hangar', () => a.back(), wallet);
+  const header = screenHeader(ctx, tr(UI.hangar), () => a.back(), wallet);
 
   // ---------------------------------------------------------------- Aperçu (gauche) et départ
 
@@ -214,7 +297,7 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     side.append(
       button(ctx, {
         label: departLabel(next),
-        sub: next.title,
+        sub: stageTitle(next.id),
         icon: ICONS.launch,
         cls: 'btn-primary hg-depart',
         onPress: () => depart(),
@@ -227,7 +310,7 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
   const main = div('hg-main');
   const tabs = div('hg-tabs');
   tabs.setAttribute('role', 'tablist');
-  tabs.setAttribute('aria-label', 'Rayons du hangar');
+  tabs.setAttribute('aria-label', tr(UI.tabsAria));
   const list = div('screen-body hg-list');
   list.id = `hg-list-${uid}`;
   list.setAttribute('role', 'tabpanel');
@@ -238,7 +321,8 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     b.id = `hg-tab-${uid}-${t.id}`;
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-controls', list.id);
-    b.append(icon(TAB_ICONS[t.id], 'ico hg-tab-ico'), el('span', 'hg-tab-label', t.label));
+    const tabLabel = t.id === 'bench' ? tr(UI.tabBench) : t.id === 'ship' ? tr(UI.tabShip) : tr(UI.tabKai);
+    b.append(icon(TAB_ICONS[t.id], 'ico hg-tab-ico'), el('span', 'hg-tab-label', tabLabel));
     b.addEventListener('click', (e) => {
       e.preventDefault();
       selectTab(t.id, false);
@@ -283,7 +367,7 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
   confirm.setAttribute('role', 'alertdialog');
   confirm.setAttribute('aria-modal', 'true');
   const cBox = div('panel confirm-box hg-confirm-box');
-  const cTitle = el('h3', 'confirm-title', 'Confirmer l’achat');
+  const cTitle = el('h3', 'confirm-title', tr(UI.confirmBuy));
   cTitle.id = `hg-confirm-title-${uid}`;
   const cText = el('p', 'confirm-text');
   cText.id = `hg-confirm-text-${uid}`;
@@ -291,8 +375,8 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
   confirm.setAttribute('aria-describedby', cText.id);
   const cFunds = el('p', 'hg-confirm-funds');
   const cActions = div('confirm-actions');
-  const cOk = button(ctx, { label: 'Acheter', icon: ICONS.crystal, cls: 'btn-primary', silent: true, onPress: () => confirmBuy() });
-  cActions.append(button(ctx, { label: 'Annuler', onPress: () => closeConfirm(true) }), cOk);
+  const cOk = button(ctx, { label: tr(UI.yes), icon: ICONS.crystal, cls: 'btn-primary', silent: true, onPress: () => confirmBuy() });
+  cActions.append(button(ctx, { label: tr(UI.cancel), onPress: () => closeConfirm(true) }), cOk);
   cBox.append(icon(ICONS.crystal, 'ico confirm-ico hg-confirm-ico'), cTitle, cText, cFunds, cActions);
   confirm.append(cBox);
   // Fermée (transparente), la boîte reste hors de la navigation au clavier.
@@ -323,6 +407,12 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
   }
 
   function statusText(st: WeaponStatus): string {
+    if (getLocale() !== 'fr') {
+      if (st.equipped) return tr(UI.equipped);
+      if (st.owned) return tr(UI.owned);
+      if (st.usable) return tr(UI.trial);
+      return st.item?.lock === 'blueprint' ? tr(UI.missingPlan) : tr(UI.notOwned);
+    }
     if (st.equipped) return agree(st.weapon, 'Équipé');
     if (st.owned) return agree(st.weapon, 'Possédé');
     if (st.usable) return 'Essai (mode test)';
@@ -343,33 +433,33 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
   function updateWallet(): void {
     const n = getCrystals();
     walletN.textContent = formatNumber(n);
-    wallet.setAttribute('aria-label', `Réserve : ${n} ${n > 1 ? 'cristaux' : 'cristal'}`);
+    wallet.setAttribute('aria-label', tf(UI.reserveAria, { total: crystalsText(n) }));
   }
 
   function updateCaption(): void {
     capLine.replaceChildren();
     const lo = playLoadout(ctx.settings);
     if (tab === 'ship') {
-      capTitle.textContent = 'La Comète';
+      capTitle.textContent = tr(UI.theShip);
       const n = lo.ship.maxShields;
       capLine.append(
-        slots(ICONS.hex, 'hg-slots--shield', n, BASE_SHIELDS, MAX_SHIELDS_CAP, `${n} boucliers`),
-        el('span', 'hg-caption-sub', lo.ship.gunLevel > 0 ? 'Mitrailleuse' : 'Canon léger'),
+        slots(ICONS.hex, 'hg-slots--shield', n, BASE_SHIELDS, MAX_SHIELDS_CAP, tf(UI.shieldsN, { n })),
+        el('span', 'hg-caption-sub', lo.ship.gunLevel > 0 ? tr(UI.minigun) : tr(UI.lightCannon)),
       );
     } else if (tab === 'kai') {
       capTitle.textContent = 'Kaï';
       const n = lo.maxHearts;
       capLine.append(
-        slots(ICONS.heart, 'hg-slots--heart', n, BASE_HEARTS, MAX_HEARTS_CAP, `${n} cœurs`),
-        el('span', 'hg-caption-sub', WEAPONS[lo.equipped].name),
+        slots(ICONS.heart, 'hg-slots--heart', n, BASE_HEARTS, MAX_HEARTS_CAP, tf(UI.heartsN, { n })),
+        el('span', 'hg-caption-sub', weaponName(lo.equipped)),
       );
     } else {
       const st = weaponStatus(selected);
-      capTitle.textContent = WEAPONS[selected].name;
+      capTitle.textContent = weaponName(selected);
       capLine.append(el('span', `hg-caption-sub${st.equipped ? ' is-on' : ''}`, statusText(st)));
       if (getSave().crew.includes(BENCH_CREW)) {
         const crew = el('span', 'hg-caption-sub hg-crew');
-        crew.append(icon(ICONS.helmet, 'ico hg-crew-ico'), el('span', '', `${CREW[BENCH_CREW].name} à l’établi`));
+        crew.append(icon(ICONS.helmet, 'ico hg-crew-ico'), el('span', '', getLocale() === 'fr' ? `${CREW[BENCH_CREW].name} à l’établi` : tr(UI.tessBench)));
         capLine.append(crew);
       }
     }
@@ -412,8 +502,8 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     const n = div('hg-item-notes');
     // « Réserve insuffisante » : seulement le prix éteint (sinon toutes les cartes le répètent).
     if (st.lock && st.lock !== 'max' && st.lock !== 'funds') n.append(note(st.lockText, 'is-lock', ICONS.lock));
-    if (st.bypassed) n.append(note('Mode test', 'is-test', ICONS.unlock));
-    if (st.item.soon) n.append(note('Effet en vol : bientôt', 'is-soon', ICONS.clock));
+    if (st.bypassed) n.append(note(tr(UI.testMode), 'is-test', ICONS.unlock));
+    if (st.item.soon) n.append(note(tr(UI.soonEffect), 'is-soon', ICONS.clock));
     return n.childElementCount ? n : null;
   }
 
@@ -430,13 +520,13 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     row.append(icon(svg, `ico hg-item-ico hg-item-ico--${it.kind}`));
     const text = div('hg-item-text');
     const top = div('hg-item-top');
-    top.append(el('span', 'hg-item-name', it.name));
+    top.append(el('span', 'hg-item-name', itemLabel(it)));
     if (it.maxLevel > 1) top.append(pips(st.level, it.maxLevel));
     text.append(top, el('span', 'hg-item-line', effectLine(st)));
     const notes = notesOf(st);
     if (notes) text.append(notes);
     const actions = div('hg-actions');
-    actions.append(st.maxed ? el('span', 'hg-max', 'Max') : buyButton(st));
+    actions.append(st.maxed ? el('span', 'hg-max', tr(UI.maxed)) : buyButton(st));
     row.append(text, actions);
     return row;
   }
@@ -446,9 +536,9 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     b.type = 'button';
     b.dataset.equip = w;
     b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    b.setAttribute('aria-label', on ? `Arme équipée : ${WEAPONS[w].name}` :`Équiper ${WEAPONS[w].name}`);
+    b.setAttribute('aria-label', on ? tf(UI.equipAriaOn, { name: weaponName(w) }) : tf(UI.equipAriaOff, { name: weaponName(w) }));
     if (on) b.append(icon(ICONS.check, 'ico hg-equip-ico'));
-    b.append(el('span', '', on ? agree(w, 'Équipé') : 'Équiper'));
+    b.append(el('span', '', on ? (getLocale() === 'fr' ? agree(w, 'Équipé') : tr(UI.equipped)) : tr(UI.equip)));
     b.addEventListener('click', (e) => {
       e.preventDefault();
       onEquip(w, b);
@@ -465,8 +555,8 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     row.append(icon(weaponIcon(w), 'ico hg-item-ico hg-item-ico--weapon'));
     const text = div('hg-item-text');
     const top = div('hg-item-top');
-    top.append(el('span', 'hg-item-name', WEAPONS[w].name));
-    text.append(top, el('span', 'hg-item-line', st.item ? st.item.item.desc : LASER_DESC));
+    top.append(el('span', 'hg-item-name', weaponName(w)));
+    text.append(top, el('span', 'hg-item-line', st.item ? itemBlurb(st.item.item) : tr(UI.laserDesc)));
     const notes = !st.owned && st.item ? notesOf(st.item) : null;
     if (notes) text.append(notes);
     const actions = div('hg-actions');
@@ -502,7 +592,7 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
   function weaponPicker(): HTMLElement {
     const group = div('hg-weapons');
     group.setAttribute('role', 'radiogroup');
-    group.setAttribute('aria-label', 'Armes de Kaï');
+    group.setAttribute('aria-label', tr(UI.weaponsAria));
     for (const w of WEAPON_IDS) {
       const st = weaponStatus(w);
       const on = w === selected;
@@ -511,9 +601,9 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
       b.dataset.weapon = w;
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', on ? 'true' : 'false');
-      b.setAttribute('aria-label', `${WEAPONS[w].name} : ${statusText(st)}`);
+      b.setAttribute('aria-label', `${weaponName(w)} : ${statusText(st)}`);
       b.tabIndex = on ? 0 : -1;
-      b.append(icon(weaponIcon(w), 'ico hg-weapon-ico'), el('span', 'hg-weapon-name', WEAPONS[w].name), weaponState(st));
+      b.append(icon(weaponIcon(w), 'ico hg-weapon-ico'), el('span', 'hg-weapon-name', weaponName(w)), weaponState(st));
       b.addEventListener('click', (e) => {
         e.preventDefault();
         // La liste est reconstruite : le focus suit la nouvelle pastille (clavier).
@@ -558,14 +648,14 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     top.append(el('span', 'hg-item-name', name));
     text.append(top, el('span', 'hg-item-line', line));
     const actions = div('hg-actions');
-    actions.append(el('span', 'hg-tag', 'Bientôt'));
+    actions.append(el('span', 'hg-tag', tr(UI.soon)));
     row.append(text, actions);
     return row;
   }
 
   function renderTab(): void {
     if (tab === 'bench') {
-      list.append(weaponPicker(), weaponRow(selected), sectionTitle(`Améliorations · ${WEAPONS[selected].name}`));
+      list.append(weaponPicker(), weaponRow(selected), sectionTitle(tf(UI.upgradesOf, { name: weaponName(selected) })));
       for (const s of UPGRADE_STATS) list.append(itemRow(upgradeItemId(selected, s), upgradeIcon(s)));
     } else if (tab === 'ship') {
       list.append(
@@ -576,7 +666,7 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     } else {
       list.append(
         itemRow('kai.heart', KIND_ICONS.heart),
-        soonRow(ICONS.drone, 'Drone compagnon', 'Un petit allié qui tire avec Kaï.'),
+        soonRow(ICONS.drone, tr(UI.drone), tr(UI.droneDesc)),
       );
     }
     let i = 0;
@@ -698,7 +788,10 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     }
     ctx.audio.sfx('click', { pitch: 1.25 });
     ctx.audio.haptic(12);
-    if (r === 'session') say(`${agree(w, 'Équipé')} pour cette session (mode test)`, 'info', from.closest('.hg-item') ?? from);
+    if (r === 'session') {
+      const state = getLocale() === 'fr' ? agree(w, 'Équipé') : tr(UI.equipped);
+      say(tf(UI.sessionEquip, { state }), 'info', from.closest('.hg-item') ?? from);
+    }
     else hideMsg(false);
     refresh(`[data-equip="${w}"]`);
     preview?.pulse();
@@ -709,7 +802,7 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     const st = getItemState(id);
     if (!st) return;
     if (!st.canBuy || st.price === null) {
-      deny(from.closest('.hg-item') ?? from, st.lockText || 'Achat impossible');
+      deny(from.closest('.hg-item') ?? from, st.lockText || tr(UI.buyFail));
       return;
     }
     ctx.audio.sfx('click');
@@ -722,10 +815,13 @@ export function createHangarScreen(ctx: UiCtx, next: StageDef | null, a: HangarA
     const have = getCrystals();
     pending = { id: st.item.id, from };
     hideMsg(false);
-    cText.textContent = `${buyPhrase(st)} pour ${formatNumber(price)} cristaux\u00a0?`;
+    cText.textContent =
+      getLocale() === 'fr'
+        ? `${buyPhrase(st)} pour ${formatNumber(price)} cristaux\u00a0?`
+        : tf(price > 1 ? UI.buyAsk : UI.buyAskOne, { phrase: buyPhrase(st), price: formatNumber(price) });
     cFunds.replaceChildren(
       icon(ICONS.crystal, 'ico'),
-      el('span', '', `Réserve : ${formatNumber(have)} → ${formatNumber(Math.max(0, have - price))}`),
+      el('span', '', tf(UI.reserveShift, { from: formatNumber(have), to: formatNumber(Math.max(0, have - price)) })),
     );
     confirm.classList.add('is-open');
     confirm.inert = false;

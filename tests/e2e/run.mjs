@@ -138,6 +138,7 @@ function checkMeta(mod) {
     problems.push('meta.allowConsole doit être un tableau de RegExp');
   }
   if (m.prod && m.dev) problems.push('meta.prod et meta.dev sont incompatibles');
+  if (m.locale !== undefined && typeof m.locale !== 'string') problems.push('meta.locale doit être une chaîne BCP 47');
   return {
     meta: {
       title: String(m.title ?? ''),
@@ -147,6 +148,7 @@ function checkMeta(mod) {
       prod: !!m.prod,
       dev: !!m.dev,
       allowConsole: m.allowConsole ?? [],
+      locale: typeof m.locale === 'string' && m.locale ? m.locale : 'fr-FR',
     },
     problems,
   };
@@ -586,7 +588,13 @@ async function runScenario(sc, opts, rep) {
       chromeVersionShown = true;
       console.log(`  Chrome ${browser.version()} (sans fenêtre, ANGLE/D3D11), base ${base}`);
     }
-    const ctx = await browser.newContext({ viewport: sc.meta.viewport, deviceScaleFactor: 1, hasTouch: true });
+    const ctx = await browser.newContext({
+      viewport: sc.meta.viewport,
+      deviceScaleFactor: 1,
+      hasTouch: true,
+      // Français par défaut : les scénarios lisent des libellés français, quelle que soit la locale de Chrome.
+      locale: sc.meta.locale,
+    });
     ctx.on('console', (m) => {
       if (closing) return;
       const type = m.type();

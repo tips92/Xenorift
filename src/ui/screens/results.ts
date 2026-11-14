@@ -1,7 +1,9 @@
 import { CREW } from '../../core/hangar';
-import { SKILL_NAMES } from '../../core/story';
+import { getLocale, localeTag, t, tf } from '../../core/i18n/locale';
+import { skillName, weaponName } from '../../core/i18n/names';
+import { UI } from '../../core/i18n/ui';
+import { stageSubtitle, stageTitle } from '../../core/story';
 import type { CrewId, SkillId, StageDef, StageResult, StageReward } from '../../core/types';
-import { WEAPONS } from '../../core/weapons';
 import { clamp, div, el, formatDuration, formatNumber, icon } from '../dom';
 import { ICONS, weaponIcon } from '../icons';
 import type { UiCtx } from '../services';
@@ -42,17 +44,15 @@ function detailRow(list: HTMLElement, svg: string, label: string, value: string)
 }
 
 const SKILL_ICONS: Record<SkillId, string> = { doubleJump: ICONS.doublejump };
-const CREW_LABELS: Record<CrewId, string> = { tess: 'Équipière', mira: 'Équipière' };
-
 /** Ligne d'une récompense : « Compétence : double saut », « Équipière : Tess », « Plan : mitrailleur ». */
 function rewardLine(r: StageReward): { svg: string; label: string; value: string } {
   switch (r.kind) {
     case 'skill':
-      return { svg: SKILL_ICONS[r.id], label: 'Compétence', value: SKILL_NAMES[r.id] };
+      return { svg: SKILL_ICONS[r.id], label: t(UI.rewardSkill), value: skillName(r.id) };
     case 'crew':
-      return { svg: ICONS.helmet, label: CREW_LABELS[r.id], value: CREW[r.id].name };
+      return { svg: ICONS.helmet, label: t(UI.rewardCrew), value: CREW[r.id].name };
     case 'blueprint':
-      return { svg: weaponIcon(r.id), label: 'Plan', value: WEAPONS[r.id].name.toLocaleLowerCase('fr-FR') };
+      return { svg: weaponIcon(r.id), label: t(UI.rewardPlan), value: weaponName(r.id).toLocaleLowerCase(getLocale() === 'fr' ? 'fr-FR' : localeTag()) };
   }
 }
 
@@ -63,31 +63,31 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
 
   const head = div('results-head');
   head.append(
-    el('p', 'results-kicker', stage.subtitle),
-    el('h2', 'results-title', stage.kind === 'platform' ? 'NIVEAU TERMINÉ' : 'VOL RÉUSSI'),
-    el('p', 'results-stage', stage.title),
+    el('p', 'results-kicker', stageSubtitle(stage.world, stage.part)),
+    el('h2', 'results-title', stage.kind === 'platform' ? t(UI.levelClear) : t(UI.flightClear)),
+    el('p', 'results-stage', stageTitle(stage.id)),
   );
 
   // ---- Colonne score
   const main = div('results-main');
   const { row: starsEl, stars } = starRow(0, 'stars--lg');
-  starsEl.setAttribute('aria-label', `${result.stars} étoile${result.stars > 1 ? 's' : ''} sur 3`);
+  starsEl.setAttribute('aria-label', tf(result.stars > 1 ? UI.starsOf : UI.starOneOf, { n: result.stars, max: 3 }));
   const scoreBox = div('results-scorebox');
   const scoreEl = el('span', 'results-score', '0');
-  scoreBox.append(el('span', 'results-score-label', 'Score'), scoreEl);
+  scoreBox.append(el('span', 'results-score-label', t(UI.score)), scoreEl);
   const record = div('results-record');
   if (d.newRecord) {
     record.classList.add('is-new');
-    record.append(icon(ICONS.trophy, 'ico'), el('span', '', 'Nouveau record !'));
+    record.append(icon(ICONS.trophy, 'ico'), el('span', '', t(UI.newRecord)));
   } else {
-    record.append(el('span', '', `Record : ${formatNumber(d.best)}`));
+    record.append(el('span', '', tf(UI.recordLine, { n: formatNumber(d.best) })));
   }
   main.append(starsEl, scoreBox);
   // Prime du boss vaincu (comprise dans le score ; niveau 2D ou vol), sous le score : la colonne des détails reste à
   // 4 lignes.
   if (result.bossBonus) {
     const bonus = div('results-bonus');
-    bonus.append(icon(ICONS.trophy, 'ico'), el('span', 'results-bonus-label', 'Boss vaincu'), el('b', 'results-bonus-value', `+${formatNumber(result.bossBonus)}`));
+    bonus.append(icon(ICONS.trophy, 'ico'), el('span', 'results-bonus-label', t(UI.bossBeaten)), el('b', 'results-bonus-value', `+${formatNumber(result.bossBonus)}`));
     main.append(bonus);
   }
   main.append(record);
@@ -98,16 +98,16 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
   if (stage.kind === 'platform') {
     if (result.crystals !== undefined) {
       const total = result.crystalsTotal !== undefined ? `/${result.crystalsTotal}` : '';
-      detailRow(details, ICONS.crystal, 'Cristaux', `${result.crystals}${total}`);
+      detailRow(details, ICONS.crystal, t(UI.crystals), `${result.crystals}${total}`);
     }
-    if (result.enemies !== undefined) detailRow(details, ICONS.enemy, 'Ennemis', String(result.enemies));
-    detailRow(details, ICONS.clock, 'Temps', formatDuration(result.timeMs, false));
+    if (result.enemies !== undefined) detailRow(details, ICONS.enemy, t(UI.enemies), String(result.enemies));
+    detailRow(details, ICONS.clock, t(UI.time), formatDuration(result.timeMs, false));
   } else {
     if (result.gates !== undefined) {
       const total = result.gatesTotal !== undefined ? `/${result.gatesTotal}` : '';
-      detailRow(details, ICONS.gate, 'Portails', `${result.gates}${total}`);
+      detailRow(details, ICONS.gate, t(UI.gates), `${result.gates}${total}`);
     }
-    detailRow(details, ICONS.clock, 'Temps', formatDuration(result.timeMs, true));
+    detailRow(details, ICONS.clock, t(UI.time), formatDuration(result.timeMs, true));
   }
 
   // Réserve du hangar : gain de l'étape (« +N cristaux », s'il y en a) et total, qui défile avec le score. Au
@@ -117,9 +117,16 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
   const bankFrom = d.settled ? bankTo : Math.max(0, bankTo - gained);
   const showGain = !d.settled;
   const bank = div('detail detail--bank');
-  bank.setAttribute('aria-label', `Réserve : ${crystalsText(bankTo)}${showGain && gained > 0 ? `, dont ${crystalsText(gained)} de cette étape` : ''}`);
+  bank.setAttribute(
+    'aria-label',
+    getLocale() === 'fr'
+      ? `Réserve : ${crystalsText(bankTo)}${showGain && gained > 0 ? `, dont ${crystalsText(gained)} de cette étape` : ''}`
+      : showGain && gained > 0
+        ? tf(UI.reserveGainAria, { total: crystalsText(bankTo), gain: crystalsText(gained) })
+        : tf(UI.reserveAria, { total: crystalsText(bankTo) }),
+  );
   const bankN = el('b', 'detail-value', formatNumber(bankFrom));
-  bank.append(icon(ICONS.crystal, 'ico detail-ico'), el('span', 'detail-label', 'Réserve'));
+  bank.append(icon(ICONS.crystal, 'ico detail-ico'), el('span', 'detail-label', t(UI.reserve)));
   if (showGain && gained > 0) bank.append(el('span', 'detail-gain', `+${crystalsText(gained)}`));
   bank.append(bankN);
   details.append(bank);
@@ -135,9 +142,9 @@ export function createResultsScreen(ctx: UiCtx, d: ResultsData, a: ResultsAction
 
   const actions = div('results-actions');
   actions.append(
-    button(ctx, { label: 'Suivant', icon: ICONS.next, cls: 'btn-primary', onPress: a.next }),
-    button(ctx, { label: 'Rejouer', icon: ICONS.restart, onPress: a.replay }),
-    button(ctx, { label: 'Menu', icon: ICONS.home, onPress: a.menu }),
+    button(ctx, { label: t(UI.next), icon: ICONS.next, cls: 'btn-primary', onPress: a.next }),
+    button(ctx, { label: t(UI.replay), icon: ICONS.restart, onPress: a.replay }),
+    button(ctx, { label: t(UI.menu), icon: ICONS.home, onPress: a.menu }),
   );
   side.append(details);
 

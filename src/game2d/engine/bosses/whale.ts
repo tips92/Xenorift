@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { bossName } from '../../../core/i18n/names';
 import { BOSS_SHEETS, HEART_POSE, TENTACLE_POSE, WHALE_BOSS, WHALE_HEART, WHALE_POSE } from '../../art/draw/bosses';
 import type { BossBox } from '../../art/draw/bosses';
 import { DEPTH, JUMP_HEIGHT_TILES, PLAYER_BODY, TILE } from '../../constants';
@@ -166,7 +167,9 @@ function easeOut(u: number): number {
 
 export class Whale implements Boss {
   readonly id = 'whale' as const;
-  readonly name = 'Méduse-baleine';
+  get name(): string {
+    return bossName('whale');
+  }
   readonly maxLife = MAX_LIFE;
   readonly phases = PHASES;
   readonly defeatMs = DEFEAT_MS;

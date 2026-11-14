@@ -20,7 +20,9 @@
 
 import type { BossId, StagePart } from '../src/core/types.ts';
 import { BOSS_IDS, COURSE_IDS, MUSIC_IDS, THEME_IDS } from '../src/core/ids.ts';
-import { RADIO, RADIO_TIMING, radioHoldS, typingDuration } from '../src/core/story.ts';
+import { LOCALES } from '../src/core/i18n/locale.ts';
+import type { Locale } from '../src/core/i18n/locale.ts';
+import { LIBERATION_BANNERS, LIBERATION_LINES, PROLOGUE_LINES, RADIO, RADIO_TIMING, RIFT_ECHO_LINES, STAGE_TEXTS, radioHoldS, radioPlain, typingDuration } from '../src/core/story.ts';
 import type { RadioMessage } from '../src/core/story.ts';
 import { WORLDS } from '../src/core/worlds.ts';
 import { GRAVITY, LEVEL_ROWS, MUSHROOM_BOUNCE_HELD_TILES, RUN_SPEED, STARS_RATIO, TILE } from '../src/game2d/constants.ts';
@@ -284,11 +286,18 @@ function checkLevel(id: string, level: LevelData): Report {
     if (!g.solid(d.col, d.row + 1)) warn(`décor (${d.col}, ${d.row}) : ne repose pas sur un sol plein`);
   }
   const glyphs = find('G');
-  if (glyphs.length > 0) {
-    const enclosed = enclosedCells(g);
+  const enclosed = glyphs.length > 0 || find('V').length > 0 ? enclosedCells(g) : null;
+  if (glyphs.length > 0 && enclosed) {
     for (const p of glyphs) {
       if (!enclosed[g.key(p.col, p.row)]) err(`glyphe (${p.col}, ${p.row}) hors d'une salle close : il serait dessiné sur le ciel`);
     }
+  }
+  // Vortex 'V' : case vide (déjà hors de SOLID_CHARS), sur un sol, dans une salle. Il ne bloque pas le graphe.
+  const vortices = find('V');
+  for (const p of vortices) {
+    const at = `vortex (${p.col}, ${p.row})`;
+    if (!g.standable(p.col, p.row)) err(`${at} : pas de sol, ou pas la place de s'y tenir`);
+    if (enclosed && !enclosed[g.key(p.col, p.row)]) err(`${at} hors d'une salle close`);
   }
 
   // ---- Portes : par paires, posées sur un sol, 2 cases de haut (la case et celle du dessus, vide)
@@ -440,6 +449,7 @@ function checkLevel(id: string, level: LevelData): Report {
   );
   rep.notes.push(`sortie : ${E ? exitName : 'aucune, la défaite du gardien termine le niveau'}`);
   if (glyphs.length > 0) rep.notes.push(`glyphes : ${glyphs.length} (${glyphs.map((p) => `${p.col},${p.row}`).join(' ')})`);
+  if (vortices.length > 0) rep.notes.push(`vortex : ${vortices.map((p) => `${p.col},${p.row}`).join(' ')}`);
   const mushrooms = find('o');
   if (mushrooms.length > 0) rep.notes.push(`champignons : ${mushrooms.length} (${mushrooms.map((p) => `${p.col},${p.row}`).join(' ')})`);
   if (doors.length > 0) {
@@ -772,9 +782,17 @@ function checkRadio(
     const known = typeof r.id === 'string' && Object.prototype.hasOwnProperty.call(RADIO, r.id);
     if (!known) err(`${label} : message inconnu de core/story.ts`);
     const m: RadioMessage | null = known ? RADIO[r.id as keyof typeof RADIO] : null;
-    // Le plus long des deux textes (tactile, clavier) : la bulle doit le tenir, la simulation le prend.
-    const text = m ? (m.keys && m.keys.length > m.text.length ? m.keys : m.text) : '';
-    if (text.length > RADIO_MAX_CHARS) warn(`${label} : ${text.length} caractères (${RADIO_MAX_CHARS} au plus pour la bulle)`);
+    // Le plus long des deux textes (tactile, clavier), dans chaque langue : la bulle doit le tenir.
+    let text = '';
+    if (m) {
+      for (const locale of LOCALES) {
+        const body = radioPlain(m, locale);
+        if (locale === 'fr') text = body;
+        if (body.length > RADIO_MAX_CHARS) warn(`${label} [${locale}] : ${body.length} caractères (${RADIO_MAX_CHARS} au plus pour la bulle)`);
+        const bad = nbspMiss(body);
+        if (bad) err(`${label} [${locale}] : espace insécable manquant avant « ${bad} »`);
+      }
+    }
     if (seen.has(id)) err(`${label} : en double (chaque message joue une fois par partie)`);
     seen.add(id);
     if (r.cols !== undefined && r.on !== undefined) {
@@ -810,40 +828,51 @@ function checkRadio(
   // Arrivée : les messages du départ partent tout de suite, Kaï ne bouge qu'ensuite.
   const t0 = level.start !== undefined ? ARRIVAL_S : 0;
   const at = (col: number, colsPerS: number): number => (col <= P.col ? 0 : t0 + (col - P.col) / colsPerS);
-  const run = (colsPerS: number): RadioSim =>
+  const run = (colsPerS: number, locale: Locale): RadioSim =>
     simulateRadio(
-      arrivals.map((a) => ({ t: at(a.col, colsPerS), id: a.id, text: a.text, urgent: a.m.urgent === true, interrupt: a.m.interrupt === true })),
+      arrivals.map((a) => ({
+        t: at(a.col, colsPerS),
+        id: a.id,
+        text: radioPlain(a.m, locale),
+        urgent: a.m.urgent === true,
+        interrupt: a.m.interrupt === true,
+      })),
     );
-  // Rythme de référence (celui de l'estimation de durée) : aucun message chassé, tutoriel à l'heure.
+  // Rythme de référence (celui de l'estimation de durée) : aucun message chassé, tutoriel à l'heure. Chaque langue.
   const pace = RUN_SPEED / TILE / RUN_FACTOR;
-  const sim = run(pace);
-  for (const [lost, by] of sim.dropped) {
-    err(`radio « ${lost} » chassé de la file par « ${by} » (file de ${RADIO_TIMING.maxWaiting} ; simulation à ${f1(pace)} colonnes/s) : espacer les fenêtres`);
-  }
-  if (sim.cut.length > 0) notes.push(`radio simulée : coupés par un dialogue (« interrupt ») : ${sim.cut.join(', ')}`);
-  for (const a of arrivals) {
-    // Retard compté depuis que Kaï a quitté la fenêtre (passé le déclencheur), maître de ses mouvements : le conseil
-    // arrive après l'endroit où il sert. Une fenêtre peut donc s'ouvrir tôt, avant ce dont elle parle.
-    const open = sim.opens.get(a.id);
-    const d = open === undefined ? 0 : open - Math.max(at(a.end, pace), t0);
-    if (a.m.tutorial && d > RADIO_LATE_S) {
-      warn(`radio « ${a.id} » : ouvert ${f1(d)} s après le passage de Kaï (${RADIO_LATE_S} s au plus ; simulation à ${f1(pace)} colonnes/s) : espacer les fenêtres ou raccourcir les messages d'avant`);
+  let sim = run(pace, 'fr');
+  for (const locale of LOCALES) {
+    const simL = locale === 'fr' ? sim : run(pace, locale);
+    if (locale === 'fr') sim = simL;
+    const tag = locale === 'fr' ? '' : ` [${locale}]`;
+    for (const [lost, by] of simL.dropped) {
+      err(`radio « ${lost} » chassé de la file par « ${by} »${tag} (file de ${RADIO_TIMING.maxWaiting} ; simulation à ${f1(pace)} colonnes/s) : espacer les fenêtres`);
     }
-  }
-  for (const mu of mushrooms) {
-    if (mu.col <= P.col) continue;
-    const b0 = at(mu.col - 1, pace);
-    const b1 = at(mu.col, pace) + BOUNCE_AIR_S;
-    for (const [id, [open, close]] of sim.shown) {
-      if (open < b1 && close + BUBBLE_FADE_S > b0) {
-        warn(`radio « ${id} » affichée pendant le rebond sur le champignon (${mu.col}, ${mu.row}) (simulation à ${f1(pace)} colonnes/s) : au sommet, la bulle cache Kaï`);
+    for (const a of arrivals) {
+      // Retard compté depuis que Kaï a quitté la fenêtre (passé le déclencheur), maître de ses mouvements : le conseil
+      // arrive après l'endroit où il sert. Une fenêtre peut donc s'ouvrir tôt, avant ce dont elle parle.
+      const open = simL.opens.get(a.id);
+      const d = open === undefined ? 0 : open - Math.max(at(a.end, pace), t0);
+      if (a.m.tutorial && d > RADIO_LATE_S) {
+        warn(`radio « ${a.id} »${tag} : ouvert ${f1(d)} s après le passage de Kaï (${RADIO_LATE_S} s au plus ; simulation à ${f1(pace)} colonnes/s) : espacer les fenêtres ou raccourcir les messages d'avant`);
+      }
+    }
+    for (const mu of mushrooms) {
+      if (mu.col <= P.col) continue;
+      const b0 = at(mu.col - 1, pace);
+      const b1 = at(mu.col, pace) + BOUNCE_AIR_S;
+      for (const [id, [open, close]] of simL.shown) {
+        if (open < b1 && close + BUBBLE_FADE_S > b0) {
+          warn(`radio « ${id} »${tag} affichée pendant le rebond sur le champignon (${mu.col}, ${mu.row}) (simulation à ${f1(pace)} colonnes/s) : au sommet, la bulle cache Kaï`);
+        }
       }
     }
   }
+  if (sim.cut.length > 0) notes.push(`radio simulée : coupés par un dialogue (« interrupt ») : ${sim.cut.join(', ')}`);
   notes.push(`radio simulée à ${f1(pace)} colonnes/s : ${sim.maxWaiting} message(s) en attente au plus, retard maximal ${f1(sim.maxDelay)} s (« ${sim.maxDelayId} »)`);
   // Pleine course, pour information : qui file sans s'arrêter ne lit pas tout.
   const full = RUN_SPEED / TILE;
-  const fast = run(full);
+  const fast = run(full, 'fr');
   const lost = fast.dropped.map(([l]) => l);
   notes.push(
     `radio à pleine course (${f1(full)} colonnes/s) : ${lost.length > 0 ? `chassés : ${lost.join(', ')}` : 'aucun message chassé'}, ` +
@@ -1028,10 +1057,48 @@ function printMap(g: LevelGrid, reach: Uint8Array, beam: Pos | null, crystals: P
   rep.notes.push('\n' + lines.join('\n'));
 }
 
+/** Premier « : ; ! ? » sans espace insécable juste avant, ou ''. */
+function nbspMiss(text: string): string {
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c !== ':' && c !== ';' && c !== '!' && c !== '?') continue;
+    if (i === 0 || text[i - 1] !== '\u00A0') return c;
+  }
+  return '';
+}
+
+function checkLine(label: string, text: string, locale: Locale, errors: string[]): void {
+  if (text.length > RADIO_MAX_CHARS) errors.push(`${label} [${locale}] : ${text.length} caractères (${RADIO_MAX_CHARS} au plus)`);
+  const bad = nbspMiss(text);
+  if (bad) errors.push(`${label} [${locale}] : espace insécable manquant avant « ${bad} »`);
+}
+
+/** Répliques hors niveaux (cinématiques) : longueur et espace insécable, chaque langue. */
+function checkCutscenes(): string[] {
+  const errors: string[] = [];
+  const packs: { label: string; text: { readonly fr: string; readonly en: string; readonly de: string; readonly it: string; readonly es: string } }[] = [];
+  for (const [id, line] of Object.entries(PROLOGUE_LINES)) packs.push({ label: `prologue « ${id} »`, text: line.text });
+  for (const [id, line] of Object.entries(LIBERATION_LINES)) packs.push({ label: `libération « ${id} »`, text: line.text });
+  for (const [id, line] of Object.entries(RIFT_ECHO_LINES)) packs.push({ label: `écho « ${id} »`, text: line.text });
+  for (const [id, line] of Object.entries(LIBERATION_BANNERS)) packs.push({ label: `bandeau « ${id} »`, text: line });
+  for (const p of packs) for (const locale of LOCALES) checkLine(p.label, p.text[locale], locale, errors);
+  // Titres d'étapes : pas de limite radio, mais on signale une langue vide.
+  for (const [id, st] of Object.entries(STAGE_TEXTS)) {
+    for (const locale of LOCALES) if (!st.title[locale]) errors.push(`titre « ${id} » [${locale}] vide`);
+  }
+  return errors;
+}
+
 // ---------------------------------------------------------------- Programme
 
 let totalErrors = 0;
 let totalWarnings = 0;
+const cutErr = checkCutscenes();
+if (cutErr.length > 0) {
+  console.log('\n== textes (toutes les langues) ==');
+  for (const e of cutErr) console.log('  ✗ ' + e);
+  totalErrors += cutErr.length;
+}
 const ids = only.length > 0 ? only : [...LEVEL_IDS];
 for (const id of ids) {
   let level: LevelData;

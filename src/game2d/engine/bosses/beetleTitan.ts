@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { bossName } from '../../../core/i18n/names';
 import { BEETLE_POSE, BOSS_SHEETS, ROCK_POSE } from '../../art/draw/bosses';
 import type { BossBox, BossFrameBoxes, BossSheet } from '../../art/draw/bosses';
 import { DEPTH, TILE } from '../../constants';
@@ -114,7 +115,9 @@ function topOver(boxes: readonly BossBox[], lo: number, hi: number, top: number)
 
 export class BeetleTitan implements Boss {
   readonly id = 'beetleTitan' as const;
-  readonly name = 'Scarabée-titan';
+  get name(): string {
+    return bossName('beetleTitan');
+  }
   readonly maxLife = MAX_LIFE;
   readonly phases = 2;
   life = MAX_LIFE;

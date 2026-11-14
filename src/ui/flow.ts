@@ -1,6 +1,9 @@
 import { STORY_LEVEL } from '../audio/world1Tracks';
+import { localeTag, t, tf } from '../core/i18n/locale';
+import { guardianName, skillName, worldName } from '../core/i18n/names';
+import { UI } from '../core/i18n/ui';
 import { STAGES, nextStage, stageWorld } from '../core/stages';
-import { CUTSCENES, SKILL_NAMES, cutsceneMark } from '../core/story';
+import { CUTSCENES, cutsceneMark, stageTitle } from '../core/story';
 import type { CutsceneId, StageDef } from '../core/types';
 import type { LiberationParams } from '../story/types';
 
@@ -14,13 +17,13 @@ export function stageAfter(stage: StageDef): StageDef | null {
 
 /** Libellé du bouton de départ du hangar vers `next` : on atterrit au niveau 1, on y redescend ensuite, on décolle pour le vol. */
 export function departLabel(next: StageDef): string {
-  if (next.part === 4) return 'Décoller';
-  return next.part === 1 ? 'Atterrir' : 'Redescendre';
+  if (next.part === 4) return t(UI.takeoff);
+  return next.part === 1 ? t(UI.land) : t(UI.descend);
 }
 
 /** Ligne sous JOUER : « Nouvelle aventure » sur une sauvegarde neuve, sinon l'étape reprise. */
 export function playSubtitle(fresh: boolean, next: StageDef): string {
-  return fresh ? 'Nouvelle aventure' : `Continuer · ${next.title}`;
+  return fresh ? t(UI.newAdventure) : tf(UI.continueStage, { title: stageTitle(next.id) });
 }
 
 // ---------------------------------------------------------------- Cinématiques (choix 14)
@@ -42,15 +45,15 @@ function storyPlay(id: CutsceneId, stage: StageDef): StoryPlay {
   const play: { -readonly [K in keyof StoryPlay]: StoryPlay[K] } = {
     id,
     mark: cutsceneMark(id, stage.world),
-    title: CUTSCENES[id].title,
-    sub: `Monde ${stage.world} · ${id === 'liberation' ? w.guardian.name : w.name}`,
+    title: t(CUTSCENES[id].title),
+    sub: tf(UI.storyWorld, { w: stage.world, name: id === 'liberation' ? guardianName(w.theme) : worldName(w.theme) }),
   };
   if (id === 'liberation') {
     const skill = w.guardian.skill;
     play.params = {
       world: stage.world,
-      guardianName: w.guardian.name,
-      skillLabel: skill ? SKILL_NAMES[skill].toLocaleUpperCase('fr-FR') : '',
+      guardianName: guardianName(w.theme),
+      skillLabel: skill ? skillName(skill).toLocaleUpperCase(localeTag()) : '',
     };
   }
   return play;

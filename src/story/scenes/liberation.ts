@@ -1,6 +1,7 @@
 import { type Ctx, linGrad, rgba } from '../../game2d/art/util';
 import { GROUND_Y, jungleFar, jungleMid, jungleNear, jungleSky } from '../art/jungle';
 import { coreSprite, drawTentacles, tentacleSprite, WHALE_HEART, WHALE, whaleSprite } from '../art/whale';
+import { t } from '../../core/i18n/locale';
 import { LIBERATION_BANNERS, LIBERATION_LINES as L } from '../../core/story';
 import type { LiberationParams } from '../types';
 import {
@@ -173,10 +174,10 @@ export function createLiberation(params: LiberationParams): CutsceneScript {
   const events: CutsceneEvent[] = [
     { t: T.voidOut, cue: 'vide' },
     { t: T.heal, cue: 'heal' },
-    { t: T.heal + 0.3, announce: `${LIBERATION_BANNERS.guardian} : ${params.guardianName}` },
+    { t: T.heal + 0.3, announce: `${t(LIBERATION_BANNERS.guardian)} : ${params.guardianName}` },
     { t: T.core, cue: 'core' },
     { t: T.skill, cue: 'skill' },
-    { t: T.skill, announce: `${LIBERATION_BANNERS.skill} : ${params.skillLabel}` },
+    { t: T.skill, announce: `${t(LIBERATION_BANNERS.skill)} : ${params.skillLabel}` },
     { t: T.say, say: L.skill },
     { t: T.shipIn, cue: 'landing' },
     { t: T.takeoff, cue: 'takeoff' },
@@ -204,8 +205,8 @@ export function createLiberation(params: LiberationParams): CutsceneScript {
       sparkPink: glowSprite('#ff4fd8', '#ffe0fa', k, 8),
       halo: glowSprite('#3ff0ff', '#e0feff', k, 48),
       dust: glowSprite('#9dffe4', '#ffffff', k, 16),
-      banner1: banner(380, 70, LIBERATION_BANNERS.guardian, name, '#3ff0ff', k, 28),
-      banner2: banner(560, 104, LIBERATION_BANNERS.skill, skill, '#9dff3f', k, 44),
+      banner1: banner(380, 70, t(LIBERATION_BANNERS.guardian), name, '#3ff0ff', k, 28),
+      banner2: banner(560, 104, t(LIBERATION_BANNERS.skill), skill, '#9dff3f', k, 44),
       sweep: sweepSprite(k),
       ship: buildShip(k * 0.9),
       kai: buildKai(k),

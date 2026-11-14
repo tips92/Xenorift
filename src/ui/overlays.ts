@@ -1,3 +1,5 @@
+import { onLocale, t } from '../core/i18n/locale';
+import { UI } from '../core/i18n/ui';
 import { delay, div, el } from './dom';
 
 // Fondu au noir (transitions entre menus et jeu) et invite « Tourne ton téléphone ».
@@ -52,16 +54,20 @@ export interface RotatePrompt {
 export function createRotatePrompt(parent: HTMLElement): RotatePrompt {
   const node = div('rotate');
   node.setAttribute('role', 'alertdialog');
-  node.setAttribute('aria-label', 'Tourne ton téléphone');
+  node.setAttribute('aria-label', t(UI.rotateTitle));
   const art = div('rotate-art');
   const phone = div('rotate-phone');
   phone.append(div('rotate-phone-screen'), div('rotate-phone-notch'));
   art.append(div('rotate-arc'), phone);
-  node.append(
-    art,
-    el('p', 'rotate-title', 'Tourne ton téléphone'),
-    el('p', 'rotate-sub', 'Xeno Rift se joue en mode paysage.'),
-  );
+  const title = el('p', 'rotate-title', t(UI.rotateTitle));
+  const sub = el('p', 'rotate-sub', t(UI.rotateSub));
+  node.append(art, title, sub);
+  onLocale(() => {
+    const label = t(UI.rotateTitle);
+    node.setAttribute('aria-label', label);
+    title.textContent = label;
+    sub.textContent = t(UI.rotateSub);
+  });
   parent.append(node);
   return {
     setVisible(on: boolean): void {

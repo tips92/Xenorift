@@ -1,3 +1,5 @@
+import type { WeaponId } from '../../core/types';
+import { isWeaponId } from '../../core/weapons';
 import type { ItemsSnapshot } from './items';
 import type { EventsSnapshot } from './levelEvents';
 
@@ -25,6 +27,21 @@ export interface FightSnapshot {
   /** Naufragé secouru ; troncs abattus (dans l'ordre de LevelData.events). */
   readonly castaway: boolean;
   readonly trunks: readonly boolean[];
+}
+
+/**
+ * Aller-retour d'une faille : même mémoire que le combat, plus l'endroit exact, les vies, les cœurs et l'arme.
+ * Opaque pour l'interface (RiftTrip.snapshot). Au retour, la scène reprend cet état dans la salle du vortex.
+ */
+export interface RiftSnapshot extends FightSnapshot {
+  readonly x: number;
+  readonly y: number;
+  readonly hearts: number;
+  readonly lives: number;
+  readonly weapon: WeaponId;
+  readonly facing: 1 | -1;
+  readonly respawnX: number;
+  readonly respawnY: number;
 }
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -55,4 +72,16 @@ export function readFightSnapshot(raw: unknown, levelId: string): FightSnapshot 
     Array.isArray(s.trunks) &&
     (ev === null || (!!ev && Array.isArray(ev.windows) && Array.isArray(ev.events) && Array.isArray(ev.fired)));
   return ok ? (s as FightSnapshot) : null;
+}
+
+/** Instantané de faille s'il vient de ce niveau, sinon null (départ normal). */
+export function readRiftSnapshot(raw: unknown, levelId: string): RiftSnapshot | null {
+  const base = readFightSnapshot(raw, levelId);
+  if (!base) return null;
+  const s = raw as Partial<RiftSnapshot>;
+  if (!isNum(s.x) || !isNum(s.y) || !isNum(s.hearts) || !isNum(s.lives)) return null;
+  if (!isNum(s.respawnX) || !isNum(s.respawnY)) return null;
+  if (s.facing !== 1 && s.facing !== -1) return null;
+  if (!isWeaponId(s.weapon)) return null;
+  return s as RiftSnapshot;
 }

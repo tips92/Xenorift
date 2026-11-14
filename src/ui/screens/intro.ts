@@ -1,3 +1,6 @@
+import { stageHint, stageSubtitle, stageTitle } from '../../core/story';
+import { t } from '../../core/i18n/locale';
+import { UI } from '../../core/i18n/ui';
 import type { StageDef } from '../../core/types';
 import { div, el } from '../dom';
 import { stageIcon } from '../icons';
@@ -20,13 +23,13 @@ export function createIntroScreen(ctx: UiCtx, stage: StageDef, onSkip: () => voi
   card.append(
     artWrap,
     el('span', `badge badge--${stage.kind}`, kindLabel(stage)),
-    el('p', 'intro-sub', stage.subtitle),
-    el('h2', 'intro-title', stage.title),
+    el('p', 'intro-sub', stageSubtitle(stage.world, stage.part)),
+    el('h2', 'intro-title', stageTitle(stage.id)),
     div('intro-line'),
-    el('p', 'intro-hint', stage.hint),
+    el('p', 'intro-hint', stageHint(stage.id)),
   );
 
-  const skip = el('p', 'intro-skip', 'Touche l’écran pour passer');
+  const skip = el('p', 'intro-skip', t(UI.skipIntro));
   const timerBar = div('intro-timer');
 
   root.append(card, timerBar, skip);

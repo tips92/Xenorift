@@ -193,7 +193,7 @@ const ARENA: Segment = [
 export const JUNGLE2: LevelData = {
   id: 'jungle2',
   theme: 'jungle',
-  name: stageText('j2').title,
+  name: stageText('j2').title.fr,
   music: 'jungle',
   map: joinSegments('jungle2', [START, MUSHROOMS, SHADOW, PITS, CANOPY, TESS, SPORES, REVIEW, ARENA]),
   boss: 'beetleTitan',

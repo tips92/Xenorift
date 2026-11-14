@@ -1,3 +1,5 @@
+import { getLangPref, t, type LangPref } from '../../core/i18n/locale';
+import { UI } from '../../core/i18n/ui';
 import { resetProgress } from '../../core/save';
 import type { Settings } from '../../core/types';
 import { TOUCH_OPACITY_STEPS, TOUCH_SIZE_STEPS, touchStep } from '../../input/touch';
@@ -45,6 +47,31 @@ interface ChoiceDef {
 }
 
 /** Sélecteurs à 3 crans (en tête de la rubrique Commandes). */
+function toggleCopy(key: ToggleKey): { label: string; desc: string } {
+  switch (key) {
+    case 'music':
+      return { label: t(UI.music), desc: t(UI.musicDesc) };
+    case 'sfx':
+      return { label: t(UI.sfx), desc: t(UI.sfxDesc) };
+    case 'haptics':
+      return { label: t(UI.haptics), desc: t(UI.hapticsDesc) };
+    case 'unlockAll':
+      return { label: t(UI.unlockAll), desc: t(UI.unlockAllDesc) };
+    case 'leftHanded':
+      return { label: t(UI.leftHanded), desc: t(UI.leftHandedDesc) };
+    case 'tilt':
+      return { label: t(UI.tilt), desc: t(UI.tiltDesc) };
+  }
+}
+
+const LANG_FIXED: readonly { pref: LangPref; label: string }[] = [
+  { pref: 'fr', label: 'Français' },
+  { pref: 'en', label: 'English' },
+  { pref: 'de', label: 'Deutsch' },
+  { pref: 'it', label: 'Italiano' },
+  { pref: 'es', label: 'Español' },
+];
+
 const CHOICES: readonly ChoiceDef[] = [
   { key: 'touchSize', label: 'Taille des boutons', desc: 'Stick, Saut, Tir et Turbo', icon: ICONS.touchSize, steps: ['Petits', 'Moyens', 'Grands'] },
   { key: 'touchOpacity', label: 'Opacité', desc: 'Commandes plus ou moins visibles', icon: ICONS.touchOpacity, steps: ['Discrète', 'Moyenne', 'Opaque'] },
@@ -99,8 +126,8 @@ function section(title: string, cls: string): Section {
 
 export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null): OptionsPanel {
   const root = div('options');
-  const general = section('Général', 'general');
-  const controls = section('Commandes', 'controls');
+  const general = section(t(UI.general), 'general');
+  const controls = section(t(UI.controls), 'controls');
   const rows: ToggleRow[] = [];
   const choices: ChoiceRow[] = [];
   let tiltPending = false;
@@ -150,7 +177,7 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
     if (ctx.settings.tilt) {
       ctx.setSettings({ tilt: false });
       ctx.audio.sfx('click', { pitch: 0.9 });
-      setDesc(r, r.def.desc, '');
+      setDesc(r, toggleCopy(r.def.key).desc, '');
       sync();
       return;
     }
@@ -159,19 +186,19 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
     ctx.audio.sfx('click', { pitch: 1.15 });
     tiltPending = true;
     r.btn.classList.add('is-pending');
-    setDesc(r, 'Autorisation en cours…', '');
+    setDesc(r, t(UI.tiltPending), '');
     void ask.then((ok) => {
       tiltPending = false;
       r.btn.classList.remove('is-pending');
       if (ok) {
         ctx.setSettings({ tilt: true });
         ctx.input.calibrateTilt();
-        if (!disposed) setDesc(r, 'Activé : la position actuelle sert de neutre', 'ok');
+        if (!disposed) setDesc(r, t(UI.tiltOn), 'ok');
       } else {
         // Refus : l'option reste désactivée et on l'explique.
         ctx.setSettings({ tilt: false });
         ctx.audio.sfx('click', { pitch: 0.6 });
-        if (!disposed) setDesc(r, 'Autorisation refusée : le pilotage reste au joystick', 'warn');
+        if (!disposed) setDesc(r, t(UI.tiltDeniedDesc), 'warn');
       }
       sync();
     });
@@ -220,15 +247,18 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
     const box = div(`choice choice--${def.key}`);
     const head = div('choice-head');
     const txt = div('toggle-text');
-    txt.append(el('span', 'toggle-label', def.label), el('span', 'toggle-desc', def.desc));
+    const choiceLabel = def.key === 'touchSize' ? t(UI.touchSize) : t(UI.touchOpacity);
+    const choiceDesc = def.key === 'touchSize' ? t(UI.touchSizeDesc) : t(UI.touchOpacityDesc);
+    const steps = def.key === 'touchSize' ? UI.sizeSteps : UI.opacitySteps;
+    txt.append(el('span', 'toggle-label', choiceLabel), el('span', 'toggle-desc', choiceDesc));
     head.append(icon(def.icon, 'ico toggle-ico'), txt);
     // Boutons obligatoires : enableSecondFingerTaps rejoue le clic d'un 2e doigt sur un <button>.
     const seg = div('seg');
     seg.setAttribute('role', 'radiogroup');
-    seg.setAttribute('aria-label', def.label);
+    seg.setAttribute('aria-label', choiceLabel);
     const row: ChoiceRow = { def, seg, btns: [] };
     for (let i = 0; i < def.steps.length; i++) {
-      const b = el('button', 'seg-btn', def.steps[i]);
+      const b = el('button', 'seg-btn', t(steps[i]));
       b.type = 'button';
       b.setAttribute('role', 'radio');
       const step = touchStep(i);
@@ -245,6 +275,33 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
     controls.grid.append(box);
   }
 
+  // Langue, en tête de Général. Les noms de langues ne se traduisent pas.
+  const langBox = div('choice choice--language');
+  const langHead = div('choice-head');
+  const langTxt = div('toggle-text');
+  langTxt.append(el('span', 'toggle-label', t(UI.language)), el('span', 'toggle-desc', t(UI.languageDesc)));
+  langHead.append(icon(ICONS.swap, 'ico toggle-ico'), langTxt);
+  const langSeg = div('lang-pick');
+  langSeg.setAttribute('role', 'radiogroup');
+  langSeg.setAttribute('aria-label', t(UI.language));
+  const langNow = getLangPref();
+  const langChoices: { pref: LangPref; label: string }[] = [{ pref: 'system', label: t(UI.langSystem) }, ...LANG_FIXED];
+  for (const c of langChoices) {
+    const b = el('button', `seg-btn${c.pref === langNow ? ' is-on' : ''}`, c.label);
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', c.pref === langNow ? 'true' : 'false');
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (getLangPref() === c.pref) return;
+      ctx.audio.sfx('click', { pitch: 1 });
+      ctx.setSettings({ language: c.pref });
+    });
+    langSeg.append(b);
+  }
+  langBox.append(langHead, langSeg);
+  general.grid.append(langBox);
+
   // ---------------------------------------------------------------- Interrupteurs
 
   for (const def of TOGGLES) {
@@ -253,8 +310,9 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
     btn.setAttribute('role', 'switch');
     btn.append(icon(def.icon, 'ico toggle-ico'));
     const txt = div('toggle-text');
-    const desc = el('span', 'toggle-desc', def.desc);
-    txt.append(el('span', 'toggle-label', def.label), desc);
+    const copy = toggleCopy(def.key);
+    const desc = el('span', 'toggle-desc', copy.desc);
+    txt.append(el('span', 'toggle-label', copy.label), desc);
     const sw = el('span', 'switch');
     sw.setAttribute('aria-hidden', 'true');
     sw.append(el('span', 'switch-knob'));
@@ -286,7 +344,7 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
   const confirm = div('confirm');
   confirm.setAttribute('role', 'alertdialog');
   confirm.setAttribute('aria-modal', 'true');
-  confirm.setAttribute('aria-label', 'Réinitialiser la progression');
+  confirm.setAttribute('aria-label', t(UI.resetAria));
   const box = div('panel confirm-box');
   const confirmActions = div('confirm-actions');
   let confirmOpen = false;
@@ -304,7 +362,7 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
   }
 
   const resetBtn = button(ctx, {
-    label: 'Réinitialiser la progression',
+    label: t(UI.reset),
     icon: ICONS.reset,
     cls: 'btn-danger btn-sm',
     onPress: openConfirm,
@@ -315,7 +373,7 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
   const storyBox = div('confirm confirm--story');
   storyBox.setAttribute('role', 'dialog');
   storyBox.setAttribute('aria-modal', 'true');
-  storyBox.setAttribute('aria-label', 'Revoir les cinématiques');
+  storyBox.setAttribute('aria-label', t(UI.replayStory));
   const storyPanel = div('panel confirm-box story-box');
   const storyList = div('story-list');
   let storyOpen = false;
@@ -347,7 +405,7 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
       storyList.append(b);
     }
     if (seen.length === 0) {
-      storyList.append(el('p', 'confirm-text', 'Aucune pour l’instant : elles se débloquent en jouant.'));
+      storyList.append(el('p', 'confirm-text', t(UI.replayEmpty)));
     }
     storyBox.classList.add('is-open');
   }
@@ -355,7 +413,7 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
   if (story) {
     storyPanel.append(
       icon(ICONS.play, 'ico confirm-ico'),
-      el('h3', 'confirm-title', 'Cinématiques'),
+      el('h3', 'confirm-title', t(UI.replayTitle)),
       storyList,
       button(ctx, { label: 'Fermer', cls: 'btn-sm', onPress: closeStory }),
     );
@@ -368,7 +426,7 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
       }
     });
     const storyBtn = button(ctx, {
-      label: 'Revoir les cinématiques',
+      label: t(UI.replayStory),
       icon: ICONS.play,
       cls: 'btn-sm options-story',
       onPress: openStory,
@@ -378,26 +436,26 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
   footer.append(resetBtn);
 
   confirmActions.append(
-    button(ctx, { label: 'Annuler', onPress: closeConfirm }),
+    button(ctx, { label: t(UI.cancel), onPress: closeConfirm }),
     button(ctx, {
-      label: 'Effacer',
+      label: t(UI.erase),
       icon: ICONS.reset,
       cls: 'btn-danger',
       onPress: () => {
         resetProgress();
         closeConfirm();
         ctx.audio.haptic([30, 40, 30]);
-        ctx.hud.toast('Progression réinitialisée', 'info');
+        ctx.hud.toast(t(UI.resetDone), 'info');
       },
     }),
   );
   box.append(
     icon(ICONS.warning, 'ico confirm-ico'),
-    el('h3', 'confirm-title', 'Tout effacer ?'),
+    el('h3', 'confirm-title', t(UI.resetAsk)),
     el(
       'p',
       'confirm-text',
-      'Les étapes débloquées, tous les records, ton équipement (armes, compétences), ta réserve de cristaux et les achats du hangar seront perdus, et les cinématiques se rejoueront. Tes réglages sont conservés.',
+      t(UI.resetBody),
     ),
     confirmActions,
   );
@@ -441,7 +499,7 @@ export function createOptionsPanel(ctx: UiCtx, story: StoryReplay | null = null)
 export function createOptionsScreen(ctx: UiCtx, a: { back(): void; story: StoryReplay }): Screen {
   const root = screenRoot('options');
   const panel = createOptionsPanel(ctx, a.story);
-  root.append(screenHeader(ctx, 'Options', a.back));
+  root.append(screenHeader(ctx, t(UI.options), a.back));
   const body = div('screen-body options-body');
   body.append(panel.el);
   root.append(body, panel.overlay);

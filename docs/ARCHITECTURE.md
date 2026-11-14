@@ -92,6 +92,7 @@ src/
                    naufragé npc.ts, instantané du combat snapshot.ts…), art/ (dessins, dont draw/beacon.ts,
                    draw/bosses.ts, draw/world1.ts ; créature du décor dans parallax.ts), levels/ (un dossier par
                    monde : jungle/j1.ts, j2.ts, j3.ts)
+  rift/            arène 3D d'une faille (survie, 3 vagues), chargée à la demande ; pas une étape de campagne
   game3d/          mode vol : flight.ts (partie), parcours et vagues, portails, astéroïdes, tir (shots.ts),
                    ennemis (enemies.ts), cristaux (pickups.ts), créatures, ciel
 preview/           pages d'outil du serveur de dev : graphismes 2D (art), vol simulé (flight), sons du monde 1
@@ -167,6 +168,7 @@ Le détail fichier par fichier est dans la section « Architecture » de [CLAUDE
 | [GDD.md](GDD.md) | conception **du jeu tel qu'il est** | quand une fonctionnalité est livrée |
 | [SOUHAITS.md](SOUHAITS.md) | **liste des tâches** (cases à cocher), idées, ordre de travail | à chaque décision et à chaque tâche finie |
 | [HISTOIRE.md](HISTOIRE.md) | trame en 5 mondes, personnages, cinématiques | si l'histoire change |
+| [LANGUES.md](LANGUES.md) | langues du jeu, catalogues, audio linguistique | à chaque texte joueur ou audio linguistique |
 | [plans/](plans/README.md) | un plan technique par étape, et leur état | avant de coder une étape, puis à sa fin |
 | [discussions-ia/](discussions-ia/README.md) | débats entre IA et l'utilisateur, un fil par sujet (`/discussion`) ; rien n'y est décidé | à chaque prise de parole ; ce qui est retenu passe dans `SOUHAITS.md` puis le plan |
 | `.cursor/rules/claude-code.mdc` | ce qui ne vaut que pour Cursor (le reste : CLAUDE.md, qu'il lit aussi) | quand la façon de travailler de Cursor change |

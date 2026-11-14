@@ -20,5 +20,6 @@ export const BOSS_IDS = ['blobKing', 'beetleTitan', 'whale'] as const;
 /**
  * Cinématiques (src/story) : étapes de WORLDS qui en jouent une avant leur carte d'intro (`before`) ou avant leurs
  * résultats (`after`) ; marques « vues » dans SaveData.story.seen (core/story.ts : cutsceneMark).
+ * `rift` : écho du Vide, vision courte avant de retenter une faille (pas une étape de WORLDS).
  */
-export const CUTSCENE_IDS = ['prologue', 'liberation'] as const;
+export const CUTSCENE_IDS = ['prologue', 'liberation', 'rift'] as const;

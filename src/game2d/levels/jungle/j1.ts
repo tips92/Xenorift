@@ -127,14 +127,15 @@ const LIFT: Segment = [
  *  mais fermée et hors d'atteinte) : on y entre par la porte posée sur le rocher (col. 144, ligne 9, sur une tuile
  *  plate), on ressort par celle de la salle (col. 128, ligne 5). Lignes 0 et 1 vides : le plafond et la flèche ▲ de
  *  la porte de la salle restent sous le HUD (caméra calée en haut de la carte). Le bloc « ? » de dessous laisse la
- *  place de se tenir debout dessus. Ses cristaux étaient sur le 2e pilier et sur le rocher du double saut. */
+ *  place de se tenir debout dessus. Ses cristaux étaient sur le 2e pilier et sur le rocher du double saut.
+ *  Vortex 'V' dans la salle, à droite des cristaux (colonne 135, ligne 5) : Haut dessus ouvre la faille. */
 const ARMORED: Segment = [
   '......................',
   '......................',
   '...BBBBBBBBBBB........',
   '...B...G.G.G.B........',
   '...B....G.G.GB........',
-  '...BD.*ccc*..B........',
+  '...BD.*ccc*V.B........',
   '...BBBBBBBBBBB........',
   '......................',
   '......................',
@@ -225,7 +226,7 @@ const ARENA: Segment = [
 export const JUNGLE: LevelData = {
   id: 'jungle',
   theme: 'jungle',
-  name: stageText('j1').title,
+  name: stageText('j1').title.fr,
   music: 'jungle',
   map: joinSegments('jungle', [
     START,

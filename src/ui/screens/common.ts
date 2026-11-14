@@ -1,3 +1,5 @@
+import { t, tf } from '../../core/i18n/locale';
+import { UI } from '../../core/i18n/ui';
 import { div, el, icon } from '../dom';
 import { ICONS } from '../icons';
 import type { UiCtx } from '../services';
@@ -13,6 +15,7 @@ export type ScreenName =
   | 'results'
   | 'hangar'
   | 'fail'
+  | 'rift'
   | 'end'
   | 'error';
 
@@ -80,7 +83,7 @@ export function iconButton(ctx: UiCtx, svg: string, aria: string, onPress: () =>
 /** En-tête d'écran : bouton retour, titre, zone libre à droite. */
 export function screenHeader(ctx: UiCtx, title: string, onBack: () => void, right?: HTMLElement): HTMLElement {
   const h = div('screen-header');
-  h.append(iconButton(ctx, ICONS.back, 'Retour', onBack));
+  h.append(iconButton(ctx, ICONS.back, t(UI.back), onBack));
   h.append(el('h2', 'screen-title', title));
   const r = div('screen-header-right');
   if (right) r.append(right);
@@ -91,7 +94,7 @@ export function screenHeader(ctx: UiCtx, title: string, onBack: () => void, righ
 /** Rangée de 3 étoiles ; `earned` étoiles allumées (sans animation). */
 export function starRow(earned: number, cls = ''): { row: HTMLElement; stars: HTMLElement[] } {
   const row = div(`stars${cls ? ` ${cls}` : ''}`);
-  row.setAttribute('aria-label', `${earned} étoile${earned > 1 ? 's' : ''} sur 3`);
+  row.setAttribute('aria-label', tf(earned > 1 ? UI.starsOf : UI.starOneOf, { n: earned, max: 3 }));
   const stars: HTMLElement[] = [];
   for (let i = 0; i < 3; i++) {
     const s = icon(ICONS.star, 'star');

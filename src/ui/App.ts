@@ -9,6 +9,7 @@ import { App as CapApp } from '@capacitor/app';
 import { createAudio } from '../audio';
 import {
   addCrystals,
+  clearRift,
   getCrystals,
   getSave,
   getSessionWeapon,
@@ -24,11 +25,15 @@ import {
   updateSettings,
   type RecordInfo,
 } from '../core/save';
+import { isRiftId, riftById } from '../core/rifts';
+import { isLangPref, navigatorLangs, onLocale, resolveLocale, setLangPref, setLocale, t, tf, type LangPref } from '../core/i18n/locale';
+import { UI } from '../core/i18n/ui';
 import { STAGES, getStage } from '../core/stages';
 import type {
   ModeHandle,
   ModeHooks,
   PlayLoadout,
+  RiftTrip,
   Settings,
   StageDef,
   StageKind,
@@ -61,6 +66,7 @@ import { createHangarScreen } from './screens/hangar';
 import { createIntroScreen } from './screens/intro';
 import { createOptionsScreen } from './screens/options';
 import { createEndScreen, createErrorScreen, createFailScreen } from './screens/outcome';
+import { createRiftDownScreen } from './screens/rift';
 import { createPauseOverlay, type PauseOverlay } from './screens/pause';
 import { createResultsScreen, type ResultsData } from './screens/results';
 import { createLevelSelect } from './screens/select';
@@ -131,7 +137,7 @@ function errorMessage(err: unknown): string {
   try {
     return String(err);
   } catch {
-    return 'Erreur inconnue';
+    return t(UI.unknownError);
   }
 }
 
@@ -169,6 +175,13 @@ export function startApp(): void {
   const input = createSafeInput(() => createInput(touchRoot));
   /** Réglages vivants : le même objet est passé aux modes et mis à jour à chaque changement. */
   const live: Settings = { ...getSettings() };
+  const params = new URLSearchParams(window.location.search);
+  const langQuery = params.get('lang');
+  /** ?lang= gagne au chargement ; un choix dans Options l'oublie pour cette visite. */
+  let urlLang: LangPref | null = isLangPref(langQuery) ? langQuery : null;
+  const bootLang = urlLang ?? live.language;
+  setLangPref(bootLang);
+  setLocale(resolveLocale(bootLang, navigatorLangs()));
 
   // ---------------------------------------------------------------- Couches de l'interface
 
@@ -197,6 +210,11 @@ export function startApp(): void {
     if (patch.touchSize !== undefined || patch.touchOpacity !== undefined || patch.leftHanded !== undefined) {
       input.setTouchOptions(next);
     }
+    if (patch.language !== undefined) {
+      urlLang = null;
+      setLangPref(patch.language);
+      setLocale(resolveLocale(patch.language, navigatorLangs()));
+    }
   }
 
   const ctx: UiCtx = { audio, input, hud, settings: live, setSettings };
@@ -206,6 +224,8 @@ export function startApp(): void {
   let phase: Phase = 'menu';
   let screen: Screen | null = null;
   let run: Run | null = null;
+  /** Voyage en cours : instantané 2D gardé le temps de l'arène (Phaser est lâché). */
+  let riftHold: { stage: StageDef; loadout: Readonly<PlayLoadout>; trip: RiftTrip } | null = null;
   let pause: PauseOverlay | null = null;
   let introSkip: (() => void) | null = null;
   /** Cinématique en cours (phase 'story'), jusqu'à sa fin ou son Passer. */
@@ -353,7 +373,11 @@ export function startApp(): void {
   }
 
   /** Écran de menu dévoilé depuis le noir (après une étape, une cinématique…), musique du menu. */
+  let menuMake: (() => Screen) | null = null;
+
   async function revealMenu(flow: number, make: () => Screen): Promise<void> {
+    menuMake = make;
+    riftHold = null;
     teardownRun();
     hud.hide();
     input.setLayout('none');
@@ -369,6 +393,7 @@ export function startApp(): void {
 
   /** Affiche un écran de menu : fondu enchaîné entre menus, fondu au noir depuis le jeu. */
   function showMenu(make: () => Screen, force = false): void {
+    menuMake = make;
     navigate(async (flow) => {
       const viaBlack = phase !== 'menu' || run !== null || fader.black;
       if (viaBlack) {
@@ -393,6 +418,17 @@ export function startApp(): void {
     showMenu(makeTitle, force);
   }
 
+  onLocale(() => {
+    if (pause && run && phase === 'playing') {
+      mountPause(run, pause.view());
+      return;
+    }
+    if (phase === 'menu' && menuMake && screen && !navLock) {
+      const s = menuMake();
+      setScreen(s, true);
+      s.shown?.();
+    }
+  });
   function goSelect(world?: number): void {
     showMenu(() => makeSelect(world));
   }
@@ -584,7 +620,13 @@ export function startApp(): void {
     weaponWarning = '';
   }
 
-  function launch(stage: StageDef, start: StartMode, startPaused: boolean, startAt: StartAt | null): boolean {
+  function launch(
+    stage: StageDef,
+    start: StartMode,
+    startPaused: boolean,
+    startAt: StartAt | null,
+    riftReturn: RiftTrip | null = null,
+  ): boolean {
     // Équipement effectif figé pour toute la partie : arme (de la session sinon de la sauvegarde), améliorations,
     // cœurs max, modules de la Comète ; mode test : 4 armes et double saut.
     const loadout = playLoadout(live);
@@ -606,10 +648,14 @@ export function startApp(): void {
       onComplete: (result) => endRun(r, { ok: true, result }),
       onFail: (reason, retry) =>
         endRun(r, { ok: false, reason: typeof reason === 'string' ? reason : '', retry: retryPoint(retry) }),
+      onRift: (trip) => beginRiftTrip(r, trip),
     };
-    // Point de reprise d'un combat, sinon ?at=boss (ignoré par une étape sans boss : f2, la Lune)
-    const at = startAt ?? urlStartAt;
-    if (at) hooks.startAt = at;
+    // Retour de faille : l'instantané prime sur ?at=boss.
+    if (riftReturn) hooks.riftReturn = riftReturn;
+    else {
+      const at = startAt ?? urlStartAt;
+      if (at) hooks.startAt = at;
+    }
 
     try {
       r.handle = start(gameRoot, stage, hooks);
@@ -736,7 +782,214 @@ export function startApp(): void {
     }
   }
 
+  // ---------------------------------------------------------------- Faille (arène 3D, puis retour au niveau 2D)
+
+  const riftEcho = (): StoryPlay => ({ id: 'rift', mark: 'rift', title: t(UI.riftEchoTitle), sub: t(UI.riftEchoSub) });
+
+  /** Vortex : noter le voyage, lâcher Phaser, ouvrir l'arène. La campagne ne se termine pas. */
+  function beginRiftTrip(r: Run, trip: RiftTrip): void {
+    if (r !== run || r.ended || !isRiftId(trip.id)) return;
+    r.ended = true;
+    const hold = { stage: r.stage, loadout: r.loadout, trip };
+    riftHold = hold;
+    window.setTimeout(() => {
+      navigate(async (flow) => {
+        closePause(false);
+        await fader.toBlack();
+        if (flow !== flowId) return;
+        if (run === r) teardownRun();
+        hud.hide();
+        input.setLayout('none');
+        try {
+          const g2 = await import('../game2d');
+          g2.releasePlatformContext();
+        } catch (err) {
+          console.error('[ui] lâcher le 2D', err);
+        }
+        if (flow !== flowId) return;
+        await openArena(flow, hold);
+      }, true);
+    }, 0);
+  }
+
+  /** Arène de la faille. Phaser est déjà lâché ; destroy de l'arène jette le contexte Three. */
+  async function openArena(flow: number, hold: NonNullable<typeof riftHold>): Promise<void> {
+    const def = riftById(hold.trip.id);
+    if (!def || !def.placed) {
+      await returnFromRift(flow, hold, false);
+      return;
+    }
+    let mod: typeof import('../rift');
+    try {
+      mod = await import('../rift');
+    } catch (err) {
+      console.error('[ui] arène indisponible', err);
+      await returnFromRift(flow, hold, false);
+      return;
+    }
+    if (flow !== flowId) return;
+    await waitPlayable(flow);
+    if (flow !== flowId) return;
+    setScreen(null, true);
+    bg.setVisible(false);
+    let handle: ModeHandle;
+    try {
+      handle = mod.startRift(gameRoot, def, {
+        hud,
+        input,
+        audio,
+        settings: live,
+        loadout: hold.loadout,
+        onClear: () => endArena(hold, true),
+        onDown: () => endArena(hold, false),
+      });
+    } catch (err) {
+      console.error('[ui] démarrage de la faille impossible', err);
+      await showRiftDown(flow, hold);
+      return;
+    }
+    if (flow !== flowId) {
+      try {
+        handle.destroy();
+      } catch {
+        /* déjà parti */
+      }
+      return;
+    }
+    const next: Run = { stage: hold.stage, loadout: hold.loadout, handle, ended: false, paused: false };
+    run = next;
+    phase = 'playing';
+    hud.showPlatform();
+    input.setLayout('platform');
+    input.clearPresses();
+    if (!isPlayable()) pauseGame();
+    await nextFrame();
+    await nextFrame();
+    await delay(90);
+    if (flow !== flowId) return;
+    await fader.clear();
+  }
+
+  function endArena(hold: NonNullable<typeof riftHold>, cleared: boolean): void {
+    const r = run;
+    if (!r || r.ended || riftHold !== hold) return;
+    r.ended = true;
+    window.setTimeout(() => {
+      navigate(async (flow) => {
+        closePause(false);
+        await fader.toBlack();
+        if (flow !== flowId) return;
+        if (run === r) teardownRun();
+        hud.hide();
+        input.setLayout('none');
+        if (cleared) {
+          try {
+            clearRift(hold.trip.id);
+          } catch (err) {
+            console.error('[ui] marque de faille', err);
+          }
+          await returnFromRift(flow, hold, true);
+          return;
+        }
+        await showRiftDown(flow, hold);
+      }, true);
+    }, 0);
+  }
+
+  /** Vision (écho du Vide), puis nouvel essai : vies et cœurs repartent du départ dans l'arène. */
+  function retryRift(hold: NonNullable<typeof riftHold>): void {
+    navigate(async (flow) => {
+      await fader.toBlack();
+      if (flow !== flowId) return;
+      if (!(await playStory(flow, riftEcho(), false))) return;
+      await openArena(flow, hold);
+    }, true);
+  }
+
+  async function showRiftDown(flow: number, hold: NonNullable<typeof riftHold>): Promise<void> {
+    if (flow !== flowId) return;
+    phase = 'menu';
+    bg.setVisible(true);
+    audio.music(null);
+    const s = createRiftDownScreen(ctx, {
+      again: () => retryRift(hold),
+      back: () => {
+        navigate(async (id) => {
+          await fader.toBlack();
+          if (id !== flowId) return;
+          await returnFromRift(id, hold, false);
+        }, true);
+      },
+    });
+    setScreen(s, true);
+    await fader.clear();
+    if (flow !== flowId) return;
+    audio.sfx('lose');
+    audio.haptic(160);
+  }
+
+  /** Ramène Kaï dans la salle, à l'endroit noté. `cleared` : la bombe a fini. */
+  async function returnFromRift(flow: number, hold: NonNullable<typeof riftHold>, cleared: boolean): Promise<void> {
+    if (flow !== flowId) return;
+    hud.hide();
+    input.setLayout('none');
+    let start: StartMode;
+    try {
+      start = await loadMode('platform');
+      await ensureKaiSprites();
+    } catch (err) {
+      console.error('[ui] retour 2D impossible', err);
+      riftHold = null;
+      showStartError(hold.stage, err, null);
+      await fader.clear();
+      return;
+    }
+    if (flow !== flowId) return;
+    await waitPlayable(flow);
+    if (flow !== flowId) return;
+    const trip: RiftTrip = { id: hold.trip.id, snapshot: hold.trip.snapshot, cleared };
+    setScreen(null, true);
+    bg.setVisible(false);
+    riftHold = null;
+    if (!launch(hold.stage, start, !isPlayable(), null, trip)) {
+      await fader.clear();
+      return;
+    }
+    await nextFrame();
+    await nextFrame();
+    await delay(90);
+    if (flow !== flowId) return;
+    await fader.clear();
+  }
+
   // ---------------------------------------------------------------- Pause
+
+  function mountPause(r: Run, view: 'menu' | 'options'): void {
+    closePause(true);
+    const p = createPauseOverlay(ctx, r.stage, {
+      resume: () => resumeGame(),
+      restart: () => {
+        if (riftHold) {
+          const hold = riftHold;
+          navigate(async (flow) => {
+            closePause(false);
+            await fader.toBlack();
+            if (flow !== flowId) return;
+            abandonRun();
+            teardownRun();
+            await openArena(flow, hold);
+          }, true);
+          return;
+        }
+        startStage(r.stage, false, true);
+      },
+      quit: () => goTitle(true),
+    });
+    pause = p;
+    uiRoot.append(p.el);
+    p.open();
+    if (view === 'options') p.openOptions();
+  }
 
   function pauseGame(): void {
     const r = run;
@@ -749,15 +1002,7 @@ export function startApp(): void {
     }
     input.setLayout('none');
     hud.setPaused(true);
-    closePause(true);
-    const p = createPauseOverlay(ctx, r.stage, {
-      resume: () => resumeGame(),
-      restart: () => startStage(r.stage, false, true),
-      quit: () => goTitle(true),
-    });
-    pause = p;
-    uiRoot.append(p.el);
-    p.open();
+    mountPause(r, 'menu');
     audio.sfx('click', { pitch: 0.8 });
   }
 
@@ -929,7 +1174,7 @@ export function startApp(): void {
       void input.requestTiltPermission().then((ok) => {
         if (ok) return;
         setSettings({ tilt: false });
-        hud.toast('Inclinaison désactivée : autorisation refusée', 'bad');
+        hud.toast(t(UI.tiltDenied), 'bad');
       });
     }
   }
@@ -938,12 +1183,11 @@ export function startApp(): void {
 
   // ---------------------------------------------------------------- Démarrage
 
-  const params = new URLSearchParams(window.location.search);
   // ?weapon=laser|machinegun|shotgun|rifle : arme de la session, même hors mode test (comme ?stage=).
   const weaponParam = params.get('weapon');
   urlWeapon = isWeaponId(weaponParam) ? weaponParam : null;
   setSessionWeapon(urlWeapon);
-  if (weaponParam && !urlWeapon) weaponWarning = `Arme inconnue : ${weaponParam}`;
+  if (weaponParam && !urlWeapon) weaponWarning = tf(UI.unknownWeapon, { id: weaponParam });
   if (params.get('unlock') === '1' && !live.unlockAll) setSettings({ unlockAll: true });
   if (import.meta.env.DEV && params.get('at') === 'boss') urlStartAt = { at: 'boss' };
   if (import.meta.env.DEV && params.get('kai') === 'glb') {
@@ -988,7 +1232,7 @@ export function startApp(): void {
       await fader.clear();
       if (flow !== flowId) return;
       s.shown?.();
-      if (devId) hud.toast(`Étape inconnue : ${devId}`, 'bad');
+      if (devId) hud.toast(tf(UI.unknownStage, { id: devId }), 'bad');
       flushWeaponWarning();
     });
   }
@@ -1019,6 +1263,7 @@ export function startApp(): void {
             unlocked: isUnlocked(s),
           })),
           crystals: getCrystals(),
+          rifts: [...getSave().rifts],
           weapon: getSessionWeapon(),
           // Cinématique en cours (phase 'story') et marques de l'histoire (cinématiques vues, tutoriel).
           cutscene: story

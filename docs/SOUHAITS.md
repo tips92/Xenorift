@@ -215,10 +215,23 @@ du stick.
       automatique, chute libre entre des obstacles, défense de la Comète contre des vagues d'ennemis,
       course de rover)
 - [ ] Récompense : cristaux en plus ou pièce rare pour le hangar
+- [x] Faille du Vide dans j1 (14/11/2026) : vortex dans la salle aux cristaux (colonne 135, ligne 5). Haut
+      dessus ouvre une arène 3D de survie (3 vagues, bombe qui s'harmonise). Ce n'est pas une étape de
+      campagne : JOUER, les 18 étoiles et l'ordre j1→j2→j3→f1 ne changent pas. Réussite : champ `rifts` de
+      la sauvegarde (version 2, absent → aucune) et icône sur la carte de j1. Les autres mondes sont des
+      emplacements de données (`core/rifts.ts`), sans vortex tant que leur niveau n'existe pas.
 
 **Choix proposés** dans [plans/07-secrets-bonus.md](plans/07-secrets-bonus.md) (pas encore validés) : d'abord la
 course en jetpack et la défense de la Comète. Le tir à défilement, la chute libre et le rover attendent l'essai
-sur téléphone de ces deux-là.
+sur téléphone de ces deux-là. La faille de j1 est un bonus à part, demandé à part du plan 07.
+
+**Relance sans publicité (14/11/2026).** Il n'y a pas de régie publicitaire dans le projet. Quand l'arène est
+perdue, « Harmoniser encore » joue d'abord la cinématique « Écho du Vide » (`rift`, `src/story/scenes/riftEcho.ts`,
+dessin par code, bouton Passer comme les autres), puis relance l'arène avec les vies et les cœurs au départ.
+« Revenir dans la salle » rend le niveau 2D au vortex, sans marquer la faille. Les vies du niveau 2D ne bougent
+pas pendant le voyage.
+
+- [x] Langues de l'interface (14/11/2026) : fr, en, de, it, es ; défaut = langue du système, repli français. Doc : [LANGUES.md](LANGUES.md). Audio non traduit.
 
 ### 7. Histoire et cinématiques
 
@@ -326,6 +339,8 @@ le jeu en 4c.
       Essai sur téléphone apprécié par Romain (12/11). **Idée d'usage** : mini-niveaux à l'intérieur d'un niveau 2D.
       Kaï passe dans un **vortex** et doit **nettoyer le Vide** : il résiste aux vagues d'ennemis le temps qu'une
       **bombe anti-vide** se charge et explose (chrono visible), puis revient dans le niveau 2D.
+      **Fait pour la Jungle (14/11)** : vortex de j1, arène dans `src/rift/` (Kaï en sprite billboard de l'arme
+      équipée, pas le `.glb` trop lourd), 3 vagues, bombe, retour au même endroit. Voir la section 6.
 
 ---
 

@@ -1,5 +1,7 @@
 # Tests de bout en bout (e2e)
 
+Le lanceur ouvre Chrome en locale `fr-FR` (sauf `meta.locale`) : la suite lit des libellés français même si la machine est dans une autre langue. `?lang=` du jeu est documenté dans `docs/LANGUES.md`. Scénario `lang`.
+
 Chrome sans fenêtre, piloté par `playwright-core` (version exacte 1.55.0, aucun navigateur téléchargé :
 on utilise le Chrome installé via `channel: 'chrome'`). Le jeu tourne sur le vrai GPU (ANGLE / Direct3D 11).
 
@@ -75,6 +77,7 @@ export const meta = {
   viewport: { width: 740, height: 360 }, // facultatif (844x390 par défaut)
   allowConsole: [/\[engine2d\] création du rendu WebGL/], // console.error attendues (sinon échec)
   // prod: true,                    // tourne uniquement sur le build de production (vite preview)
+  // locale: 'fr-FR',               // défaut du lanceur : les libellés français restent vrais quelle que soit la locale de Chrome
 };
 
 export default async function (t) {

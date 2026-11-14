@@ -1,4 +1,5 @@
 import * as Phaser from 'phaser';
+import { bossName } from '../../../core/i18n/names';
 import { BLOB_POSE, BLOB_WAVE, BOSS_SHEETS } from '../../art/draw/bosses';
 import type { BossBox, BossFrameBoxes, BossSheet } from '../../art/draw/bosses';
 import { DEPTH, TILE } from '../../constants';
@@ -71,7 +72,9 @@ function inside(boxes: readonly BossBox[], x: number, y: number, pad: number): b
 
 export class BlobKing implements Boss {
   readonly id = 'blobKing' as const;
-  readonly name = 'Blob-roi';
+  get name(): string {
+    return bossName('blobKing');
+  }
   readonly maxLife = MAX_LIFE;
   readonly phases = 2;
   life = MAX_LIFE;

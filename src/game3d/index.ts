@@ -1,5 +1,7 @@
+import { t } from '../core/i18n/locale';
+import { UI } from '../core/i18n/ui';
 import type { ModeHandle, ModeHooks, StageDef } from '../core/types';
-import { CONTEXT_LOST_REASON, FlightRun, UnknownCourseError } from './flight';
+import { FlightRun, UnknownCourseError } from './flight';
 import { ContextLostError } from './renderer';
 
 // Mode vol spatial 3D (Three.js) : la Comète file dans un couloir de portails jusqu'au grand
@@ -18,10 +20,10 @@ export function startFlight(container: HTMLElement, stage: StageDef, hooks: Mode
     console.error('[flight3d] démarrage impossible', err);
     const reason =
       err instanceof ContextLostError
-        ? CONTEXT_LOST_REASON
+        ? t(UI.gfxLost)
         : err instanceof UnknownCourseError
           ? err.message
-          : 'Mode 3D indisponible sur cet appareil';
+          : t(UI.mode3dFail);
     let failed = false;
     const timer = window.setTimeout(() => {
       failed = true;

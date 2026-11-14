@@ -1,4 +1,6 @@
 import * as Phaser from 'phaser';
+import { t } from '../../core/i18n/locale';
+import { UI } from '../../core/i18n/ui';
 import { GRAVITY, MAX_VIEW_W, MIN_VIEW_W, VIEW_H } from '../constants';
 import { PlatformScene } from './PlatformScene';
 import { endSession, reportError, toast } from './session';
@@ -23,7 +25,9 @@ let resizeTimer = 0;
 /** Délai d'attente de la restauration du contexte (application au premier plan) avant d'abandonner l'étape. */
 const GFX_RESTORE_WAIT_MS = 5000;
 const GFX_CHECK_MS = 250;
-const GFX_LOST_REASON = 'Liaison graphique perdue';
+function gfxLostReason(): string {
+  return t(UI.gfxLost);
+}
 let lostTimer = 0;
 /** Temps passé au premier plan depuis la perte (ou depuis le dernier retour au premier plan). */
 let lostVisibleMs = 0;
@@ -191,7 +195,7 @@ function onContextLost(g: Phaser.Game): void {
   const scene = sceneOf(s);
   if (scene && scene.sys.isActive()) g.scene.pause(SCENE_KEY);
   if (s.ended) return;
-  toast(s, 'Liaison graphique perdue…', 'bad');
+  toast(s, t(UI.gfxLostToast), 'bad');
   armLostTimer(s);
 }
 
@@ -223,7 +227,7 @@ function giveUpSession(s: Session): void {
   if (scene && scene.finishExitNow()) return;
   // En plein combat de boss : point de reprise (« Réessayer le combat »).
   const retry = scene ? scene.fightRetryPoint() : null;
-  endSession(s, () => s.hooks.onFail(GFX_LOST_REASON, retry ?? undefined));
+  endSession(s, () => s.hooks.onFail(gfxLostReason(), retry ?? undefined));
 }
 
 function onContextRestored(g: Phaser.Game): void {
@@ -274,6 +278,9 @@ function dropGame(): void {
   }
   // Retiré tout de suite : le nouveau canvas prend sa place sans attendre la frame suivante.
   if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+  // L'aide DEV pointe encore l'ancienne scène si SHUTDOWN n'a pas tourné (contexte lâché pour une faille).
+  const w = window as unknown as { __xr2d?: unknown };
+  delete w.__xr2d;
 }
 
 function ensureGame(container: HTMLElement): Phaser.Game {
@@ -373,6 +380,27 @@ export function resumeSession(session: Session): void {
   }
 }
 
+/**
+ * Lâche le contexte WebGL de Phaser (faille 3D ensuite : un seul contexte à la fois).
+ * À appeler une fois la session relâchée. La prochaine partie plateforme recrée le jeu.
+ */
+export function releasePlatformContext(): void {
+  if (current) {
+    current.alive = false;
+    releaseSession(current);
+  }
+  const g = game;
+  if (g) {
+    try {
+      const gl = webglRenderer(g)?.gl;
+      gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    } catch {
+      // Contexte déjà inutilisable.
+    }
+  }
+  dropGame();
+}
+
 /** Libère le jeu : arrête la scène, masque le canvas, endort la boucle. Sans effet si la session a été remplacée. */
 export function releaseSession(session: Session): void {
   if (current !== session) return;
@@ -383,8 +411,8 @@ export function releaseSession(session: Session): void {
   setCanvasVisible(false);
   const g = game;
   const stop = (): void => {
-    // Une nouvelle session a pu démarrer entre-temps : elle a déjà relancé la scène.
-    if (current) return;
+    // Une nouvelle session a pu démarrer, ou le contexte a été lâché (voyage vers une faille).
+    if (current || game !== g) return;
     const scene = getScene();
     if (scene) {
       const status = scene.sys.settings.status;

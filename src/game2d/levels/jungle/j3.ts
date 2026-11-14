@@ -189,7 +189,7 @@ const END: Segment = [
 export const JUNGLE3: LevelData = {
   id: 'jungle3',
   theme: 'jungle',
-  name: stageText('j3').title,
+  name: stageText('j3').title.fr,
   music: 'jungle',
   map: joinSegments('jungle3', [START, GROVE, PITS, HIGH, SPORES, ROCKS, APPROACH, ARENA, END]),
   ending: 'guardian',

@@ -1,3 +1,5 @@
+import { t } from '../core/i18n/locale';
+import { UI } from '../core/i18n/ui';
 import { BUBBLE_CPS, letterGap } from '../core/story';
 import { PORTRAIT_FRAME, PORTRAIT_FRAMES, SPEAKER_NAME, renderPortraitStrip } from './portraits';
 import { ensureStoryStyles } from './styles';
@@ -237,7 +239,7 @@ export function createBubble(parent: HTMLElement, opts: BubbleOptions = {}): Bub
       el.dataset.speaker = who;
       el.dataset.mood = how;
       nameEl.textContent = SPEAKER_NAME[who];
-      statusEl.textContent = how === 'scrambled' ? 'signal brouillé' : '';
+      statusEl.textContent = how === 'scrambled' ? t(UI.scrambled) : '';
       while (spans.length < total) spans.push(document.createElement('span'));
       const frag = document.createDocumentFragment();
       for (let i = 0; i < total; i++) {

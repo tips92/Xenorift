@@ -1,8 +1,11 @@
+import { onLocale, t as tr, type L10n } from '../core/i18n/locale';
+import { UI } from '../core/i18n/ui';
 import type { Ctx } from '../game2d/art/util';
 import { type Bubble, createBubble } from './bubble';
 import { type CutsceneEvent, type CutsceneScript, type View, VH } from './scenes/common';
 import { createLiberation } from './scenes/liberation';
 import { createPrologue } from './scenes/prologue';
+import { createRiftEcho } from './scenes/riftEcho';
 import { ensureStoryStyles } from './styles';
 import type { CutsceneAudio, CutsceneHandle, CutsceneId, LiberationParams, Mood, Speaker } from './types';
 
@@ -12,6 +15,10 @@ import type { CutsceneAudio, CutsceneHandle, CutsceneId, LiberationParams, Mood,
 // cachée, cumulables). Calques pré-rendus à la construction et à chaque changement de taille ; une image ne
 // dépend que du temps (startAtS : départ à n'importe quel instant, images reproductibles). Un toucher sur
 // l'image termine la réplique en cours. destroy() libère boucle, écouteurs, DOM et calques.
+
+function spoken(text: string | L10n): string {
+  return typeof text === 'string' ? text : tr(text);
+}
 
 export interface CutsceneOptions {
   audio: CutsceneAudio;
@@ -45,7 +52,9 @@ const SKIP_ICON =
   'stroke-linecap="round" stroke-linejoin="round" d="M5 6l6 6-6 6M13 6l6 6-6 6"/></svg>';
 
 function createScript(id: CutsceneId, params: LiberationParams | undefined): CutsceneScript {
-  return id === 'liberation' ? createLiberation(params ?? DEFAULT_LIBERATION) : createPrologue();
+  if (id === 'liberation') return createLiberation(params ?? DEFAULT_LIBERATION);
+  if (id === 'rift') return createRiftEcho();
+  return createPrologue();
 }
 
 function reducedMotion(): boolean {
@@ -71,7 +80,7 @@ export function playCutscene(root: HTMLElement, id: CutsceneId, opts: CutsceneOp
   box.className = 'cs';
   box.dataset.cutscene = id;
   box.setAttribute('role', 'region');
-  box.setAttribute('aria-label', 'Cinématique');
+  box.setAttribute('aria-label', tr(UI.cutscene));
   const cnv = document.createElement('canvas');
   cnv.className = 'cs-canvas';
   cnv.setAttribute('aria-hidden', 'true');
@@ -79,8 +88,16 @@ export function playCutscene(root: HTMLElement, id: CutsceneId, opts: CutsceneOp
   const skipBtn = document.createElement('button');
   skipBtn.type = 'button';
   skipBtn.className = 'cs-skip';
-  skipBtn.setAttribute('aria-label', 'Passer la cinématique');
-  skipBtn.innerHTML = '<span>Passer</span>' + SKIP_ICON;
+  skipBtn.setAttribute('aria-label', tr(UI.skipCutscene));
+  const skipSpan = document.createElement('span');
+  skipSpan.textContent = tr(UI.pass);
+  skipBtn.append(skipSpan);
+  skipBtn.insertAdjacentHTML('beforeend', SKIP_ICON);
+  onLocale(() => {
+    box.setAttribute('aria-label', tr(UI.cutscene));
+    skipBtn.setAttribute('aria-label', tr(UI.skipCutscene));
+    skipSpan.textContent = tr(UI.pass);
+  });
   const live = document.createElement('div');
   live.className = 'xr-sr';
   live.setAttribute('aria-live', 'polite');
@@ -175,7 +192,7 @@ export function playCutscene(root: HTMLElement, id: CutsceneId, opts: CutsceneOp
     while (nextEvent < events.length && events[nextEvent].t <= t1) {
       const e = events[nextEvent++];
       if (e.cue) audioCue(e.cue);
-      if (e.say) void bubble.say(e.say.speaker, e.say.mood, e.say.text);
+      if (e.say) void bubble.say(e.say.speaker, e.say.mood, spoken(e.say.text));
       if (e.hide) bubble.hide();
       if (e.announce) live.textContent = e.announce;
     }
@@ -197,7 +214,7 @@ export function playCutscene(root: HTMLElement, id: CutsceneId, opts: CutsceneOp
     if (sayIdx >= 0 && !hidden) {
       const e = events[sayIdx];
       if (e.say) {
-        void bubble.say(e.say.speaker, e.say.mood, e.say.text);
+        void bubble.say(e.say.speaker, e.say.mood, spoken(e.say.text));
         bubble.advance(t - e.t, true);
       }
     }

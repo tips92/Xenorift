@@ -9,6 +9,8 @@ import type {
   WeaponId,
   WeaponUpgrades,
 } from './types';
+import { formatMul as mulLabel, t, tf } from './i18n/locale.ts';
+import { UI } from './i18n/ui.ts';
 import { SHIP_GUN_MULS, SHIP_GUNS } from './shipGuns.ts';
 import { isWeaponId, WEAPON_IDS, WEAPONS } from './weapons.ts';
 import type { WeaponMods } from './weapons';
@@ -137,7 +139,7 @@ const WEAPON_DESC: Readonly<Record<BuyableWeaponId, string>> = {
 
 /** Multiplicateur affiché à la française : 1.25 → « ×1,25 ». */
 export function formatMul(m: number): string {
-  return `×${String(Math.round(m * 100) / 100).replace('.', ',')}`;
+  return mulLabel(m);
 }
 
 /**
@@ -414,15 +416,15 @@ export function itemLevel(save: Readonly<SaveData>, item: HangarItem): number {
 export function lockLabel(lock: LockReason | null, item: HangarItem, needs: CrewId | null): string {
   switch (lock) {
     case 'max':
-      return item.kind === 'weapon' ? 'Arme déjà possédée' : 'Niveau max';
+      return item.kind === 'weapon' ? t(UI.weaponOwned) : t(UI.maxLevel);
     case 'blueprint':
-      return 'Plan manquant';
+      return t(UI.missingPlan);
     case 'weapon':
-      return 'Arme non possédée';
+      return t(UI.needWeapon);
     case 'crew':
-      return `Demande ${needs ? CREW[needs].name : 'un équipier'}`;
+      return tf(UI.needCrew, { name: needs ? CREW[needs].name : t(UI.crewmate) });
     case 'funds':
-      return 'Réserve insuffisante';
+      return t(UI.lowFunds);
     default:
       return '';
   }

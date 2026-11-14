@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { getLocale, t, tf } from '../core/i18n/locale';
+import { leviathanName } from '../core/i18n/names';
+import { UI } from '../core/i18n/ui';
 import { BASE_SHIELDS, BOOST_MULS, MAX_SHIELDS_CAP, MAX_SHIP_GUN_LEVEL } from '../core/hangar';
 import { SHIP_AIM } from '../core/shipGuns';
 import { stageCourse } from '../core/stages';
@@ -90,7 +93,7 @@ export const CONTEXT_LOST_REASON = 'Liaison graphique perdue';
 /** Étape de vol au `levelId` hors de COURSE_IDS (refusée par check-levels) : son message sert de motif d'échec. */
 export class UnknownCourseError extends Error {
   constructor(levelId: string) {
-    super(`Parcours inconnu : « ${levelId} »`);
+    super(tf(UI.unknownCourse, { id: levelId }));
     this.name = 'UnknownCourseError';
   }
 }
@@ -258,6 +261,7 @@ export class FlightRun implements ModeHandle {
   private readonly bossHud: BossHud = { name: '', life: 1, phase: 1, phases: 1, steps: 0 };
   private bossHudOn = false;
   private bossHudLeft = -1;
+  private bossHudLocale = '';
   private bossHudPhase = 0;
   /** Départ au début du combat (nouvel essai, ?at=boss) : la phase 'boss' suit le compte à rebours. */
   private atBoss = false;
@@ -578,7 +582,7 @@ export class FlightRun implements ModeHandle {
     this.ctxLost = true;
     this.stopLoop();
     console.warn('[flight3d] contexte WebGL perdu');
-    if (!this.finished) this.hooks.hud.toast('Liaison graphique perdue…', 'bad');
+    if (!this.finished) this.hooks.hud.toast(t(UI.gfxLostToast), 'bad');
     this.armLossTimer();
   }
 
@@ -613,7 +617,7 @@ export class FlightRun implements ModeHandle {
     }
     this.ctxLost = false;
     console.info('[flight3d] contexte WebGL restauré');
-    this.hooks.hud.toast('Liaison rétablie', 'good');
+    this.hooks.hud.toast(t(UI.gfxBack), 'good');
     if (this.paused) this.renderer.render(this.scene, this.camera);
     else this.startLoop();
   }
@@ -654,9 +658,9 @@ export class FlightRun implements ModeHandle {
     this.setPhase('done');
     if (phase === 'warp' && this.result) this.hooks.onComplete(this.result);
     else if (phase === 'boss' && this.bossBeaten) this.hooks.onComplete((this.result = this.makeResult()));
-    else if (phase === 'dead') this.hooks.onFail('Vaisseau détruit !', this.fightRetryPoint());
-    else if (phase === 'timeout') this.hooks.onFail('Temps écoulé !');
-    else this.hooks.onFail(CONTEXT_LOST_REASON, this.fightRetryPoint());
+    else if (phase === 'dead') this.hooks.onFail(t(UI.shipDestroyed), this.fightRetryPoint());
+    else if (phase === 'timeout') this.hooks.onFail(t(UI.timeUp));
+    else this.hooks.onFail(t(UI.gfxLost), this.fightRetryPoint());
   }
 
   private dropRenderer(): void {
@@ -831,7 +835,7 @@ export class FlightRun implements ModeHandle {
       hud.toast(String(COUNTDOWN - step));
       audio.sfx('click', { pitch: 0.75 });
     } else {
-      hud.toast('Go !', 'good');
+      hud.toast(t(UI.go), 'good');
       audio.sfx('takeoff', { volume: 0.7 });
       this.hooks.input.clearPresses();
       // Départ au combat : le boss arrive dès la fin du compte à rebours
@@ -1020,7 +1024,7 @@ export class FlightRun implements ModeHandle {
     this.timeLeft -= GATE_PENALTY;
     this.combo = 0;
     this.hooks.audio.sfx('gateMiss');
-    this.hooks.hud.toast('Portail manqué −5 s', 'bad');
+    this.hooks.hud.toast(t(UI.gateMiss), 'bad');
     this.gates.miss(i);
     _c.set(this.theme.gateMissed);
     this.particles.ring(g.x, g.y, g.z, GATE_R, 18, _c, 0.7, 3);
@@ -1277,7 +1281,7 @@ export class FlightRun implements ModeHandle {
       this.noteSwallow();
     }
     this.hooks.audio.haptic(60);
-    this.hooks.hud.toast('Chrono figé !');
+    this.hooks.hud.toast(t(UI.chronoFrozen));
     this.syncBossHud();
     this.pushHud();
   }
@@ -1350,7 +1354,7 @@ export class FlightRun implements ModeHandle {
     // Ses orbes se dissipent (la Comète ne craint plus rien jusqu'à la distorsion)
     this.enemies.dissolveOrbs();
     this.openPortal(PORTAL_AHEAD);
-    this.hooks.hud.toast('Portail ouvert !', 'good');
+    this.hooks.hud.toast(t(UI.gateOpen), 'good');
     this.syncBossHud();
     this.pushHud();
   }
@@ -1373,12 +1377,13 @@ export class FlightRun implements ModeHandle {
       }
       return;
     }
-    if (this.bossHudOn && b.touchesLeft === this.bossHudLeft && b.phase === this.bossHudPhase) return;
+    if (this.bossHudOn && b.touchesLeft === this.bossHudLeft && b.phase === this.bossHudPhase && this.bossHudLocale === getLocale()) return;
+    this.bossHudLocale = getLocale();
     this.bossHudOn = true;
     this.bossHudLeft = b.touchesLeft;
     this.bossHudPhase = b.phase;
     const hb = this.bossHud;
-    hb.name = b.def.name;
+    hb.name = leviathanName();
     hb.life = b.touches > 0 ? b.touchesLeft / b.touches : 0;
     hb.phase = b.phase;
     hb.phases = b.phases;

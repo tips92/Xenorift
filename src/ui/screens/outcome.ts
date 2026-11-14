@@ -1,3 +1,6 @@
+import { t, tf } from '../../core/i18n/locale';
+import { UI } from '../../core/i18n/ui';
+import { stageSubtitle, stageTitle } from '../../core/story';
 import type { StageDef } from '../../core/types';
 import { clamp, div, el, formatNumber, icon } from '../dom';
 import { ICONS } from '../icons';
@@ -22,17 +25,17 @@ export function createFailScreen(
   badge.append(icon(ICONS.warning, 'ico'));
   panel.append(
     badge,
-    el('h2', 'fail-title', 'MISSION ÉCHOUÉE'),
-    el('p', 'fail-reason', reason.trim() || 'Kaï doit battre en retraite…'),
-    el('p', 'fail-stage', `${stage.subtitle} · ${stage.title}`),
+    el('h2', 'fail-title', t(UI.missionFailed)),
+    el('p', 'fail-reason', reason.trim() || t(UI.retreat)),
+    el('p', 'fail-stage', `${stageSubtitle(stage.world, stage.part)} · ${stageTitle(stage.id)}`),
   );
   const actions = div('fail-actions');
   if (a.retryFight) {
-    actions.append(button(ctx, { label: 'Réessayer le combat', icon: ICONS.aim, cls: 'btn-primary fail-fight', onPress: a.retryFight }));
+    actions.append(button(ctx, { label: t(UI.retryFight), icon: ICONS.aim, cls: 'btn-primary fail-fight', onPress: a.retryFight }));
   }
   actions.append(
-    button(ctx, { label: 'Réessayer', icon: ICONS.restart, cls: a.retryFight ? '' : 'btn-primary', onPress: a.retry }),
-    button(ctx, { label: 'Menu', icon: ICONS.home, onPress: a.menu }),
+    button(ctx, { label: t(UI.retry), icon: ICONS.restart, cls: a.retryFight ? '' : 'btn-primary', onPress: a.retry }),
+    button(ctx, { label: t(UI.menu), icon: ICONS.home, onPress: a.menu }),
   );
   panel.append(actions);
   root.append(panel);
@@ -70,19 +73,19 @@ export function createEndScreen(ctx: UiCtx, d: EndData, a: { menu(): void }): Sc
   const panel = div('panel end-panel');
   const totalEl = el('b', 'end-total-n', '0');
   const total = div('end-total');
-  total.append(el('span', 'end-total-label', 'Score total'), totalEl);
+  total.append(el('span', 'end-total-label', t(UI.totalScore)), totalEl);
   const stars = div('end-stars');
-  stars.append(icon(ICONS.star, 'star is-on'), el('span', '', `${d.stars}/${d.maxStars} étoiles`));
+  stars.append(icon(ICONS.star, 'star is-on'), el('span', '', tf(UI.starsShort, { n: d.stars, max: d.maxStars })));
 
   panel.append(
-    el('p', 'end-kicker', 'Mission accomplie'),
-    el('h2', 'end-title', 'FIN DE LA DÉMO'),
-    el('p', 'end-text', 'Merci d’avoir joué à Xeno Rift ! Kaï et la Comète ont franchi la ceinture d’Orak… La suite de l’odyssée arrive bientôt.'),
+    el('p', 'end-kicker', t(UI.endKicker)),
+    el('h2', 'end-title', t(UI.endTitle)),
+    el('p', 'end-text', t(UI.endText)),
     total,
     stars,
   );
   const actions = div('end-actions');
-  actions.append(button(ctx, { label: 'Menu', icon: ICONS.home, cls: 'btn-primary', onPress: a.menu }));
+  actions.append(button(ctx, { label: t(UI.menu), icon: ICONS.home, cls: 'btn-primary', onPress: a.menu }));
   panel.append(actions);
 
   root.append(sparks, flyby, panel);
@@ -130,18 +133,18 @@ export function createErrorScreen(
   const panel = div('panel error-panel');
   const badge = div('fail-badge');
   badge.append(icon(ICONS.warning, 'ico'));
-  const msg = el('pre', 'error-msg', message.trim() || 'Erreur inconnue');
+  const msg = el('pre', 'error-msg', message.trim() || t(UI.unknownError));
   panel.append(
     badge,
-    el('h2', 'fail-title', 'ERREUR'),
-    el('p', 'fail-reason', stage ? `Impossible de lancer « ${stage.title} ».` : 'Un problème est survenu.'),
+    el('h2', 'fail-title', t(UI.errorTitle)),
+    el('p', 'fail-reason', stage ? tf(UI.launchFail, { title: stageTitle(stage.id) }) : t(UI.problem)),
     msg,
   );
   const actions = div('fail-actions');
   if (a.retry) {
-    actions.append(button(ctx, { label: 'Réessayer', icon: ICONS.restart, cls: 'btn-primary', onPress: a.retry }));
+    actions.append(button(ctx, { label: t(UI.retry), icon: ICONS.restart, cls: 'btn-primary', onPress: a.retry }));
   }
-  actions.append(button(ctx, { label: 'Menu', icon: ICONS.home, onPress: a.menu }));
+  actions.append(button(ctx, { label: t(UI.menu), icon: ICONS.home, onPress: a.menu }));
   panel.append(actions);
   root.append(panel);
   return {

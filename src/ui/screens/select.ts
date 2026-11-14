@@ -1,5 +1,10 @@
-import { getCrystals, getSave, isUnlocked, nextToPlay } from '../../core/save';
+import { getLocale, t, tf } from '../../core/i18n/locale';
+import { worldName as worldLabel } from '../../core/i18n/names';
+import { UI } from '../../core/i18n/ui';
+import { riftForStage } from '../../core/rifts';
+import { getCrystals, getSave, isRiftCleared, isUnlocked, nextToPlay } from '../../core/save';
 import { STAGES } from '../../core/stages';
+import { stageSubtitle, stageTitle } from '../../core/story';
 import type { SaveData, StageDef } from '../../core/types';
 import { WORLDS } from '../../core/worlds';
 import { clamp, div, el, formatNumber, icon, play } from '../dom';
@@ -32,13 +37,14 @@ const SWIPE_PART = 0.18;
 const SWIPE_SPEED = 0.45;
 
 export function kindLabel(stage: StageDef): string {
-  return stage.kind === 'platform' ? 'Plateforme' : 'Vol spatial';
+  return stage.kind === 'platform' ? t(UI.kindPlatform) : t(UI.kindFlight);
 }
 
-/** « 0 cristal », « 1 cristal », « 1 250 cristaux ». */
+/** « 0 cristal », « 1 cristal », « 1 250 cristaux » (français : singulier aussi pour 0). */
 export function crystalsText(n: number): string {
   const v = Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
-  return `${formatNumber(v)} ${v >= 2 ? 'cristaux' : 'cristal'}`;
+  const one = getLocale() === 'fr' ? v < 2 : v === 1;
+  return tf(one ? UI.crystalOne : UI.crystalMany, { n: formatNumber(v) });
 }
 
 function stageCard(ctx: UiCtx, a: SelectActions, save: Readonly<SaveData>, stage: StageDef, i: number): HTMLButtonElement {
@@ -51,31 +57,39 @@ function stageCard(ctx: UiCtx, a: SelectActions, save: Readonly<SaveData>, stage
   c.style.setProperty('--i', String(i));
   c.setAttribute(
     'aria-label',
-    `${stage.title}, ${kindLabel(stage)}${unlocked ? (best ? `, record ${best.score}` : '') : ', verrouillé'}`,
+    `${stageTitle(stage.id)}, ${kindLabel(stage)}${unlocked ? (best ? tf(UI.recordAria, { score: best.score }) : '') : t(UI.lockedAria)}`,
   );
 
   const top = div('card-top');
-  const world = el('span', 'card-world', 'Monde ');
+  const world = el('span', 'card-world', `${t(UI.worldN).replace('{n}', '')}`);
   world.append(el('b', '', String(stage.world)));
   top.append(world, el('span', `badge badge--${stage.kind}`, kindLabel(stage)));
 
   const art = div('card-art');
   art.innerHTML = stageIcon(stage);
+  const rift = riftForStage(stage.id);
+  if (rift && isRiftCleared(rift.id)) {
+    const mark = div('card-rift');
+    mark.innerHTML = ICONS.rift;
+    mark.title = t(UI.riftCleared);
+    c.append(mark);
+    c.setAttribute('aria-label', `${c.getAttribute('aria-label')}${t(UI.riftClearedAria)}`);
+  }
 
-  const title = el('h3', 'card-title', stage.title);
-  const sub = el('p', 'card-sub', stage.subtitle);
+  const title = el('h3', 'card-title', stageTitle(stage.id));
+  const sub = el('p', 'card-sub', stageSubtitle(stage.world, stage.part));
 
   const foot = div('card-foot');
   const { row } = starRow(best?.stars ?? 0, 'stars--sm');
   const rec = div('card-best');
-  rec.append(el('small', '', 'Record'), el('b', '', best ? formatNumber(best.score) : '—'));
+  rec.append(el('small', '', t(UI.record)), el('b', '', best ? formatNumber(best.score) : '—'));
   foot.append(row, rec);
 
   c.append(top, art, title, sub, foot);
 
   if (!unlocked) {
     const lock = div('card-lock');
-    lock.append(icon(ICONS.lock, 'ico'), el('span', '', 'Verrouillé'));
+    lock.append(icon(ICONS.lock, 'ico'), el('span', '', t(UI.locked)));
     c.append(lock);
   }
 
@@ -85,7 +99,7 @@ function stageCard(ctx: UiCtx, a: SelectActions, save: Readonly<SaveData>, stage
       ctx.audio.sfx('click', { pitch: 0.55 });
       ctx.audio.haptic([18, 40, 18]);
       play(c, SHAKE, { duration: 360, easing: 'ease-out' });
-      ctx.hud.toast('Termine l’étape précédente pour la débloquer', 'bad');
+      ctx.hud.toast(t(UI.lockedToast), 'bad');
       return;
     }
     ctx.audio.sfx('click');
@@ -111,23 +125,23 @@ export function createLevelSelect(ctx: UiCtx, a: SelectActions, world?: number):
   let stars = 0;
   for (const s of STAGES) stars += save.best[s.id]?.stars ?? 0;
   const total = div('select-total');
-  total.setAttribute('aria-label', `${stars} étoiles sur ${STAGES.length * 3}`);
+  total.setAttribute('aria-label', tf(UI.starsOf, { n: stars, max: STAGES.length * 3 }));
   total.append(icon(ICONS.star, 'star is-on'), el('span', 'select-total-n', `${stars}/${STAGES.length * 3}`));
 
   // Hangar, avec la réserve de cristaux en sous-titre.
   const reserve = crystalsText(getCrystals());
   const hangar = button(ctx, {
-    label: 'Hangar',
+    label: t(UI.hangar),
     icon: ICONS.hangar,
     sub: reserve,
     cls: 'btn-sm select-hangar',
-    aria: `Hangar, réserve : ${reserve}`,
+    aria: getLocale() === 'fr' ? `Hangar, réserve : ${reserve}` : `${t(UI.hangar)}, ${tf(UI.reserveAria, { total: reserve })}`,
     onPress: () => a.hangar(pages[page].world),
   });
   const right = div('select-head-right');
   right.append(hangar, total);
 
-  root.append(screenHeader(ctx, 'Choix du niveau', a.back, right));
+  root.append(screenHeader(ctx, t(UI.chooseLevel), a.back, right));
 
   // ---- Pages : une par monde, côte à côte dans une bande qui se décale.
   const view = div('select-pages');
@@ -137,7 +151,7 @@ export function createLevelSelect(ctx: UiCtx, a: SelectActions, world?: number):
   WORLDS.forEach((w, wi) => {
     const list = STAGES.filter((s) => s.world === wi + 1);
     if (list.length === 0) return;
-    const label = `Monde ${wi + 1} · ${w.name}`;
+    const label = tf(UI.worldLine, { n: wi + 1, name: worldLabel(w.theme) });
     const node = div('select-page');
     node.dataset.world = String(wi + 1);
     node.setAttribute('role', 'group');
@@ -156,8 +170,8 @@ export function createLevelSelect(ctx: UiCtx, a: SelectActions, world?: number):
 
   // ---- Barre du monde affiché : ◀, nom et étoiles du monde, ▶.
   const bar = div(`select-bar${pages.length < 2 ? ' is-single' : ''}`);
-  const prev = iconButton(ctx, ICONS.back, 'Monde précédent', () => show(page - 1, true), 'select-arrow select-prev');
-  const next = iconButton(ctx, ICONS.back, 'Monde suivant', () => show(page + 1, true), 'select-arrow select-next');
+  const prev = iconButton(ctx, ICONS.back, t(UI.worldPrev), () => show(page - 1, true), 'select-arrow select-prev');
+  const next = iconButton(ctx, ICONS.back, t(UI.worldNext), () => show(page + 1, true), 'select-arrow select-next');
   const info = div('select-world');
   info.setAttribute('aria-live', 'polite');
   const worldName = el('span', 'select-world-name');
@@ -189,7 +203,7 @@ export function createLevelSelect(ctx: UiCtx, a: SelectActions, world?: number):
     if (!p) return;
     worldName.textContent = p.label;
     worldStarsN.textContent = `${p.stars}/${p.max}`;
-    worldStars.setAttribute('aria-label', `${p.stars} étoiles sur ${p.max} dans ce monde`);
+    worldStars.setAttribute('aria-label', tf(UI.starsInWorld, { n: p.stars, max: p.max }));
   }
 
   const want = world ?? nextToPlay().world;

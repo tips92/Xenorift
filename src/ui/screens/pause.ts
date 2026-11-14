@@ -1,3 +1,6 @@
+import { t } from '../../core/i18n/locale';
+import { UI } from '../../core/i18n/ui';
+import { stageSubtitle, stageTitle } from '../../core/story';
 import type { StageDef } from '../../core/types';
 import { div, el } from '../dom';
 import { ICONS } from '../icons';
@@ -21,13 +24,15 @@ export interface PauseOverlay {
   close(instant: boolean): void;
   /** Retour : sous-vue Options → menu. Renvoie false si on est déjà sur le menu. */
   back(): boolean;
+  view(): 'menu' | 'options';
+  openOptions(): void;
 }
 
 export function createPauseOverlay(ctx: UiCtx, stage: StageDef, a: PauseActions): PauseOverlay {
   const root = div('overlay pause');
   root.setAttribute('role', 'dialog');
   root.setAttribute('aria-modal', 'true');
-  root.setAttribute('aria-label', 'Pause');
+  root.setAttribute('aria-label', t(UI.pause));
 
   const panel = div('panel pause-panel');
   let locked = false;
@@ -44,9 +49,9 @@ export function createPauseOverlay(ctx: UiCtx, stage: StageDef, a: PauseActions)
   // ---- Vue menu
   const menuView = div('pause-view pause-view--menu');
   const head = div('pause-head');
-  head.append(el('h2', 'pause-title', 'PAUSE'), el('p', 'pause-stage', `${stage.subtitle} · ${stage.title}`));
+  head.append(el('h2', 'pause-title', t(UI.pauseTitle)), el('p', 'pause-stage', `${stageSubtitle(stage.world, stage.part)} · ${stageTitle(stage.id)}`));
   const resumeBtn = button(ctx, {
-    label: 'Reprendre',
+    label: t(UI.resume),
     icon: ICONS.play,
     cls: 'btn-primary btn-wide',
     onPress: () => {
@@ -55,16 +60,16 @@ export function createPauseOverlay(ctx: UiCtx, stage: StageDef, a: PauseActions)
   });
   const row = div('pause-row');
   row.append(
-    button(ctx, { label: 'Recommencer', icon: ICONS.restart, onPress: once(a.restart) }),
-    button(ctx, { label: 'Options', icon: ICONS.gear, onPress: () => showOptions() }),
-    button(ctx, { label: 'Quitter', icon: ICONS.home, onPress: once(a.quit) }),
+    button(ctx, { label: t(UI.restart), icon: ICONS.restart, onPress: once(a.restart) }),
+    button(ctx, { label: t(UI.options), icon: ICONS.gear, onPress: () => showOptions() }),
+    button(ctx, { label: t(UI.quit), icon: ICONS.home, onPress: once(a.quit) }),
   );
   menuView.append(head, resumeBtn, row);
 
   // ---- Vue options (créée à la demande)
   const optView = div('pause-view pause-view--options');
   const optHead = div('screen-header pause-opt-head');
-  optHead.append(iconButton(ctx, ICONS.back, 'Retour', () => showMenu()), el('h2', 'screen-title', 'Options'), div('screen-header-right'));
+  optHead.append(iconButton(ctx, ICONS.back, t(UI.back), () => showMenu()), el('h2', 'screen-title', t(UI.options)), div('screen-header-right'));
   const optBody = div('pause-opt-body');
   optView.append(optHead, optBody);
 
@@ -106,6 +111,12 @@ export function createPauseOverlay(ctx: UiCtx, stage: StageDef, a: PauseActions)
       root.classList.remove('is-open');
       if (instant) root.remove();
       else window.setTimeout(() => root.remove(), FADE_MS + 40);
+    },
+    view(): 'menu' | 'options' {
+      return view;
+    },
+    openOptions(): void {
+      showOptions();
     },
     back(): boolean {
       if (view === 'options') {

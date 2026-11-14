@@ -1,7 +1,9 @@
 import type { ModeHandle, ModeHooks, StageDef } from '../core/types';
-import { pauseSession, releaseSession, resumeSession, runSession } from './engine/game';
+import { pauseSession, releasePlatformContext, releaseSession, resumeSession, runSession } from './engine/game';
 import { createSession, music, reportError } from './engine/session';
 import { getLevel } from './levels';
+
+export { releasePlatformContext };
 
 // Mode plateforme 2D (Phaser 3). La signature exportée ne doit pas changer.
 
